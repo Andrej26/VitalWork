@@ -49,7 +49,6 @@ List of supported sensor types.
 - Back button -> Home
 - **eSense Pulse card** (Heart Rate + R-R, BLE) — shows connection status
 - **eSense Respiration card** (Breathing, Audio Jack) — shows connection status
-- **Fibion Flash card** (ECG / HR / R-R, BLE) — shows connection status
 - Tap card -> opens Sensor Detail
 
 ### 4. Sensor Detail Screen
@@ -57,7 +56,6 @@ Configuration for a specific sensor. Routes to vendor-specific screens based on 
 
 - `esense_pulse` -> EsensePulseScreen (BLE scan, connect, HR + R-R monitoring)
 - `esense_respiration` -> EsenseRespirationScreen (audio connection, breathing rate)
-- `fibion_flash` -> FibionFlashScreen (BLE scan, connect, ECG + HR + R-R monitoring)
 
 ### 5. VR Control Screen
 Configure and test VR headset connection.
@@ -93,7 +91,6 @@ Main operational screen during active therapy. This is where researchers spend m
   - VR Headset status (mDNS-discovered or manual IP)
   - eSense Pulse status
   - eSense Respiration status
-  - Fibion Flash status
 - **VR Controls:**
   - Tutorial button (trigger_event)
   - StressChamber button (load scene)
@@ -182,8 +179,7 @@ presentation/
     │   ├── SensorDetailScreen.kt      # Router to vendor-specific screens
     │   ├── components/                # Shared sensor UI components
     │   ├── mindfield/pulse/           # eSense Pulse (HR + R-R)
-    │   ├── mindfield/respiration/     # eSense Respiration
-    │   └── fibion/flash/              # Fibion Flash (ECG + HR + R-R)
+    │   └── mindfield/respiration/     # eSense Respiration
     ├── vr/
     │   ├── VRConnectionScreen.kt
     │   └── VRConnectionViewModel.kt

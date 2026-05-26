@@ -23,7 +23,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.biometrix.operator.presentation.screens.sensors.fibion.flash.FibionFlashScreen
 import com.biometrix.operator.presentation.screens.sensors.mindfield.pulse.EsensePulseScreen
 import com.biometrix.operator.presentation.screens.sensors.mindfield.respiration.EsenseRespirationScreen
 
@@ -40,8 +39,6 @@ fun SensorDetailScreen(
         // Mindfield eSense sensors
         "esense_pulse" -> EsensePulseScreen(onNavigateBack = onNavigateBack)
         "esense_respiration" -> EsenseRespirationScreen(onNavigateBack = onNavigateBack)
-        // Fibion sensors
-        "fibion_flash" -> FibionFlashScreen(onNavigateBack = onNavigateBack)
         else -> UnknownSensorScreen(sensorId = sensorId, onNavigateBack = onNavigateBack)
     }
 }

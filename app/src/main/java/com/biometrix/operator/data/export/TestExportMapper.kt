@@ -4,7 +4,6 @@ import com.biometrix.operator.data.db.RecordingEntity
 import com.biometrix.operator.data.db.SensorSampleEntity
 import com.biometrix.operator.data.db.SensorType
 import com.biometrix.operator.data.db.TestEntity
-import com.biometrix.operator.data.export.model.FibionFlashInfo
 import com.biometrix.operator.data.export.model.GapExport
 import com.biometrix.operator.data.export.model.RecordingData
 import com.biometrix.operator.data.export.model.RecordingGaps
@@ -18,9 +17,6 @@ import com.biometrix.operator.data.export.model.TestExport
 import com.biometrix.operator.data.export.model.TestStatistics
 import com.biometrix.operator.data.recording.GapEvent
 import com.biometrix.operator.data.recording.detectEsenseRrIntervalGaps
-import com.biometrix.operator.data.recording.detectFibionEcgGaps
-import com.biometrix.operator.data.recording.detectFibionHeartRateGaps
-import com.biometrix.operator.data.recording.detectFibionRrIntervalGaps
 import com.biometrix.operator.data.recording.detectHeartRateGaps
 import com.biometrix.operator.data.recording.detectRespirationGaps
 import com.biometrix.operator.data.repository.RecordingRepository
@@ -68,9 +64,6 @@ class TestExportMapper @Inject constructor(
                     totalHeartRateSamples = test.totalHeartRateSampleCount,
                     totalRespirationSamples = test.totalRespirationSampleCount,
                     totalSudsEvents = sudsEvents.size,
-                    totalFibionHeartRateSamples = test.totalFibionHeartRateSampleCount,
-                    totalFibionEcgSamples = test.totalFibionEcgSampleCount,
-                    totalFibionRrIntervalSamples = test.totalFibionRrIntervalSampleCount,
                     totalEsenseRrIntervalSamples = test.totalEsenseRrIntervalSampleCount
                 ),
                 recordings = recordingDataList,
@@ -92,9 +85,6 @@ class TestExportMapper @Inject constructor(
                     SensorType.HEART_RATE -> "esensePulse_hr"
                     SensorType.ESENSE_RR_INTERVAL -> "esensePulse_rr"
                     SensorType.RESPIRATION -> "esenseResp_resp"
-                    SensorType.FIBION_HEART_RATE -> "fibion_hr"
-                    SensorType.FIBION_ECG -> "fibion_ecg"
-                    SensorType.FIBION_RR_INTERVAL -> "fibion_rr"
                 }
             )
         }
@@ -106,19 +96,13 @@ class TestExportMapper @Inject constructor(
         val hrGaps       = if (recording.heartRateEnabled) detectHeartRateGaps(samples) else emptyList()
         val esenseRrGaps = if (recording.heartRateEnabled && recording.esenseRrIntervalSampleCount > 0) detectEsenseRrIntervalGaps(samples) else emptyList()
         val respGaps     = if (recording.respirationEnabled) detectRespirationGaps(samples) else emptyList()
-        val fibHrGaps    = if (recording.fibionEnabled && recording.fibionHeartRateSampleCount > 0) detectFibionHeartRateGaps(samples) else emptyList()
-        val fibEcgGaps   = if (recording.fibionEnabled && recording.fibionEcgSampleCount > 0) detectFibionEcgGaps(samples) else emptyList()
-        val fibRrGaps    = if (recording.fibionEnabled && recording.fibionRrIntervalSampleCount > 0) detectFibionRrIntervalGaps(samples) else emptyList()
 
-        val allGaps = listOf(hrGaps, esenseRrGaps, respGaps, fibHrGaps, fibEcgGaps, fibRrGaps)
+        val allGaps = listOf(hrGaps, esenseRrGaps, respGaps)
         val recordingGaps = if (allGaps.all { it.isEmpty() }) null
         else RecordingGaps(
             esensePulseHeartRate = gapInfoOrNull(hrGaps),
             esensePulseRrInterval = gapInfoOrNull(esenseRrGaps),
-            esenseRespRespiration = gapInfoOrNull(respGaps),
-            fibionHeartRate = gapInfoOrNull(fibHrGaps),
-            fibionEcg = gapInfoOrNull(fibEcgGaps),
-            fibionRrInterval = gapInfoOrNull(fibRrGaps)
+            esenseRespRespiration = gapInfoOrNull(respGaps)
         )
 
         return RecordingData(
@@ -136,23 +120,6 @@ class TestExportMapper @Inject constructor(
                 } else null,
                 respiration = if (recording.respirationEnabled) {
                     SensorInfo(enabled = true, sampleCount = recording.respirationSampleCount)
-                } else null,
-                fibionFlash = if (recording.fibionEnabled) {
-                    FibionFlashInfo(
-                        enabled = true,
-                        heartRate = if (recording.fibionHeartRateSampleCount > 0) SensorInfo(
-                            enabled = true,
-                            sampleCount = recording.fibionHeartRateSampleCount
-                        ) else null,
-                        ecg = if (recording.fibionEcgSampleCount > 0) SensorInfo(
-                            enabled = true,
-                            sampleCount = recording.fibionEcgSampleCount
-                        ) else null,
-                        rrInterval = if (recording.fibionRrIntervalSampleCount > 0) SensorInfo(
-                            enabled = true,
-                            sampleCount = recording.fibionRrIntervalSampleCount
-                        ) else null
-                    )
                 } else null
             ),
             recordingGaps = recordingGaps,

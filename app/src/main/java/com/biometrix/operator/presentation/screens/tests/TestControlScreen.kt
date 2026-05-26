@@ -79,7 +79,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.biometrix.operator.data.model.ConnectionState
-import com.biometrix.operator.data.prefs.HeartRateDevice
 import com.biometrix.operator.data.recording.model.DataRecordingState
 import com.biometrix.operator.data.sensor.ble.model.BleDevice
 import com.biometrix.operator.data.sensor.audio.LowSignalWarning
@@ -107,27 +106,16 @@ fun TestControlScreen(
     onTestEnded: (testId: Long) -> Unit,
     viewModel: TestControlViewModel = hiltViewModel()
 ) {
-    // Device selection
-    val selectedHrDevice by viewModel.selectedHeartRateDevice.collectAsState()
-
     // Connection states
     val vrConnectionState by viewModel.vrConnectionState.collectAsState()
     val pulseSensorState by viewModel.bleConnectionState.collectAsState()
     val respirationSensorState by viewModel.respirationState.collectAsState()
-    val fibionConnectionState by viewModel.fibionConnectionState.collectAsState()
 
     // Live sensor values
     val heartRate by viewModel.heartRate.collectAsState()
     val bleBatteryLevel by viewModel.bleBatteryLevel.collectAsState()
     val respirationRate by viewModel.respirationRate.collectAsState()
-    val fibionHeartRate by viewModel.fibionHeartRate.collectAsState()
     val pulseLatestRr by viewModel.pulseLatestRr.collectAsState()
-    val fibionLatestRr by viewModel.fibionLatestRr.collectAsState()
-    val fibionBatteryLevel by viewModel.fibionBatteryLevel.collectAsState()
-    val showFibionScanDialog by viewModel.showFibionScanDialog.collectAsState()
-    val fibionDiscoveredDevices by viewModel.fibionDiscoveredDevices.collectAsState()
-    val fibionIsScanning by viewModel.fibionIsScanning.collectAsState()
-    val fibionScanTimeoutReached by viewModel.fibionScanTimeoutReached.collectAsState()
 
     // Recording state
     val recordingUiState by viewModel.recordingUiState.collectAsState()
@@ -208,8 +196,7 @@ fun TestControlScreen(
     val respirationConnectionState = respirationSensorState.toConnectionState()
 
     val isAnySensorConnected = pulseSensorState == ConnectionState.CONNECTED ||
-            respirationConnectionState == ConnectionState.CONNECTED ||
-            fibionConnectionState == ConnectionState.CONNECTED
+            respirationConnectionState == ConnectionState.CONNECTED
 
     val context = LocalContext.current
 
@@ -357,20 +344,6 @@ fun TestControlScreen(
         )
     }
 
-    // Fibion Flash scan dialog
-    if (showFibionScanDialog) {
-        FibionScanDialog(
-            devices = fibionDiscoveredDevices,
-            isScanning = fibionIsScanning,
-            fibionConnectionState = fibionConnectionState,
-            bluetoothEnabled = bluetoothEnabled,
-            scanTimeoutReached = fibionScanTimeoutReached,
-            onDeviceSelected = { device -> viewModel.connectToFibionDevice(device) },
-            onEnableBluetooth = { enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)) },
-            onDismiss = { viewModel.dismissFibionScanDialog() }
-        )
-    }
-
     // BLE warning dialogs (location services, connection timeout, low battery, unexpected disconnection)
     bleDialogState?.let { dialogState ->
         BleWarningDialog(
@@ -481,7 +454,6 @@ fun TestControlScreen(
                 val lostSensors = buildList {
                     if (recordingUiState.heartRateWasEnabled && !recordingUiState.isHeartRateConnected) add("eSense Pulse")
                     if (recordingUiState.respirationWasEnabled && !recordingUiState.isRespirationConnected) add("eSense Respiration")
-                    if (recordingUiState.fibionWasEnabled && !recordingUiState.isFibionConnected) add("Fibion Flash")
                 }
                 if (lostSensors.isNotEmpty()) {
                     SensorLostDuringRecordingBanner(sensorNames = lostSensors)
@@ -489,20 +461,19 @@ fun TestControlScreen(
             }
 
             // Mindfield eSense device group
-            val showEsensePulse = selectedHrDevice == HeartRateDevice.ESENSE_PULSE
             val eSenseConnectionState = when {
-                (showEsensePulse && pulseSensorState == ConnectionState.CONNECTED) ||
+                pulseSensorState == ConnectionState.CONNECTED ||
                         respirationConnectionState == ConnectionState.CONNECTED -> ConnectionState.CONNECTED
-                (showEsensePulse && pulseSensorState == ConnectionState.CONNECTING) ||
+                pulseSensorState == ConnectionState.CONNECTING ||
                         respirationConnectionState == ConnectionState.CONNECTING -> ConnectionState.CONNECTING
-                (showEsensePulse && pulseSensorState == ConnectionState.ERROR) ||
+                pulseSensorState == ConnectionState.ERROR ||
                         respirationConnectionState == ConnectionState.ERROR -> ConnectionState.ERROR
                 else -> ConnectionState.DISCONNECTED
             }
             DeviceSensorGroup(
                 deviceName = "Mindfield eSense",
                 connectionState = eSenseConnectionState,
-                footer = if (showEsensePulse && (recordingUiState.isHeartRateConnected || recordingUiState.heartRateWasEnabled)) {
+                footer = if (recordingUiState.isHeartRateConnected || recordingUiState.heartRateWasEnabled) {
                     {
                         PulseRrRow(
                             latestValue = pulseLatestRr,
@@ -512,24 +483,22 @@ fun TestControlScreen(
                     }
                 } else null
             ) {
-                if (showEsensePulse) {
-                    LiveSensorCard(
-                        icon = Icons.Default.FavoriteBorder,
-                        label = "Heart Rate",
-                        value = when {
-                            heartRate != null -> heartRate.toString()
-                            pulseSensorState == ConnectionState.CONNECTED -> "..."
-                            else -> "--"
-                        },
-                        unit = "BPM",
-                        connectionState = pulseSensorState,
-                        sampleCount = recordingUiState.heartRateSampleCount,
-                        animate = heartRate != null && heartRate!! > 0,
-                        onClick = { viewModel.onHeartRateCardClick() },
-                        batteryLevel = bleBatteryLevel,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
+                LiveSensorCard(
+                    icon = Icons.Default.FavoriteBorder,
+                    label = "Heart Rate",
+                    value = when {
+                        heartRate != null -> heartRate.toString()
+                        pulseSensorState == ConnectionState.CONNECTED -> "..."
+                        else -> "--"
+                    },
+                    unit = "BPM",
+                    connectionState = pulseSensorState,
+                    sampleCount = recordingUiState.heartRateSampleCount,
+                    animate = heartRate != null && heartRate!! > 0,
+                    onClick = { viewModel.onHeartRateCardClick() },
+                    batteryLevel = bleBatteryLevel,
+                    modifier = Modifier.weight(1f)
+                )
                 LiveSensorCard(
                     icon = Icons.Default.Mic,
                     label = "Respiration",
@@ -542,39 +511,6 @@ fun TestControlScreen(
                     onClick = { viewModel.onRespirationCardClick(context) },
                     modifier = Modifier.weight(1f)
                 )
-            }
-
-            // Fibion Flash device group
-            if (selectedHrDevice == HeartRateDevice.FIBION_FLASH) {
-                DeviceSensorGroup(
-                    deviceName = "Fibion Flash",
-                    connectionState = fibionConnectionState,
-                    batteryLevel = fibionBatteryLevel,
-                    footer = if (recordingUiState.isFibionConnected || recordingUiState.fibionWasEnabled) {
-                        {
-                            FibionRrRow(
-                                latestValue = fibionLatestRr,
-                                sampleCount = recordingUiState.fibionRrIntervalSampleCount,
-                                connectionState = fibionConnectionState
-                            )
-                            FibionEcgRow(
-                                sampleCount = recordingUiState.fibionEcgSampleCount,
-                                connectionState = fibionConnectionState
-                            )
-                        }
-                    } else null
-                ) {
-                    LiveSensorCard(
-                        icon = Icons.Default.Favorite,
-                        label = "Heart Rate",
-                        value = fibionHeartRate?.toString() ?: "--",
-                        unit = "BPM",
-                        connectionState = fibionConnectionState,
-                        sampleCount = recordingUiState.fibionHeartRateSampleCount,
-                        onClick = { viewModel.onFibionCardClick() },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
             }
 
             // VR Controls Section
@@ -807,33 +743,6 @@ fun TestControlScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    }
-
-                    if (recordingUiState.isFibionConnected || recordingUiState.fibionWasEnabled) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Sensors,
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Fibion Flash",
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Text(
-                                text = if (recordingUiState.isFibionConnected) {
-                                    "${recordingUiState.fibionHeartRateSampleCount} HR · ${recordingUiState.fibionEcgSampleCount} ECG · ${recordingUiState.fibionRrIntervalSampleCount} RR"
-                                } else "Not connected",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
                     }
 
                     HorizontalDivider()
@@ -1366,144 +1275,6 @@ private fun VrConnectedState(
 }
 
 @Composable
-private fun FibionScanDialog(
-    devices: List<BleDevice>,
-    isScanning: Boolean,
-    fibionConnectionState: ConnectionState,
-    bluetoothEnabled: Boolean,
-    scanTimeoutReached: Boolean,
-    onDeviceSelected: (BleDevice) -> Unit,
-    onEnableBluetooth: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Bluetooth,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Text("Connect Fibion Flash")
-            }
-        },
-        text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                if (!bluetoothEnabled) {
-                    Row(
-                        modifier = Modifier.clickable { onEnableBluetooth() },
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.BluetoothDisabled,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                        Text(
-                            text = "Bluetooth is disabled. Tap here to enable it.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                    }
-                }
-
-                if (isScanning) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            strokeWidth = 2.dp
-                        )
-                        Text(
-                            text = "Scanning for Fibion Flash devices...",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                if (fibionConnectionState == ConnectionState.CONNECTING) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            strokeWidth = 2.dp
-                        )
-                        Text(
-                            text = "Connecting...",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                }
-
-                if (bluetoothEnabled) {
-                    if (devices.isEmpty() && isScanning) {
-                        Text(
-                            text = "Searching for nearby devices...",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        if (scanTimeoutReached) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "No Fibion Flash devices found. Please check:\n\n" +
-                                    "\u2022 The device is powered on\n" +
-                                    "\u2022 The device is nearby (within 2 meters)\n\n" +
-                                    "Scanning will continue in the background.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                        }
-                    } else if (devices.isEmpty() && !isScanning) {
-                        Text(
-                            text = "No devices found. Make sure the Fibion Flash is powered on and nearby.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        Text(
-                            text = "Found ${devices.size} device(s):",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        devices.forEach { device ->
-                            BleDeviceItem(
-                                device = device,
-                                onClick = { onDeviceSelected(device) }
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
-    )
-}
-
-@Composable
 private fun SensorLostDuringRecordingBanner(sensorNames: List<String>) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1596,102 +1367,3 @@ private fun PulseRrRow(
     }
 }
 
-@Composable
-private fun FibionRrRow(
-    latestValue: Int?,
-    sampleCount: Int,
-    connectionState: ConnectionState,
-    modifier: Modifier = Modifier
-) {
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = "R-R",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-                color = if (connectionState == ConnectionState.CONNECTED)
-                    MaterialTheme.colorScheme.onSurface
-                else
-                    MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = if (latestValue != null) "$latestValue ms" else "--",
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (latestValue != null)
-                    MaterialTheme.colorScheme.onSurface
-                else
-                    MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        if (sampleCount > 0) {
-            SuggestionChip(
-                onClick = {},
-                label = {
-                    Text(
-                        text = "$sampleCount samples",
-                        style = MaterialTheme.typography.labelSmall
-                    )
-                }
-            )
-        } else {
-            Text(
-                text = if (connectionState == ConnectionState.CONNECTED) "Waiting" else "--",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-@Composable
-private fun FibionEcgRow(
-    sampleCount: Int,
-    connectionState: ConnectionState,
-    modifier: Modifier = Modifier
-) {
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(
-            text = "ECG",
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-            color = if (connectionState == ConnectionState.CONNECTED)
-                MaterialTheme.colorScheme.onSurface
-            else
-                MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        if (sampleCount > 0) {
-            SuggestionChip(
-                onClick = {},
-                label = {
-                    Text(
-                        text = "$sampleCount samples",
-                        style = MaterialTheme.typography.labelSmall
-                    )
-                }
-            )
-        } else {
-            Text(
-                text = if (connectionState == ConnectionState.CONNECTED) "Recording" else "--",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}

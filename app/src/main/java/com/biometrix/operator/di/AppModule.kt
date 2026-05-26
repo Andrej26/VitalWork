@@ -9,8 +9,6 @@ import com.biometrix.operator.data.db.SudsEventDao
 import com.biometrix.operator.data.db.TestDao
 import com.biometrix.operator.data.export.TestExportService
 import com.biometrix.operator.data.export.TestExporter
-import com.biometrix.operator.data.prefs.HeartRateDevice
-import com.biometrix.operator.data.prefs.HeartRateDevicePreferences
 import com.biometrix.operator.data.recording.SensorRecordingRepository
 import com.biometrix.operator.data.recording.SensorRecordingRepositoryImpl
 import com.biometrix.operator.data.repository.RecordingRepository
@@ -18,8 +16,6 @@ import com.biometrix.operator.data.sensor.SensorDevice
 import com.biometrix.operator.data.sensor.audio.MindfieldRespiration
 import com.biometrix.operator.data.sensor.ble.BleManager
 import com.biometrix.operator.data.sensor.ble.BleManagerImpl
-import com.biometrix.operator.data.sensor.fibion.FibionFlashManager
-import com.biometrix.operator.data.sensor.fibion.FibionFlashManagerImpl
 import com.biometrix.operator.data.network.NetworkChecker
 import com.biometrix.operator.data.system.LocationChecker
 import com.biometrix.operator.data.system.LocationCheckerImpl
@@ -52,12 +48,6 @@ abstract class AppBindsModule {
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
-
-    @Provides
-    @Singleton
-    fun provideSelectedHeartRateDeviceFlow(
-        prefs: HeartRateDevicePreferences
-    ): StateFlow<HeartRateDevice> = prefs.selectedDevice
 
     @Provides
     @Singleton
@@ -132,21 +122,11 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideFibionFlashManager(
-        @ApplicationContext context: Context
-    ): FibionFlashManager {
-        return FibionFlashManagerImpl(context)
-    }
-
-    @Provides
-    @Singleton
     fun provideSensorRecordingRepository(
         bleManager: BleManager,
         @Named("respiration") respirationDevice: SensorDevice,
-        fibionFlashManager: FibionFlashManager,
-        recordingRepository: RecordingRepository,
-        heartRateDevicePreferences: HeartRateDevicePreferences
+        recordingRepository: RecordingRepository
     ): SensorRecordingRepository {
-        return SensorRecordingRepositoryImpl(bleManager, respirationDevice, fibionFlashManager, recordingRepository, heartRateDevicePreferences.selectedDevice)
+        return SensorRecordingRepositoryImpl(bleManager, respirationDevice, recordingRepository)
     }
 }

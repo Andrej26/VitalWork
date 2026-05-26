@@ -9,14 +9,11 @@ import android.os.Build
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.biometrix.operator.data.model.ConnectionState
-import com.biometrix.operator.data.prefs.HeartRateDevice
-import com.biometrix.operator.data.prefs.HeartRateDevicePreferences
 import com.biometrix.operator.data.prefs.TutorialPreferencesRepository
 import com.biometrix.operator.data.sensor.DeviceState
 import com.biometrix.operator.data.sensor.SensorDevice
 import com.biometrix.operator.data.sensor.ble.BleManager
 import com.biometrix.operator.data.sensor.ble.model.BleDevice
-import com.biometrix.operator.data.sensor.fibion.FibionFlashManager
 import com.biometrix.operator.data.vr.VRConnectionManager
 import com.biometrix.operator.data.vr.VrDeviceDiscovery
 import com.biometrix.operator.data.vr.model.DiscoveredVrDevice
@@ -42,11 +39,6 @@ data class TutorialUiState(
     // Respiration
     val respirationState: DeviceState = DeviceState.Disconnected,
     val audioPermissionGranted: Boolean = false,
-    // Fibion Flash
-    val fibionConnectionState: ConnectionState = ConnectionState.DISCONNECTED,
-    val fibionScannedDevices: List<BleDevice> = emptyList(),
-    val fibionIsScanning: Boolean = false,
-    val fibionDeviceSerial: String? = null,
     // VR
     val vrConnectionState: ConnectionState = ConnectionState.DISCONNECTED,
     val discoveredVrDevices: List<DiscoveredVrDevice> = emptyList(),
@@ -59,30 +51,14 @@ data class TutorialUiState(
 class TutorialViewModel @Inject constructor(
     private val bleManager: BleManager,
     @Named("respiration") private val respirationSensor: SensorDevice,
-    private val fibionFlashManager: FibionFlashManager,
     private val vrWebSocketClient: VRConnectionManager,
     private val mdnsDiscovery: VrDeviceDiscovery,
     private val tutorialPreferences: TutorialPreferencesRepository,
-    private val heartRateDevicePreferences: HeartRateDevicePreferences,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
-    /** Selected heart rate device — drives tutorial slide filtering */
-    val selectedHeartRateDevice: StateFlow<HeartRateDevice> = heartRateDevicePreferences.selectedDevice
-
-    /** Whether the user has ever explicitly chosen a device — frozen at ViewModel creation */
-    private val showDeviceSelection = !heartRateDevicePreferences.hasExplicitSelection
-
-    /** True if the device selection slide is included in this tutorial session */
-    val showDeviceSelectionSlide: Boolean get() = showDeviceSelection
-
-    /** Total steps: 13 with device selection slide, 12 without */
-    val totalSteps: Int
-        get() = if (showDeviceSelection) 13 else 12
-
-    fun selectHeartRateDevice(device: HeartRateDevice) {
-        heartRateDevicePreferences.select(device)
-    }
+    /** Total number of tutorial steps */
+    val totalSteps: Int = 12
 
     private val _uiState = MutableStateFlow(TutorialUiState())
     val uiState: StateFlow<TutorialUiState> = _uiState.asStateFlow()
@@ -103,7 +79,6 @@ class TutorialViewModel @Inject constructor(
         )
         observeBleState()
         observeRespirationState()
-        observeFibionState()
         observeVrState()
         mdnsDiscovery.startDiscovery()
     }
@@ -227,47 +202,6 @@ class TutorialViewModel @Inject constructor(
         } else {
             respirationSensor.disconnect()
         }
-    }
-
-    private fun observeFibionState() {
-        viewModelScope.launch {
-            fibionFlashManager.isScanning.collect { scanning ->
-                _uiState.update { it.copy(fibionIsScanning = scanning) }
-            }
-        }
-        viewModelScope.launch {
-            fibionFlashManager.connectionState.collect { state ->
-                _uiState.update { it.copy(fibionConnectionState = state) }
-            }
-        }
-        viewModelScope.launch {
-            fibionFlashManager.discoveredDevices.collect { devices ->
-                _uiState.update { it.copy(fibionScannedDevices = devices) }
-            }
-        }
-        viewModelScope.launch {
-            fibionFlashManager.deviceSerial.collect { serial ->
-                _uiState.update { it.copy(fibionDeviceSerial = serial) }
-            }
-        }
-    }
-
-    // ── Fibion Flash ──────────────────────────────────────────────────────────
-
-    fun toggleFibionScan() {
-        if (_uiState.value.fibionIsScanning) {
-            fibionFlashManager.stopScan()
-        } else {
-            fibionFlashManager.startScan()
-        }
-    }
-
-    fun connectFibionDevice(device: BleDevice) {
-        fibionFlashManager.connect(device)
-    }
-
-    fun disconnectFibion() {
-        fibionFlashManager.disconnect()
     }
 
     // ── VR ───────────────────────────────────────────────────────────────────

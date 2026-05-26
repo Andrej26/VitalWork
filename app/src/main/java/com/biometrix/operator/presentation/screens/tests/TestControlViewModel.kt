@@ -7,8 +7,6 @@ import androidx.lifecycle.viewModelScope
 import com.biometrix.operator.data.db.RecordingEntity
 import com.biometrix.operator.data.db.TestEntity
 import com.biometrix.operator.data.model.ConnectionState
-import com.biometrix.operator.data.prefs.HeartRateDevice
-import com.biometrix.operator.data.prefs.HeartRateDevicePreferences
 import com.biometrix.operator.data.recording.SensorRecordingRepository
 import com.biometrix.operator.data.system.LocationChecker
 import com.biometrix.operator.data.recording.model.DataRecordingState
@@ -19,7 +17,6 @@ import com.biometrix.operator.data.repository.SudsRepository
 import com.biometrix.operator.data.repository.TestRepository
 import com.biometrix.operator.data.sensor.DeviceState
 import com.biometrix.operator.data.sensor.ble.BleEvent
-import com.biometrix.operator.data.sensor.fibion.FibionFlashEvent
 import com.biometrix.operator.data.sensor.ble.model.BleDevice
 import com.biometrix.operator.data.vr.VRConnectionManager
 import com.biometrix.operator.data.vr.VrDeviceDiscovery
@@ -55,7 +52,6 @@ class TestControlViewModel @Inject constructor(
     private val sudsRepository: SudsRepository,
     private val vrWebSocketClient: VRConnectionManager,
     private val mdnsDiscovery: VrDeviceDiscovery,
-    selectedHeartRateDeviceFlow: @JvmSuppressWildcards StateFlow<HeartRateDevice>,
     private val locationChecker: LocationChecker,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
@@ -67,9 +63,6 @@ class TestControlViewModel @Inject constructor(
     }
 
     val testId: Long = savedStateHandle.get<Long>("testId") ?: -1L
-
-    /** Selected heart rate device */
-    val selectedHeartRateDevice: StateFlow<HeartRateDevice> = selectedHeartRateDeviceFlow
 
     private val _test = MutableStateFlow<TestEntity?>(null)
     val test: StateFlow<TestEntity?> = _test.asStateFlow()
@@ -152,7 +145,6 @@ class TestControlViewModel @Inject constructor(
     private var scanTimeoutJob: Job? = null
     private var scanTimeoutShown = false
     private var lowBatteryShownForConnection = false
-    private var fibionLowBatteryShownForConnection = false
     private var lastConnectedDevice: BleDevice? = null
     private var bleFirstDataJob: Job? = null
 
@@ -201,76 +193,34 @@ class TestControlViewModel @Inject constructor(
         MutableStateFlow(emptyList())
     }
 
-    /** Fibion Flash connection state */
-    val fibionConnectionState: StateFlow<ConnectionState> = connectionRepository.fibionFlashConnectionState
-
-    /** Live Fibion Flash heart rate */
-    val fibionHeartRate: StateFlow<Int?> = connectionRepository.fibionFlashHeartRate
-
     /** Live eSense Pulse latest R-R interval (ms) */
     private val _pulseLatestRr = MutableStateFlow<Int?>(null)
     val pulseLatestRr: StateFlow<Int?> = _pulseLatestRr.asStateFlow()
 
-    /** Live Fibion Flash latest R-R interval (ms) */
-    private val _fibionLatestRr = MutableStateFlow<Int?>(null)
-    val fibionLatestRr: StateFlow<Int?> = _fibionLatestRr.asStateFlow()
-
-    /** Fibion Flash battery level */
-    val fibionBatteryLevel: StateFlow<Int?> = connectionRepository.fibionFlashBatteryLevel
-
-    /** Fibion Flash discovered devices (for scan dialog) */
-    val fibionDiscoveredDevices: StateFlow<List<BleDevice>> = connectionRepository.fibionFlashDiscoveredDevices
-
-    /** Whether Fibion Flash scan is active */
-    val fibionIsScanning: StateFlow<Boolean> = connectionRepository.fibionFlashIsScanning
-
-    /** Whether the Fibion scan dialog is showing */
-    private val _showFibionScanDialog = MutableStateFlow(false)
-    val showFibionScanDialog: StateFlow<Boolean> = _showFibionScanDialog.asStateFlow()
-
-    /** Whether Fibion scan timeout was reached */
-    private val _fibionScanTimeoutReached = MutableStateFlow(false)
-    val fibionScanTimeoutReached: StateFlow<Boolean> = _fibionScanTimeoutReached.asStateFlow()
-
-    private var fibionScanTimeoutJob: Job? = null
-
     /** Recording UI state combining repository state with connection states */
     val recordingUiState: StateFlow<RecordingUiState> = combine(
-        combine(
-            sensorRecordingRepository.recordingState,
-            sensorRecordingRepository.recordingDurationMs,
-            sensorRecordingRepository.recordingMetadata,
-        ) { state, durationMs, metadata -> Triple(state, durationMs, metadata) },
-        combine(
-            connectionRepository.bleConnectionState,
-            connectionRepository.respirationState,
-            connectionRepository.fibionFlashConnectionState,
-        ) { ble, resp, fibionState -> Triple(ble, resp, fibionState) },
-    ) { recordingTriple, connectionTriple ->
-        val (state, durationMs, metadata) = recordingTriple
-        val (bleState, respState, fibionState) = connectionTriple
+        sensorRecordingRepository.recordingState,
+        sensorRecordingRepository.recordingDurationMs,
+        sensorRecordingRepository.recordingMetadata,
+        connectionRepository.bleConnectionState,
+        connectionRepository.respirationState,
+    ) { state, durationMs, metadata, bleState, respState ->
         val isHeartRateConnected = bleState == ConnectionState.CONNECTED
         val isRespirationConnected = respState == DeviceState.Streaming ||
                 respState == DeviceState.Connected
-        val isFibionConnected = fibionState == ConnectionState.CONNECTED
 
         RecordingUiState(
             recordingState = state,
             durationFormatted = formatDuration(durationMs),
             isHeartRateConnected = isHeartRateConnected,
             isRespirationConnected = isRespirationConnected,
-            isFibionConnected = isFibionConnected,
             heartRateSampleCount = metadata?.heartRateSampleCount ?: 0,
             respirationSampleCount = metadata?.respirationSampleCount ?: 0,
-            fibionHeartRateSampleCount = metadata?.fibionHeartRateSampleCount ?: 0,
-            fibionEcgSampleCount = metadata?.fibionEcgSampleCount ?: 0,
-            fibionRrIntervalSampleCount = metadata?.fibionRrIntervalSampleCount ?: 0,
             esenseRrIntervalSampleCount = metadata?.esenseRrIntervalSampleCount ?: 0,
             recordingIdentifier = metadata?.recordingIdentifier,
             isRecording = state == DataRecordingState.RECORDING,
             heartRateWasEnabled = metadata?.heartRateRecording ?: false,
-            respirationWasEnabled = metadata?.respirationRecording ?: false,
-            fibionWasEnabled = metadata?.fibionRecording ?: false
+            respirationWasEnabled = metadata?.respirationRecording ?: false
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), RecordingUiState())
 
@@ -409,57 +359,6 @@ class TestControlViewModel @Inject constructor(
                 }
             }
         }
-
-        // Auto-dismiss Fibion scan dialog + auto-subscribe sensors when Fibion connects
-        viewModelScope.launch {
-            connectionRepository.fibionFlashConnectionState.collect { state ->
-                if (state == ConnectionState.CONNECTED) {
-                    _showFibionScanDialog.value = false
-                    cancelFibionScanTimeout()
-                    connectionRepository.subscribeFibionFlashHeartRate()
-                    connectionRepository.subscribeFibionFlashEcg()
-                } else if (state == ConnectionState.DISCONNECTED) {
-                    _fibionLatestRr.value = null
-                    fibionLowBatteryShownForConnection = false
-                }
-            }
-        }
-
-        // Live R-R interval from Fibion Flash
-        viewModelScope.launch {
-            connectionRepository.fibionFlashRrIntervalSampleFlow.collect { rr ->
-                _fibionLatestRr.value = rr.toInt()
-            }
-        }
-
-        // Cancel Fibion scan timeout when devices are found
-        viewModelScope.launch {
-            connectionRepository.fibionFlashDiscoveredDevices.collect { devices ->
-                if (devices.isNotEmpty()) {
-                    cancelFibionScanTimeout()
-                    _fibionScanTimeoutReached.value = false
-                }
-            }
-        }
-
-        // Handle Fibion Flash events for warning dialogs
-        viewModelScope.launch {
-            connectionRepository.fibionFlashEvents.collect { event ->
-                when (event) {
-                    is FibionFlashEvent.ConnectionTimeout -> {
-                        _bleDialogState.value = BleDialogState.ConnectionTimeout(event.deviceName)
-                    }
-                    is FibionFlashEvent.BatteryLevelRead -> {
-                        if (event.percent <= 30 && !fibionLowBatteryShownForConnection) {
-                            fibionLowBatteryShownForConnection = true
-                            _bleDialogState.value = BleDialogState.LowBattery(event.percent)
-                        }
-                    }
-                    else -> { /* no dialog */ }
-                }
-            }
-        }
-
     }
 
     private fun handleVrBiofeedbackEvent(eventName: String, value: Int?) {
@@ -501,8 +400,7 @@ class TestControlViewModel @Inject constructor(
         val bleConnected = connectionRepository.bleConnectionState.value == ConnectionState.CONNECTED
         val respState = connectionRepository.respirationState.value
         val respConnected = respState == DeviceState.Streaming || respState == DeviceState.Connected
-        val fibionConnected = connectionRepository.fibionFlashConnectionState.value == ConnectionState.CONNECTED
-        return bleConnected || respConnected || fibionConnected
+        return bleConnected || respConnected
     }
 
     private fun startRecordingFromVr() {
@@ -641,53 +539,6 @@ class TestControlViewModel @Inject constructor(
         if (state == DeviceState.Disconnected || state == DeviceState.Error) {
             connectionRepository.connectRespiration(context)
         }
-    }
-
-    fun onFibionCardClick() {
-        val state = connectionRepository.fibionFlashConnectionState.value
-        if (state == ConnectionState.DISCONNECTED || state == ConnectionState.ERROR) {
-            if (!locationChecker.isLocationEnabled()) {
-                _bleDialogState.value = BleDialogState.LocationServicesRequired
-                return
-            }
-            _fibionScanTimeoutReached.value = false
-            _showFibionScanDialog.value = true
-            if (connectionRepository.bluetoothEnabled.value) {
-                connectionRepository.startFibionFlashScan()
-                startFibionScanTimeout()
-            }
-        }
-    }
-
-    fun dismissFibionScanDialog() {
-        _showFibionScanDialog.value = false
-        cancelFibionScanTimeout()
-        _fibionScanTimeoutReached.value = false
-        connectionRepository.stopFibionFlashScan()
-    }
-
-    fun connectToFibionDevice(device: BleDevice) {
-        cancelFibionScanTimeout()
-        connectionRepository.stopFibionFlashScan()
-        connectionRepository.connectFibionFlashDevice(device)
-        _showFibionScanDialog.value = false
-    }
-
-    private fun startFibionScanTimeout() {
-        fibionScanTimeoutJob?.cancel()
-        fibionScanTimeoutJob = viewModelScope.launch {
-            delay(15_000L)
-            if (connectionRepository.fibionFlashIsScanning.value &&
-                connectionRepository.fibionFlashDiscoveredDevices.value.isEmpty()
-            ) {
-                _fibionScanTimeoutReached.value = true
-            }
-        }
-    }
-
-    private fun cancelFibionScanTimeout() {
-        fibionScanTimeoutJob?.cancel()
-        fibionScanTimeoutJob = null
     }
 
     fun dismissBleDialog() {

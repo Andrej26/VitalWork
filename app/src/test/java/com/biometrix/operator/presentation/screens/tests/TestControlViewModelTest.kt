@@ -8,7 +8,6 @@ import com.biometrix.operator.data.db.FakeTestDao
 import com.biometrix.operator.data.db.TestEntity
 import com.biometrix.operator.data.db.TestStatus
 import com.biometrix.operator.data.model.ConnectionState
-import com.biometrix.operator.data.prefs.HeartRateDevice
 import com.biometrix.operator.data.recording.FakeSensorRecordingRepository
 import com.biometrix.operator.data.recording.model.DataRecordingState
 import com.biometrix.operator.data.repository.ConnectionRepository
@@ -17,8 +16,6 @@ import com.biometrix.operator.data.repository.SudsRepository
 import com.biometrix.operator.data.repository.TestRepository
 import com.biometrix.operator.data.sensor.FakeSensorDevice
 import com.biometrix.operator.data.sensor.ble.FakeBleManager
-import com.biometrix.operator.data.sensor.fibion.FakeFibionFlashManager
-import com.biometrix.operator.data.sensor.fibion.FibionFlashEvent
 import com.biometrix.operator.data.system.FakeLocationChecker
 import com.biometrix.operator.data.vr.FakeVRConnectionManager
 import com.biometrix.operator.data.vr.FakeVrDeviceDiscovery
@@ -53,7 +50,6 @@ class TestControlViewModelTest {
     private lateinit var fakeDiscovery: FakeVrDeviceDiscovery
     private lateinit var fakeBleManager: FakeBleManager
     private lateinit var fakeRespiration: FakeSensorDevice
-    private lateinit var fakeFibion: FakeFibionFlashManager
     private lateinit var fakeTestDao: FakeTestDao
     private lateinit var fakeRecordingDao: FakeRecordingDao
     private lateinit var fakeSensorSampleDao: FakeSensorSampleDao
@@ -64,7 +60,6 @@ class TestControlViewModelTest {
     private lateinit var testRepository: TestRepository
     private lateinit var recordingRepository: RecordingRepository
     private lateinit var sudsRepository: SudsRepository
-    private lateinit var selectedDeviceFlow: MutableStateFlow<HeartRateDevice>
     private lateinit var lanAvailableFlow: MutableStateFlow<Boolean>
 
     private val testId = 1L
@@ -75,21 +70,18 @@ class TestControlViewModelTest {
         fakeDiscovery = FakeVrDeviceDiscovery()
         fakeBleManager = FakeBleManager()
         fakeRespiration = FakeSensorDevice()
-        fakeFibion = FakeFibionFlashManager()
         fakeTestDao = FakeTestDao()
         fakeRecordingDao = FakeRecordingDao()
         fakeSensorSampleDao = FakeSensorSampleDao()
         fakeSudsDao = FakeSudsEventDao()
         fakeSensorRecordingRepo = FakeSensorRecordingRepository()
         fakeLocationChecker = FakeLocationChecker(locationEnabled = true)
-        selectedDeviceFlow = MutableStateFlow(HeartRateDevice.ESENSE_PULSE)
         lanAvailableFlow = MutableStateFlow(true)
 
         connectionRepository = ConnectionRepository(
             vrWebSocketClient = fakeVrClient,
             bleManager = fakeBleManager,
             respirationDevice = fakeRespiration,
-            fibionFlashManager = fakeFibion,
             lanAvailableFlow = lanAvailableFlow
         )
         recordingRepository = RecordingRepository(fakeRecordingDao, fakeSensorSampleDao)
@@ -124,7 +116,6 @@ class TestControlViewModelTest {
             sudsRepository = sudsRepository,
             vrWebSocketClient = fakeVrClient,
             mdnsDiscovery = fakeDiscovery,
-            selectedHeartRateDeviceFlow = selectedDeviceFlow,
             locationChecker = fakeLocationChecker,
             savedStateHandle = savedState
         )
@@ -351,47 +342,6 @@ class TestControlViewModelTest {
         runCurrent()
         assertEquals("hello", fakeTestDao.tests[0].notes)
         assertEquals(NotesSaveStatus.Saved, vm.notesSaveStatus.value)
-    }
-
-    // ---- Group H: Fibion low-battery debounce ----
-
-    @Test
-    fun fibionLowBattery_debouncesWithinSameConnection_andResetsOnReconnect() = runTest {
-        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
-        seedActiveTest()
-
-        val vm = createVm()
-        advanceUntilIdle()
-
-        fakeFibion.connectionState.value = ConnectionState.CONNECTED
-        advanceUntilIdle()
-
-        // First low-battery read opens the dialog
-        fakeFibion.eventsFlow.emit(FibionFlashEvent.BatteryLevelRead(25))
-        advanceUntilIdle()
-        assertTrue(vm.bleDialogState.value is BleDialogState.LowBattery)
-
-        // Dismiss the dialog; a second low-battery read in the same connection must NOT re-open it
-        vm.dismissBleDialog()
-        advanceUntilIdle()
-        fakeFibion.eventsFlow.emit(FibionFlashEvent.BatteryLevelRead(25))
-        advanceUntilIdle()
-        assertNull(
-            "Low-battery dialog should be debounced within a single Fibion connection",
-            vm.bleDialogState.value
-        )
-
-        // Disconnect + reconnect resets the flag — dialog should fire again
-        fakeFibion.connectionState.value = ConnectionState.DISCONNECTED
-        advanceUntilIdle()
-        fakeFibion.connectionState.value = ConnectionState.CONNECTED
-        advanceUntilIdle()
-        fakeFibion.eventsFlow.emit(FibionFlashEvent.BatteryLevelRead(25))
-        advanceUntilIdle()
-        assertTrue(
-            "Low-battery dialog should fire again after reconnect",
-            vm.bleDialogState.value is BleDialogState.LowBattery
-        )
     }
 
     // ---- Group G: Location-gated scan ----

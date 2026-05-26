@@ -5,22 +5,17 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Vrpano
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -29,16 +24,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.biometrix.operator.data.prefs.HeartRateDevice
-import com.biometrix.operator.presentation.components.HeartRateDeviceSelectionDialog
 import com.biometrix.operator.presentation.components.NavigationCard
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -53,8 +42,6 @@ fun HomeScreen(
     val vrConnectionState by viewModel.vrConnectionState.collectAsState()
     val hasActiveTest by viewModel.hasActiveTest.collectAsState()
     val shouldAutoShowTutorial by viewModel.shouldAutoShowTutorial.collectAsState()
-    val selectedHrDevice by viewModel.selectedHeartRateDevice.collectAsState()
-    var showDeviceSelectionDialog by remember { mutableStateOf(false) }
 
     // Auto-navigate to Tutorial on first launch
     LaunchedEffect(shouldAutoShowTutorial) {
@@ -79,14 +66,6 @@ fun HomeScreen(
             )
         }
     ) { paddingValues ->
-
-        if (showDeviceSelectionDialog) {
-            HeartRateDeviceSelectionDialog(
-                currentDevice = selectedHrDevice,
-                onSelect = { viewModel.selectHeartRateDevice(it) },
-                onDismiss = { showDeviceSelectionDialog = false }
-            )
-        }
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
@@ -112,12 +91,6 @@ fun HomeScreen(
                     text = "Configure your sensors and VR connection, then start a therapy test.",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                HrDeviceRow(
-                    selectedDevice = selectedHrDevice,
-                    enabled = !hasActiveTest,
-                    onClick = { showDeviceSelectionDialog = true }
                 )
 
                 if (isWide) {
@@ -197,58 +170,6 @@ fun HomeScreen(
                         connectionLabel = if (hasActiveTest) "Running" else null
                     )
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun HrDeviceRow(
-    selectedDevice: HeartRateDevice,
-    enabled: Boolean,
-    onClick: () -> Unit
-) {
-    val deviceLabel = when (selectedDevice) {
-        HeartRateDevice.ESENSE_PULSE -> "eSense Pulse"
-        HeartRateDevice.FIBION_FLASH -> "Fibion Flash"
-    }
-    OutlinedCard(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.FavoriteBorder,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(24.dp)
-            )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = deviceLabel,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = if (enabled) "Heart Rate Sensor · Tap to change" else "Heart Rate Sensor",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            if (enabled) {
-                Icon(
-                    imageVector = Icons.Default.Edit,
-                    contentDescription = "Change",
-                    modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
     }

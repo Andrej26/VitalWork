@@ -3,14 +3,12 @@ package com.biometrix.operator.data.recording
 import com.biometrix.operator.data.db.SensorSampleEntity
 import com.biometrix.operator.data.db.SensorType
 import com.biometrix.operator.data.model.ConnectionState
-import com.biometrix.operator.data.prefs.HeartRateDevice
 import com.biometrix.operator.data.recording.model.DataRecordingState
 import com.biometrix.operator.data.recording.model.RecordingMetadata
 import com.biometrix.operator.data.repository.RecordingRepository
 import com.biometrix.operator.data.sensor.DeviceState
 import com.biometrix.operator.data.sensor.SensorDevice
 import com.biometrix.operator.data.sensor.ble.BleManager
-import com.biometrix.operator.data.sensor.fibion.FibionFlashManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -27,9 +25,7 @@ import kotlinx.coroutines.launch
 class SensorRecordingRepositoryImpl(
     private val bleManager: BleManager,
     private val respirationDevice: SensorDevice,
-    private val fibionFlashManager: FibionFlashManager,
     private val recordingRepository: RecordingRepository,
-    private val selectedDeviceFlow: StateFlow<HeartRateDevice>,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 ) : SensorRecordingRepository {
 
@@ -57,27 +53,17 @@ class SensorRecordingRepositoryImpl(
 
         startTimeMs = System.currentTimeMillis()
 
-        val selectedDevice = selectedDeviceFlow.value
         val isHeartRateConnected = bleManager.connectionState.value == ConnectionState.CONNECTED
         val respirationState = respirationDevice.state.value
         val isRespirationAvailable = respirationState == DeviceState.Streaming ||
                 respirationState == DeviceState.Connected
-        val isFibionConnected = fibionFlashManager.connectionState.value == ConnectionState.CONNECTED
 
-        val shouldRecordHr = isHeartRateConnected && selectedDevice == HeartRateDevice.ESENSE_PULSE
+        val shouldRecordHr = isHeartRateConnected
         val shouldRecordResp = isRespirationAvailable
-        val shouldRecordFibion = isFibionConnected && selectedDevice == HeartRateDevice.FIBION_FLASH
 
         // Auto-start streaming if sensor is connected but not yet streaming
         if (respirationState == DeviceState.Connected) {
             respirationDevice.startStreaming()
-        }
-
-        // Subscribe Fibion sensors if connected (idempotent — already-subscribed paths are skipped).
-        // Always uses Chest mode: subscribe both HR and ECG.
-        if (shouldRecordFibion) {
-            fibionFlashManager.subscribeHeartRate()
-            fibionFlashManager.subscribeEcg()
         }
 
         // Create recording entity in database
@@ -85,8 +71,7 @@ class SensorRecordingRepositoryImpl(
             testId = testId,
             testIdentifier = testIdentifier,
             heartRateEnabled = shouldRecordHr,
-            respirationEnabled = shouldRecordResp,
-            fibionEnabled = shouldRecordFibion
+            respirationEnabled = shouldRecordResp
         )
         currentRecordingId = recording.id
 
@@ -95,8 +80,7 @@ class SensorRecordingRepositoryImpl(
             recordingIdentifier = recording.recordingIdentifier,
             startTimestampMs = startTimeMs,
             heartRateRecording = shouldRecordHr,
-            respirationRecording = shouldRecordResp,
-            fibionRecording = shouldRecordFibion
+            respirationRecording = shouldRecordResp
         )
 
         // Ensure heart rate notifications are enabled before recording
@@ -151,20 +135,6 @@ class SensorRecordingRepositoryImpl(
             collectorJobs += collectSensor(
                 respirationDevice.sampleFlow, SensorType.RESPIRATION
             ) { it.copy(respirationSampleCount = it.respirationSampleCount + 1) }
-        }
-
-        if (shouldRecordFibion) {
-            collectorJobs += collectSensor(
-                fibionFlashManager.heartRateSampleFlow, SensorType.FIBION_HEART_RATE
-            ) { it.copy(fibionHeartRateSampleCount = it.fibionHeartRateSampleCount + 1) }
-
-            collectorJobs += collectSensor(
-                fibionFlashManager.ecgSampleFlow, SensorType.FIBION_ECG
-            ) { it.copy(fibionEcgSampleCount = it.fibionEcgSampleCount + 1) }
-
-            collectorJobs += collectSensor(
-                fibionFlashManager.rrIntervalSampleFlow, SensorType.FIBION_RR_INTERVAL
-            ) { it.copy(fibionRrIntervalSampleCount = it.fibionRrIntervalSampleCount + 1) }
         }
 
         _recordingState.value = DataRecordingState.RECORDING

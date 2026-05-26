@@ -102,7 +102,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.biometrix.operator.R
-import com.biometrix.operator.data.prefs.HeartRateDevice
 import com.biometrix.operator.data.model.ConnectionState
 import com.biometrix.operator.data.sensor.DeviceState
 import com.biometrix.operator.data.sensor.ble.model.BleDevice
@@ -118,11 +117,11 @@ import androidx.compose.ui.viewinterop.AndroidView
 // ─────────────────────────────────────────────────────────────────────────────
 
 private enum class SlideType {
-    WELCOME, DEVICE_SELECTION, INFO, INTERACTIVE_BLE, INTERACTIVE_RESP, INTERACTIVE_FIBION, INTERACTIVE_VR, COMPLETE
+    WELCOME, INFO, INTERACTIVE_BLE, INTERACTIVE_RESP, INTERACTIVE_VR, COMPLETE
 }
 
 private enum class SlidePhase {
-    WELCOME, HEART_RATE, RESPIRATION, FIBION_FLASH, VR, COMPLETE
+    WELCOME, HEART_RATE, RESPIRATION, VR, COMPLETE
 }
 
 private data class TutorialSlide(
@@ -135,20 +134,12 @@ private data class TutorialSlide(
     @RawRes val videoRawRes: Int? = null
 )
 
-private val ALL_TUTORIAL_SLIDES = listOf(
+private val TUTORIAL_SLIDES = listOf(
     TutorialSlide(
         type = SlideType.WELCOME,
         phase = SlidePhase.WELCOME,
         title = "Welcome to BioMetrix Operator",
         body = "This tutorial walks you through the complete setup for a claustrophobia exposure therapy session."
-    ),
-
-    // ── Device Selection — 1 slide (shown only on first use) ────────────────
-    TutorialSlide(
-        type = SlideType.DEVICE_SELECTION,
-        phase = SlidePhase.WELCOME,
-        title = "Choose Your Heart Rate Sensor",
-        body = "Select which chest strap sensor you will use. The tutorial will adapt to show setup instructions for your device."
     ),
 
     // ── Heart Rate Sensor (eSense Pulse) — 3 slides ─────────────────────────
@@ -173,30 +164,6 @@ private val ALL_TUTORIAL_SLIDES = listOf(
         phase = SlidePhase.HEART_RATE,
         title = "Connect Heart Rate Sensor",
         body = "Scan for and connect to the eSense Pulse over Bluetooth."
-    ),
-
-    // ── Fibion Flash — 3 slides ──────────────────────────────────────────────
-    TutorialSlide(
-        type = SlideType.INFO,
-        phase = SlidePhase.FIBION_FLASH,
-        title = "Position the Fibion Flash Belt",
-        body = "Have the patient lift their shirt. Wrap the belt horizontally just below the breast tissue, with the sensor module slightly left of centre (towards the heart). The belt must sit directly on bare skin — adjust the tension so it is snug but does not restrict breathing.",
-        imageRes = R.drawable.tutorial_fibion_belt_position,
-        imageCaption = "Fibion Flash belt on bare skin, wrapped below breast tissue with sensor module left of centre"
-    ),
-    TutorialSlide(
-        type = SlideType.INFO,
-        phase = SlidePhase.FIBION_FLASH,
-        title = "Moisten the Electrode Contacts",
-        body = "If the signal is weak, gently moisten the electrode contact pads on the inside of the belt with water. This will improve electrical conductivity.",
-        imageRes = R.drawable.tutorial_fibion_moisten_contacts,
-        imageCaption = "Fingertip moistening the inner electrode pads on the belt"
-    ),
-    TutorialSlide(
-        type = SlideType.INTERACTIVE_FIBION,
-        phase = SlidePhase.FIBION_FLASH,
-        title = "Connect Fibion Flash",
-        body = "Scan for and connect to the Fibion Flash (Movesense) over Bluetooth."
     ),
 
     // ── Breathing Sensor — 4 slides ──────────────────────────────────────────
@@ -272,33 +239,18 @@ private val ALL_TUTORIAL_SLIDES = listOf(
     )
 )
 
-private fun filteredTutorialSlides(
-    device: HeartRateDevice,
-    includeDeviceSelection: Boolean
-): List<TutorialSlide> =
-    ALL_TUTORIAL_SLIDES.filter { slide ->
-        when {
-            slide.type == SlideType.DEVICE_SELECTION && !includeDeviceSelection -> false
-            device == HeartRateDevice.ESENSE_PULSE -> slide.phase != SlidePhase.FIBION_FLASH
-            device == HeartRateDevice.FIBION_FLASH -> slide.phase != SlidePhase.HEART_RATE
-            else -> true
-        }
-    }
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Phase accent colors
 // ─────────────────────────────────────────────────────────────────────────────
 
 private val PhaseColorHR      = Color(0xFFE57373)   // Red 300        — Heart Rate
 private val PhaseColorResp    = Color(0xFF4DB6AC)   // Teal 300       — Respiration
-private val PhaseColorFibion  = Color(0xFF81C784)   // Green 300      — Fibion Flash
 private val PhaseColorVR      = Color(0xFFFFB74D)   // Orange 300     — VR
 private val PhaseColorDefault = Color(0xFF9575CD)   // Deep Purple 300 — Welcome / Complete
 
 private fun phaseAccentColor(phase: SlidePhase): Color = when (phase) {
     SlidePhase.HEART_RATE      -> PhaseColorHR
     SlidePhase.RESPIRATION     -> PhaseColorResp
-    SlidePhase.FIBION_FLASH    -> PhaseColorFibion
     SlidePhase.VR              -> PhaseColorVR
     SlidePhase.WELCOME, SlidePhase.COMPLETE -> PhaseColorDefault
 }
@@ -311,11 +263,7 @@ fun TutorialScreen(
     viewModel: TutorialViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val selectedHrDevice by viewModel.selectedHeartRateDevice.collectAsState()
-    val showDeviceSelection = remember { viewModel.showDeviceSelectionSlide }
-    val slides = remember(selectedHrDevice, showDeviceSelection) {
-        filteredTutorialSlides(selectedHrDevice, includeDeviceSelection = showDeviceSelection)
-    }
+    val slides = TUTORIAL_SLIDES
     val totalSteps = slides.size
     val pagerState = rememberPagerState(pageCount = { totalSteps })
     val context = LocalContext.current
@@ -431,10 +379,6 @@ fun TutorialScreen(
                 val slide = slides[page]
                 when (slide.type) {
                     SlideType.WELCOME -> TutorialWelcomeStep()
-                    SlideType.DEVICE_SELECTION -> TutorialDeviceSelectionStep(
-                        currentDevice = selectedHrDevice,
-                        onSelectDevice = viewModel::selectHeartRateDevice
-                    )
                     SlideType.INFO -> TutorialSinglePointStep(
                         title = slide.title,
                         body = slide.body,
@@ -463,19 +407,6 @@ fun TutorialScreen(
                         },
                         onToggle = viewModel::toggleRespirationConnection
                     )
-                    SlideType.INTERACTIVE_FIBION -> TutorialFibionFlashConnectStep(
-                        uiState = uiState,
-                        onRequestPermissions = { blePermissionLauncher.launch(blePermissions) },
-                        onEnableBluetooth = {
-                            enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
-                        },
-                        onOpenLocationSettings = {
-                            locationSettingsLauncher.launch(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
-                        },
-                        onToggleScan = viewModel::toggleFibionScan,
-                        onConnectDevice = viewModel::connectFibionDevice,
-                        onDisconnect = viewModel::disconnectFibion
-                    )
                     SlideType.INTERACTIVE_VR -> TutorialVrConnectStep(
                         connectionState = uiState.vrConnectionState,
                         discoveredDevices = uiState.discoveredVrDevices,
@@ -495,7 +426,6 @@ fun TutorialScreen(
             val currentSlide = slides.getOrNull(uiState.currentStep)
             val isConnectionStep = currentSlide?.type in setOf(
                 SlideType.INTERACTIVE_BLE, SlideType.INTERACTIVE_RESP,
-                SlideType.INTERACTIVE_FIBION,
                 SlideType.INTERACTIVE_VR
             )
             TutorialNavigationBar(
@@ -534,7 +464,6 @@ private fun PhaseProgressHeader(
         SlidePhase.WELCOME         -> "Overview"
         SlidePhase.HEART_RATE      -> "Heart Rate Sensor"
         SlidePhase.RESPIRATION     -> "Breathing Sensor"
-        SlidePhase.FIBION_FLASH    -> "Fibion Flash"
         SlidePhase.VR              -> "VR Headset"
         SlidePhase.COMPLETE        -> "Complete"
     }
@@ -551,7 +480,6 @@ private fun PhaseProgressHeader(
     val phaseSize = phaseSlidesIndices.size
     val isInteractive = currentSlide?.type in setOf(
         SlideType.INTERACTIVE_BLE, SlideType.INTERACTIVE_RESP,
-        SlideType.INTERACTIVE_FIBION,
         SlideType.INTERACTIVE_VR
     )
     val phaseStepLabel = when {
@@ -778,7 +706,7 @@ private fun TutorialWelcomeStep() {
                 number = "1",
                 icon = Icons.Default.Sensors,
                 label = "Prepare & connect biosensors",
-                detail = "eSense Pulse, eSense Respiration, and Fibion Flash"
+                detail = "eSense Pulse and eSense Respiration"
             )
             SessionOverviewItem(
                 number = "2",
@@ -845,134 +773,6 @@ private fun SessionOverviewItem(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Device selection step (first-time users)
-// ─────────────────────────────────────────────────────────────────────────────
-
-@Composable
-private fun TutorialDeviceSelectionStep(
-    currentDevice: HeartRateDevice,
-    onSelectDevice: (HeartRateDevice) -> Unit
-) {
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val pad = if (maxWidth < 600.dp) 16.dp else 24.dp
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(pad),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Icon(
-                imageVector = Icons.Default.FavoriteBorder,
-                contentDescription = null,
-                modifier = Modifier.size(72.dp),
-                tint = PhaseColorHR
-            )
-
-            Text(
-                text = "Choose Your Heart Rate Sensor",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
-
-            Text(
-                text = "Select which chest strap sensor you will use. The tutorial will adapt to show setup instructions for your device.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            DeviceSelectionCard(
-                label = "eSense Pulse",
-                description = "Chest strap — Mindfield (BLE)",
-                isSelected = currentDevice == HeartRateDevice.ESENSE_PULSE,
-                onClick = { onSelectDevice(HeartRateDevice.ESENSE_PULSE) }
-            )
-
-            DeviceSelectionCard(
-                label = "Fibion Flash",
-                description = "Chest strap — Fibion / Movesense (BLE)",
-                isSelected = currentDevice == HeartRateDevice.FIBION_FLASH,
-                onClick = { onSelectDevice(HeartRateDevice.FIBION_FLASH) }
-            )
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.Top
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Info,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp).padding(top = 2.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "You can change this anytime from the Home screen using the HR Device button.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-        }
-    }
-}
-
-@Composable
-private fun DeviceSelectionCard(
-    label: String,
-    description: String,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    val borderColor by animateColorAsState(
-        targetValue = if (isSelected) MaterialTheme.colorScheme.primary
-        else MaterialTheme.colorScheme.outlineVariant,
-        label = "cardBorder"
-    )
-    OutlinedCard(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(
-            width = if (isSelected) 2.dp else 1.dp,
-            color = borderColor
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            RadioButton(selected = isSelected, onClick = onClick)
-            Spacer(modifier = Modifier.width(12.dp))
-            Column {
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
         }
     }
 }
@@ -1485,266 +1285,6 @@ private fun TutorialRespirationConnectStep(
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Step 13 – Connect Fibion Flash (BLE via MDS)
-// ─────────────────────────────────────────────────────────────────────────────
-
-@Composable
-private fun TutorialFibionFlashConnectStep(
-    uiState: TutorialUiState,
-    onRequestPermissions: () -> Unit,
-    onEnableBluetooth: () -> Unit,
-    onOpenLocationSettings: () -> Unit,
-    onToggleScan: () -> Unit,
-    onConnectDevice: (BleDevice) -> Unit,
-    onDisconnect: () -> Unit
-) {
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val pad = if (maxWidth < 600.dp) 16.dp else 24.dp
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(pad),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(
-                text = "Connect Fibion Flash",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
-
-            DeviceStatusCard(
-                label = "Fibion Flash" + (uiState.fibionDeviceSerial?.let { " · $it" } ?: ""),
-                connectionState = uiState.fibionConnectionState,
-                deviceState = null
-            )
-
-            // 1. Permissions status
-            if (uiState.blePermissionsGranted) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFF4CAF50).copy(alpha = 0.15f)
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = Color(0xFF4CAF50),
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Text(
-                            text = "Bluetooth & Location permissions already granted",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
-            } else {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = "Bluetooth & Location permissions required",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Text(
-                            text = "Grant Bluetooth and Location permissions so the app can scan for and connect to the Fibion Flash.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Button(
-                            onClick = onRequestPermissions,
-                            modifier = Modifier.align(Alignment.End)
-                        ) {
-                            Text("Grant Permissions")
-                        }
-                    }
-                }
-            }
-
-            // 2. Bluetooth disabled warning
-            if (uiState.blePermissionsGranted && !uiState.bluetoothEnabled) {
-                Card(
-                    onClick = onEnableBluetooth,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.BluetoothDisabled,
-                            contentDescription = null,
-                            modifier = Modifier.size(32.dp),
-                            tint = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Bluetooth Disabled",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                            Text(
-                                text = "Bluetooth must be enabled to scan for the Fibion Flash.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
-                }
-            }
-
-            // 3. Location disabled warning
-            if (uiState.blePermissionsGranted && !uiState.locationEnabled) {
-                Card(
-                    onClick = onOpenLocationSettings,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.LocationOff,
-                            contentDescription = null,
-                            modifier = Modifier.size(32.dp),
-                            tint = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Location Services Disabled",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                            Text(
-                                text = "Location Services must be enabled for BLE scanning to work.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
-                }
-            }
-
-            // 4. Connection / scan UI (only when permissions granted and BT enabled)
-            if (uiState.blePermissionsGranted && uiState.bluetoothEnabled) {
-                when (uiState.fibionConnectionState) {
-                    ConnectionState.CONNECTED -> {
-                        Text(
-                            text = "Fibion Flash connected. You can proceed to the next step or disconnect.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        OutlinedButton(
-                            onClick = onDisconnect,
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = MaterialTheme.colorScheme.error
-                            )
-                        ) {
-                            Text("Disconnect")
-                        }
-                    }
-
-                    ConnectionState.CONNECTING -> {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                            Text(
-                                text = "Connecting to device…",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-                    }
-
-                    else -> {
-                        Button(
-                            onClick = onToggleScan,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(
-                                if (uiState.fibionIsScanning) Icons.Default.Stop else Icons.Default.Search,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(if (uiState.fibionIsScanning) "Stop Scanning" else "Scan for Devices")
-                        }
-
-                        if (uiState.fibionIsScanning && uiState.fibionScannedDevices.isEmpty()) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                                Text(
-                                    text = "Scanning for Fibion Flash (Movesense) devices…",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-
-                        if (uiState.fibionScannedDevices.isNotEmpty()) {
-                            Text(
-                                text = "Found devices — tap to connect:",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            uiState.fibionScannedDevices.forEach { device ->
-                                BleDeviceItem(
-                                    device = device,
-                                    onClick = { onConnectDevice(device) }
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Step 6 – Connect VR Headset

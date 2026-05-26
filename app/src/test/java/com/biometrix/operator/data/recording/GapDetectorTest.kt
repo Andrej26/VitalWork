@@ -166,9 +166,6 @@ class GapDetectorTest {
     private val mixedFixture: List<SensorSampleEntity> =
         gapPair(SensorType.HEART_RATE) +
         gapPair(SensorType.RESPIRATION) +
-        gapPair(SensorType.FIBION_HEART_RATE) +
-        gapPair(SensorType.FIBION_ECG) +
-        gapPair(SensorType.FIBION_RR_INTERVAL) +
         gapPair(SensorType.ESENSE_RR_INTERVAL)
 
     @Test
@@ -179,21 +176,6 @@ class GapDetectorTest {
     @Test
     fun detectRespirationGaps_onlySeesRespiration() {
         assertEquals(1, detectRespirationGaps(mixedFixture).size)
-    }
-
-    @Test
-    fun detectFibionHeartRateGaps_onlySeesFibionHeartRate() {
-        assertEquals(1, detectFibionHeartRateGaps(mixedFixture).size)
-    }
-
-    @Test
-    fun detectFibionEcgGaps_onlySeesFibionEcg() {
-        assertEquals(1, detectFibionEcgGaps(mixedFixture).size)
-    }
-
-    @Test
-    fun detectFibionRrIntervalGaps_onlySeesFibionRrInterval() {
-        assertEquals(1, detectFibionRrIntervalGaps(mixedFixture).size)
     }
 
     @Test

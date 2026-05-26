@@ -3,8 +3,6 @@ package com.biometrix.operator.presentation.screens.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.biometrix.operator.data.model.ConnectionState
-import com.biometrix.operator.data.prefs.HeartRateDevice
-import com.biometrix.operator.data.prefs.HeartRateDevicePreferences
 import com.biometrix.operator.data.prefs.TutorialPreferencesRepository
 import com.biometrix.operator.data.repository.ConnectionRepository
 import com.biometrix.operator.data.repository.TestRepository
@@ -23,8 +21,7 @@ import javax.inject.Inject
 class HomeViewModel @Inject constructor(
     connectionRepository: ConnectionRepository,
     testRepository: TestRepository,
-    private val tutorialPreferences: TutorialPreferencesRepository,
-    private val heartRateDevicePreferences: HeartRateDevicePreferences
+    private val tutorialPreferences: TutorialPreferencesRepository
 ) : ViewModel() {
 
     /** VR headset connection state */
@@ -40,13 +37,6 @@ class HomeViewModel @Inject constructor(
     val hasActiveTest: StateFlow<Boolean> = testRepository.activeTest
         .map { it != null }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
-
-    /** Selected heart rate device */
-    val selectedHeartRateDevice: StateFlow<HeartRateDevice> = heartRateDevicePreferences.selectedDevice
-
-    fun selectHeartRateDevice(device: HeartRateDevice) {
-        heartRateDevicePreferences.select(device)
-    }
 
     /** True on first launch; drives auto-navigation to the Tutorial screen. */
     private val _shouldAutoShowTutorial = MutableStateFlow(tutorialPreferences.isFirstLaunchPending())

@@ -30,9 +30,6 @@ data class TestStatistics(
     @SerialName("esensePulse_totalSamples") val totalHeartRateSamples: Int,
     @SerialName("esenseResp_totalSamples") val totalRespirationSamples: Int,
     val totalSudsEvents: Int,
-    @SerialName("fibion_totalHeartRateSamples") val totalFibionHeartRateSamples: Int = 0,
-    @SerialName("fibion_totalEcgSamples") val totalFibionEcgSamples: Int = 0,
-    @SerialName("fibion_totalRrIntervalSamples") val totalFibionRrIntervalSamples: Int = 0,
     @SerialName("esensePulse_totalRrIntervalSamples") val totalEsenseRrIntervalSamples: Int = 0
 )
 
@@ -55,19 +52,10 @@ data class RecordingData(
 )
 
 @Serializable
-data class FibionFlashInfo(
-    val enabled: Boolean,
-    val heartRate: SensorInfo? = null,
-    val ecg: SensorInfo? = null,
-    val rrInterval: SensorInfo? = null
-)
-
-@Serializable
 data class SensorData(
     @SerialName("esensePulse_heartRate") val heartRate: SensorInfo?,
     @SerialName("esensePulse_rrInterval") val esenseRrInterval: SensorInfo? = null,
-    @SerialName("esenseResp_respiration") val respiration: SensorInfo?,
-    @SerialName("fibion_flash") val fibionFlash: FibionFlashInfo? = null
+    @SerialName("esenseResp_respiration") val respiration: SensorInfo?
 )
 
 @Serializable
@@ -87,10 +75,7 @@ data class SensorGapInfo(
 data class RecordingGaps(
     @SerialName("esensePulse_heartRate") val esensePulseHeartRate: SensorGapInfo? = null,
     @SerialName("esensePulse_rrInterval") val esensePulseRrInterval: SensorGapInfo? = null,
-    @SerialName("esenseResp_respiration") val esenseRespRespiration: SensorGapInfo? = null,
-    @SerialName("fibion_heartRate") val fibionHeartRate: SensorGapInfo? = null,
-    @SerialName("fibion_ecg") val fibionEcg: SensorGapInfo? = null,
-    @SerialName("fibion_rrInterval") val fibionRrInterval: SensorGapInfo? = null
+    @SerialName("esenseResp_respiration") val esenseRespRespiration: SensorGapInfo? = null
 )
 
 @Serializable
@@ -111,4 +96,3 @@ data class SensorSample(
     @SerialName("s")
     val sensorType: String
 )
-

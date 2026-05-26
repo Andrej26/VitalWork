@@ -19,24 +19,6 @@ fun detectRespirationGaps(
     startupThresholdMs: Long = 10_000L
 ): List<GapEvent> = detectGaps(SensorType.RESPIRATION, samples, minGapMs, startupThresholdMs)
 
-fun detectFibionHeartRateGaps(
-    samples: List<SensorSampleEntity>,
-    minGapMs: Long = 5_000L,
-    startupThresholdMs: Long = 10_000L
-): List<GapEvent> = detectGaps(SensorType.FIBION_HEART_RATE, samples, minGapMs, startupThresholdMs)
-
-fun detectFibionEcgGaps(
-    samples: List<SensorSampleEntity>,
-    minGapMs: Long = 5_000L,
-    startupThresholdMs: Long = 10_000L
-): List<GapEvent> = detectGaps(SensorType.FIBION_ECG, samples, minGapMs, startupThresholdMs)
-
-fun detectFibionRrIntervalGaps(
-    samples: List<SensorSampleEntity>,
-    minGapMs: Long = 5_000L,
-    startupThresholdMs: Long = 10_000L
-): List<GapEvent> = detectGaps(SensorType.FIBION_RR_INTERVAL, samples, minGapMs, startupThresholdMs)
-
 fun detectEsenseRrIntervalGaps(
     samples: List<SensorSampleEntity>,
     minGapMs: Long = 5_000L,

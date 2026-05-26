@@ -7,16 +7,11 @@ data class RecordingUiState(
     val durationFormatted: String = "00:00:00",
     val isHeartRateConnected: Boolean = false,
     val isRespirationConnected: Boolean = false,
-    val isFibionConnected: Boolean = false,
     val heartRateSampleCount: Int = 0,
     val respirationSampleCount: Int = 0,
-    val fibionHeartRateSampleCount: Int = 0,
-    val fibionEcgSampleCount: Int = 0,
-    val fibionRrIntervalSampleCount: Int = 0,
     val esenseRrIntervalSampleCount: Int = 0,
     val recordingIdentifier: String? = null,
     val isRecording: Boolean = false,
     val heartRateWasEnabled: Boolean = false,
-    val respirationWasEnabled: Boolean = false,
-    val fibionWasEnabled: Boolean = false
+    val respirationWasEnabled: Boolean = false
 )

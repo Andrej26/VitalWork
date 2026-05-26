@@ -80,7 +80,6 @@ The app has three main responsibilities:
 
 **Local SDKs (`app/libs/`):**
 - `eSense_sdk_2_lib.jar` — eSense Respiration sensor SDK
-- `mdslib-3.27.0-release.aar` — Movesense MDS library for Fibion Flash sensor
 
 ## Git Workflow
 
@@ -94,7 +93,6 @@ The app has three main responsibilities:
 |--------|--------|------------|----------------|
 | eSense Pulse | Mindfield | BLE | Heart rate (BPM), RR intervals |
 | eSense Respiration | Mindfield | Audio jack | Respiration rate |
-| Fibion Flash | Fibion (Movesense) | BLE | Heart rate (BPM), ECG (125 Hz), RR intervals |
 
 **BLE Requirements:**
 - Android 12+: `BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT` permissions
@@ -130,7 +128,6 @@ com.biometrix.operator/
 │   ├── network/
 │   │   └── NetworkChecker.kt               # LAN connectivity checker
 │   ├── prefs/
-│   │   ├── HeartRateDevicePreferences.kt   # HR sensor selection (eSense Pulse vs Fibion Flash)
 │   │   └── TutorialPreferencesRepository.kt
 │   ├── recording/
 │   │   ├── GapDetector.kt                  # Sensor data gap detection
@@ -153,12 +150,6 @@ com.biometrix.operator/
 │   │   │   └── model/
 │   │   │       ├── BleDevice.kt
 │   │   │       └── BleGattService.kt
-│   │   └── fibion/
-│   │       ├── FibionFlashManager.kt        # Fibion Flash interface
-│   │       ├── FibionFlashManagerImpl.kt    # Fibion Flash implementation (Movesense MDS)
-│   │       ├── FibionFlashEvent.kt
-│   │       └── model/
-│   │           └── FibionFlashData.kt
 │   └── vr/
 │       ├── VRWebSocketClient.kt
 │       ├── MdnsDiscoveryService.kt          # mDNS headset auto-discovery
@@ -170,7 +161,6 @@ com.biometrix.operator/
 │   │   ├── BioSensorCard.kt
 │   │   ├── BleDialogTypes.kt
 │   │   ├── ConnectionStatusBadge.kt
-│   │   ├── HeartRateDeviceSelectionDialog.kt
 │   │   ├── LowSignalWarningBanner.kt
 │   │   ├── NavigationCard.kt
 │   │   ├── RecordingIndicator.kt
@@ -195,10 +185,6 @@ com.biometrix.operator/
 │       │   │   ├── BleServiceExplorer.kt
 │       │   │   ├── HeartRateDisplay.kt
 │       │   │   └── RrIntervalDisplay.kt
-│       │   ├── fibion/
-│       │   │   └── flash/
-│       │   │       ├── FibionFlashScreen.kt
-│       │   │       └── FibionFlashViewModel.kt
 │       │   └── mindfield/
 │       │       ├── pulse/
 │       │       │   ├── EsensePulseScreen.kt
@@ -256,7 +242,7 @@ Room database (version 1) with 4 entities:
 | SensorSampleEntity | `sensor_samples` | Time-series sensor data points (FK → recordings) |
 | SudsEventEntity | `suds_events` | Subjective Units of Distress scores (FK → tests) |
 
-**SensorType enum:** HEART_RATE, RESPIRATION, FIBION_HEART_RATE, FIBION_ECG, FIBION_RR_INTERVAL, ESENSE_RR_INTERVAL
+**SensorType enum:** HEART_RATE, RESPIRATION, ESENSE_RR_INTERVAL
 
 ## Data Flow
 
@@ -266,7 +252,6 @@ Meta Quest VR ◄──WebSocket──► VRWebSocketClient ──► VRConnecti
                       MdnsDiscoveryService (auto-discovery)
 
 eSense Pulse  ◄────BLE──────► BleManager ──────────► EsensePulseViewModel ──► UI
-Fibion Flash  ◄────BLE/MDS──► FibionFlashManager ──► FibionFlashViewModel ──► UI
 eSense Resp.  ◄────Audio────► MindfieldRespiration ► EsenseRespirationViewModel ► UI
 
 All sensors ──► SensorRecordingRepository ──► Room DB ──► TestExportService ──► JSON/CSV
@@ -318,7 +303,7 @@ Unit tests live under `app/src/test/` and run on the host JVM (no device/emulato
 | `data/vr/model/WebSocketMessageTest.kt` | `WebSocketMessage.kt` | 8 | `ServerMessage` JSON serialization: minimal/full/failure decoding, round-trip, malformed JSON, missing fields, unknown fields |
 | `data/repository/TestRepositoryTest.kt` | `TestRepository.kt` | 7 | Test lifecycle: creation format (BMX-yyMMdd-HHmmss), sample count aggregation from completed recordings, status transitions, notes persistence, deletion |
 | `data/repository/RecordingRepositoryTest.kt` | `RecordingRepository.kt` | 8 | Recording lifecycle: identifier format (BMX-...-R01), sequence auto-increment, sensor flags, sample count aggregation per sensor type, duration/status on complete, batch sample insert |
-| `data/export/TestExportMapperTest.kt` | `TestExportMapper.kt` | 14 | Export data transformation: sensor type mapping (6 types), sensor enable/disable flags, Fibion sub-sensor population, gap detection conditional logic, statistics aggregation, SUDS event mapping, recording sample inclusion, test field mapping |
+| `data/export/TestExportMapperTest.kt` | `TestExportMapper.kt` | 11 | Export data transformation: sensor type mapping (3 types), sensor enable/disable flags, gap detection conditional logic, statistics aggregation, SUDS event mapping, recording sample inclusion, test field mapping |
 | `data/sensor/audio/MindfieldRespirationTest.kt` | `MindfieldRespiration.kt` | 12 | Zero-crossing breathing rate algorithm (edge cases, accuracy at normal/rapid rates, buffer windowing), signal verification logic (insufficient samples, out-of-range, no movement, valid signal transition) |
 | `presentation/screens/vr/VRConnectionViewModelTest.kt` | `VRConnectionViewModel.kt` | 23 | VR connection state machine, command sending with validation, discovery lifecycle, error flow, log management |
 

@@ -61,18 +61,6 @@ data class RecordingEntity(
     /** Number of respiration samples collected */
     val respirationSampleCount: Int = 0,
 
-    /** Whether Fibion Flash was enabled during this recording */
-    val fibionEnabled: Boolean = false,
-
-    /** Number of Fibion heart rate samples collected */
-    val fibionHeartRateSampleCount: Int = 0,
-
-    /** Number of Fibion ECG samples collected */
-    val fibionEcgSampleCount: Int = 0,
-
-    /** Number of Fibion R-R interval samples collected */
-    val fibionRrIntervalSampleCount: Int = 0,
-
     /** Number of eSense Pulse R-R interval samples collected */
     val esenseRrIntervalSampleCount: Int = 0
 )

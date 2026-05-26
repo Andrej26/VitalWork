@@ -10,9 +10,6 @@ import android.provider.MediaStore
 import androidx.annotation.RequiresApi
 import com.biometrix.operator.data.db.RecordingEntity
 import com.biometrix.operator.data.db.SensorType
-import com.biometrix.operator.data.recording.detectFibionEcgGaps
-import com.biometrix.operator.data.recording.detectFibionHeartRateGaps
-import com.biometrix.operator.data.recording.detectFibionRrIntervalGaps
 import com.biometrix.operator.data.recording.detectEsenseRrIntervalGaps
 import com.biometrix.operator.data.recording.detectHeartRateGaps
 import com.biometrix.operator.data.recording.detectRespirationGaps
@@ -85,9 +82,6 @@ class TestExportService @Inject constructor(
         val hrGaps       = if (recording.heartRateEnabled) detectHeartRateGaps(samples) else emptyList()
         val esenseRrGaps = if (recording.heartRateEnabled && recording.esenseRrIntervalSampleCount > 0) detectEsenseRrIntervalGaps(samples) else emptyList()
         val respGaps     = if (recording.respirationEnabled) detectRespirationGaps(samples) else emptyList()
-        val fibHrGaps    = if (recording.fibionEnabled && recording.fibionHeartRateSampleCount > 0) detectFibionHeartRateGaps(samples) else emptyList()
-        val fibEcgGaps   = if (recording.fibionEnabled && recording.fibionEcgSampleCount > 0) detectFibionEcgGaps(samples) else emptyList()
-        val fibRrGaps    = if (recording.fibionEnabled && recording.fibionRrIntervalSampleCount > 0) detectFibionRrIntervalGaps(samples) else emptyList()
 
         val csvContent = buildString {
             // Metadata header
@@ -104,11 +98,6 @@ class TestExportService @Inject constructor(
                 appendLine("# esense_pulse_rr_samples,${recording.esenseRrIntervalSampleCount}")
             }
             appendLine("# esense_resp_samples,${recording.respirationSampleCount}")
-            if (recording.fibionEnabled) {
-                appendLine("# fibion_hr_samples,${recording.fibionHeartRateSampleCount}")
-                appendLine("# fibion_ecg_samples,${recording.fibionEcgSampleCount}")
-                appendLine("# fibion_rr_samples,${recording.fibionRrIntervalSampleCount}")
-            }
             if (hrGaps.isNotEmpty()) {
                 appendLine("# esense_pulse_hr_gaps,${hrGaps.size}")
                 appendLine("# esense_pulse_hr_gap_total_ms,${hrGaps.sumOf { it.gapMs }}")
@@ -121,18 +110,6 @@ class TestExportService @Inject constructor(
                 appendLine("# esense_resp_gaps,${respGaps.size}")
                 appendLine("# esense_resp_gap_total_ms,${respGaps.sumOf { it.gapMs }}")
             }
-            if (fibHrGaps.isNotEmpty()) {
-                appendLine("# fibion_hr_gaps,${fibHrGaps.size}")
-                appendLine("# fibion_hr_gap_total_ms,${fibHrGaps.sumOf { it.gapMs }}")
-            }
-            if (fibEcgGaps.isNotEmpty()) {
-                appendLine("# fibion_ecg_gaps,${fibEcgGaps.size}")
-                appendLine("# fibion_ecg_gap_total_ms,${fibEcgGaps.sumOf { it.gapMs }}")
-            }
-            if (fibRrGaps.isNotEmpty()) {
-                appendLine("# fibion_rr_gaps,${fibRrGaps.size}")
-                appendLine("# fibion_rr_gap_total_ms,${fibRrGaps.sumOf { it.gapMs }}")
-            }
 
             // Header row
             appendLine("timestamp_ms,elapsed_ms,value,sensor_type")
@@ -143,9 +120,6 @@ class TestExportService @Inject constructor(
                     SensorType.HEART_RATE -> "esense_pulse_hr"
                     SensorType.ESENSE_RR_INTERVAL -> "esense_pulse_rr_interval"
                     SensorType.RESPIRATION -> "esense_resp"
-                    SensorType.FIBION_HEART_RATE -> "fibion_heart_rate"
-                    SensorType.FIBION_ECG -> "fibion_ecg"
-                    SensorType.FIBION_RR_INTERVAL -> "fibion_rr_interval"
                 }
                 appendLine("${sample.timestampMs},${sample.elapsedMs},${sample.value},$sensorType")
             }

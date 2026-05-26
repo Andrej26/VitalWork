@@ -77,13 +77,6 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)
     implementation(files("libs/eSense_sdk_2_lib.jar"))
-    implementation(files("libs/mdslib-3.27.0-release.aar"))
-
-    // Movesense MDS library transitive dependencies (required by mdslib AAR)
-    implementation("com.polidea.rxandroidble2:rxandroidble:1.17.2")
-    implementation("io.reactivex.rxjava2:rxjava:2.2.21")
-    implementation("io.reactivex.rxjava2:rxandroid:2.1.1")
-    implementation("com.google.code.gson:gson:2.10.1")
 
     // Hilt Dependency Injection
     implementation(libs.hilt.android)

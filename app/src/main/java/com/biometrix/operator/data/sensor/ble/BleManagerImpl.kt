@@ -204,7 +204,7 @@ class BleManagerImpl(
                 }
                 emitEvent(BleEvent.ServicesDiscoveryComplete(services.size))
                 // Balanced priority (30–50 ms intervals) is sufficient for 1 Hz HR data
-                // and coexists better with other concurrent BLE connections (e.g. Fibion Flash)
+                // and coexists better with other concurrent BLE connections
                 gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_BALANCED)
                 enableHeartRateNotifications()
             } else {

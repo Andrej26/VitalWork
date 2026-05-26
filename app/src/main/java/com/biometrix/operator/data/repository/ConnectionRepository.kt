@@ -9,9 +9,6 @@ import com.biometrix.operator.data.sensor.audio.MindfieldRespiration
 import com.biometrix.operator.data.sensor.ble.BleEvent
 import com.biometrix.operator.data.sensor.ble.BleManager
 import com.biometrix.operator.data.sensor.ble.model.BleDevice
-import com.biometrix.operator.data.sensor.fibion.FibionFlashEvent
-import com.biometrix.operator.data.sensor.fibion.FibionFlashManager
-import com.biometrix.operator.data.sensor.fibion.model.FibionFlashDeviceInfo
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharedFlow
 import com.biometrix.operator.data.vr.VRConnectionManager
@@ -30,7 +27,6 @@ class ConnectionRepository @Inject constructor(
     private val vrWebSocketClient: VRConnectionManager,
     private val bleManager: BleManager,
     @Named("respiration") private val respirationDevice: SensorDevice,
-    private val fibionFlashManager: FibionFlashManager,
     @Named("lanAvailable") private val lanAvailableFlow: StateFlow<Boolean>
 ) {
     /** VR headset WebSocket connection state */
@@ -127,83 +123,5 @@ class ConnectionRepository @Inject constructor(
 
     fun clearRespirationDisconnectReason() {
         (respirationDevice as? MindfieldRespiration)?.clearDisconnectReason()
-    }
-
-    // --- Fibion Flash ---
-
-    /** Fibion Flash connection state */
-    val fibionFlashConnectionState: StateFlow<ConnectionState> = fibionFlashManager.connectionState
-
-    /** Discovered Fibion Flash devices during scanning */
-    val fibionFlashDiscoveredDevices: StateFlow<List<BleDevice>> = fibionFlashManager.discoveredDevices
-
-    /** Whether a Fibion Flash scan is currently in progress */
-    val fibionFlashIsScanning: StateFlow<Boolean> = fibionFlashManager.isScanning
-
-    /** Currently connected Fibion Flash device (null if not connected) */
-    val fibionFlashConnectedDevice: StateFlow<BleDevice?> = fibionFlashManager.connectedDevice
-
-    /** Fibion Flash device serial number */
-    val fibionFlashDeviceSerial: StateFlow<String?> = fibionFlashManager.deviceSerial
-
-    /** Fibion Flash device info */
-    val fibionFlashDeviceInfo: StateFlow<FibionFlashDeviceInfo?> = fibionFlashManager.deviceInfo
-
-    /** Heart rate from Fibion Flash (null if not subscribed) */
-    val fibionFlashHeartRate: StateFlow<Int?> = fibionFlashManager.heartRate
-
-    /** ECG sample flow from Fibion Flash (µV or mV samples at 125 Hz) */
-    val fibionFlashEcgSampleFlow = fibionFlashManager.ecgSampleFlow
-
-    /** R-R interval sample flow from Fibion Flash (ms) */
-    val fibionFlashRrIntervalSampleFlow = fibionFlashManager.rrIntervalSampleFlow
-
-    /** Fibion Flash battery level */
-    val fibionFlashBatteryLevel: StateFlow<Int?> = fibionFlashManager.batteryLevel
-
-    /** Timestamp of last successful Fibion Flash battery read */
-    val fibionFlashBatteryLastUpdated: StateFlow<Long?> = fibionFlashManager.batteryLastUpdated
-
-    /** Flow of Fibion Flash events for debug logging */
-    val fibionFlashEvents: Flow<FibionFlashEvent> = fibionFlashManager.events
-
-    fun startFibionFlashScan(filterByName: Boolean = true) {
-        fibionFlashManager.startScan(filterByName)
-    }
-
-    fun stopFibionFlashScan() {
-        fibionFlashManager.stopScan()
-    }
-
-    fun connectFibionFlashDevice(device: BleDevice) {
-        fibionFlashManager.connect(device)
-    }
-
-    fun disconnectFibionFlashDevice() {
-        fibionFlashManager.disconnect()
-    }
-
-    fun subscribeFibionFlashHeartRate() {
-        fibionFlashManager.subscribeHeartRate()
-    }
-
-    fun subscribeFibionFlashEcg(sampleRate: Int = 125) {
-        fibionFlashManager.subscribeEcg(sampleRate)
-    }
-
-    fun unsubscribeFibionFlashAll() {
-        fibionFlashManager.unsubscribeAll()
-    }
-
-    fun unsubscribeFibionFlashHeartRate() {
-        fibionFlashManager.unsubscribeHeartRate()
-    }
-
-    fun unsubscribeFibionFlashEcg() {
-        fibionFlashManager.unsubscribeEcg()
-    }
-
-    fun readFibionFlashBatteryLevel() {
-        fibionFlashManager.readBatteryLevel()
     }
 }

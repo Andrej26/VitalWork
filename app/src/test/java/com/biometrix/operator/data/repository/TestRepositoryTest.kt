@@ -51,15 +51,13 @@ class TestRepositoryTest {
     }
 
     @Test
-    fun endTest_sumsAllSixSampleCountFields() = runTest {
+    fun endTest_sumsAllSampleCountFields() = runTest {
         val test = repository.createTest()
         fakeRecordingDao.recordings.addAll(listOf(
             recording(test.id, status = RecordingStatus.COMPLETED,
-                heartRate = 5, respiration = 10, fibionHr = 15,
-                fibionEcg = 20, fibionRr = 25, esenseRr = 30),
+                heartRate = 5, respiration = 10, esenseRr = 30),
             recording(test.id, status = RecordingStatus.COMPLETED,
-                heartRate = 1, respiration = 2, fibionHr = 3,
-                fibionEcg = 4, fibionRr = 5, esenseRr = 6)
+                heartRate = 1, respiration = 2, esenseRr = 6)
         ))
 
         repository.endTest(test.id, 2)
@@ -67,9 +65,6 @@ class TestRepositoryTest {
         val updated = fakeTestDao.getTestById(test.id)!!
         assertEquals(6, updated.totalHeartRateSampleCount)
         assertEquals(12, updated.totalRespirationSampleCount)
-        assertEquals(18, updated.totalFibionHeartRateSampleCount)
-        assertEquals(24, updated.totalFibionEcgSampleCount)
-        assertEquals(30, updated.totalFibionRrIntervalSampleCount)
         assertEquals(36, updated.totalEsenseRrIntervalSampleCount)
     }
 
@@ -112,9 +107,6 @@ class TestRepositoryTest {
         status: RecordingStatus = RecordingStatus.COMPLETED,
         heartRate: Int = 0,
         respiration: Int = 0,
-        fibionHr: Int = 0,
-        fibionEcg: Int = 0,
-        fibionRr: Int = 0,
         esenseRr: Int = 0
     ) = RecordingEntity(
         testId = testId,
@@ -124,9 +116,6 @@ class TestRepositoryTest {
         status = status,
         heartRateSampleCount = heartRate,
         respirationSampleCount = respiration,
-        fibionHeartRateSampleCount = fibionHr,
-        fibionEcgSampleCount = fibionEcg,
-        fibionRrIntervalSampleCount = fibionRr,
         esenseRrIntervalSampleCount = esenseRr
     )
 }

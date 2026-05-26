@@ -53,7 +53,7 @@ The device may send UINT8 or UINT16 format; the parser handles both. R-R values 
 
 ### Connection Priority
 
-After service discovery, the app requests `CONNECTION_PRIORITY_BALANCED` (30–50 ms connection intervals). This is sufficient for the HR notification rate and coexists better with other concurrent BLE connections (e.g. Fibion Flash).
+After service discovery, the app requests `CONNECTION_PRIORITY_BALANCED` (30–50 ms connection intervals). This is sufficient for the HR notification rate and coexists better with other concurrent BLE connections.
 
 ## Quirks and Known Behaviors
 
@@ -79,7 +79,7 @@ If the GATT callback reports `STATE_DISCONNECTED` with a non-success status whil
 | Property | Value |
 |----------|-------|
 | Unit | BPM (beats per minute) |
-| Output rate | ≈ 4.5 Hz (225 ms period, clock-driven; observed 4.27–5.01 Hz across recordings). Samples occasionally arrive in close pairs (~1–2 ms apart). See `sensor_comparison_pulse_vs_fibion.html` §5. |
+| Output rate | ≈ 4.5 Hz (225 ms period, clock-driven; observed 4.27–5.01 Hz across recordings). Samples occasionally arrive in close pairs (~1–2 ms apart). |
 | Internal device rate | 500 Hz (PPG sensor); processed before BLE transmission |
 | Measuring range | 30–240 BPM (±2 BPM accuracy per device spec) |
 
@@ -134,11 +134,9 @@ Both are cleared on disconnect and when HR notifications are disabled. `RrInterv
 
 ### Recording Integration
 
-eSense Pulse data is **recording-scoped** — it is collected within the `start_recording` → `stop_recording` VR window, the same as Fibion Flash and eSense Respiration.
+eSense Pulse data is **recording-scoped** — it is collected within the `start_recording` → `stop_recording` VR window, alongside eSense Respiration.
 
-**Only one HR sensor records per session.** If the active heart-rate device preference is set to Fibion Flash, the eSense collectors below are not started. See [`SensorRecordingRepositoryImpl`](../app/src/main/java/com/biometrix/operator/data/recording/SensorRecordingRepositoryImpl.kt) and [`HeartRateDevicePreferences`](../app/src/main/java/com/biometrix/operator/data/prefs/HeartRateDevicePreferences.kt).
-
-When a recording starts, `SensorRecordingRepositoryImpl` checks if the eSense Pulse is connected (`ConnectionState.CONNECTED`) **and** that it is the selected HR device. If both conditions hold:
+When a recording starts, `SensorRecordingRepositoryImpl` checks if the eSense Pulse is connected (`ConnectionState.CONNECTED`). If so:
 1. `enableHeartRateNotifications()` is called explicitly to ensure HR notifications are active before collecting begins.
 2. Two collector coroutines are launched:
    - `heartRateSampleFlow` → `SensorType.HEART_RATE` samples in `sensor_samples` table

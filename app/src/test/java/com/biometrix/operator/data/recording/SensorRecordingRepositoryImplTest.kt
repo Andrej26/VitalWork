@@ -5,15 +5,12 @@ import com.biometrix.operator.data.db.FakeSensorSampleDao
 import com.biometrix.operator.data.db.RecordingStatus
 import com.biometrix.operator.data.db.SensorType
 import com.biometrix.operator.data.model.ConnectionState
-import com.biometrix.operator.data.prefs.HeartRateDevice
 import com.biometrix.operator.data.recording.model.DataRecordingState
 import com.biometrix.operator.data.repository.RecordingRepository
 import com.biometrix.operator.data.sensor.DeviceState
 import com.biometrix.operator.data.sensor.FakeSensorDevice
 import com.biometrix.operator.data.sensor.ble.FakeBleManager
-import com.biometrix.operator.data.sensor.fibion.FakeFibionFlashManager
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -30,11 +27,9 @@ class SensorRecordingRepositoryImplTest {
 
     private lateinit var bleManager: FakeBleManager
     private lateinit var respirationDevice: FakeSensorDevice
-    private lateinit var fibionFlashManager: FakeFibionFlashManager
     private lateinit var fakeRecordingDao: FakeRecordingDao
     private lateinit var fakeSensorSampleDao: FakeSensorSampleDao
     private lateinit var recordingRepository: RecordingRepository
-    private lateinit var selectedDeviceFlow: MutableStateFlow<HeartRateDevice>
 
     private val testDispatcher = UnconfinedTestDispatcher()
 
@@ -42,19 +37,15 @@ class SensorRecordingRepositoryImplTest {
     fun setUp() {
         bleManager = FakeBleManager()
         respirationDevice = FakeSensorDevice()
-        fibionFlashManager = FakeFibionFlashManager()
         fakeRecordingDao = FakeRecordingDao()
         fakeSensorSampleDao = FakeSensorSampleDao()
         recordingRepository = RecordingRepository(fakeRecordingDao, fakeSensorSampleDao)
-        selectedDeviceFlow = MutableStateFlow(HeartRateDevice.ESENSE_PULSE)
     }
 
     private fun TestScope.createSut() = SensorRecordingRepositoryImpl(
         bleManager = bleManager,
         respirationDevice = respirationDevice,
-        fibionFlashManager = fibionFlashManager,
         recordingRepository = recordingRepository,
-        selectedDeviceFlow = selectedDeviceFlow,
         scope = backgroundScope
     )
 
@@ -85,13 +76,11 @@ class SensorRecordingRepositoryImplTest {
         assertEquals(1L, recording.testId)
         assertTrue(recording.heartRateEnabled)
         assertTrue(recording.respirationEnabled)
-        assertFalse(recording.fibionEnabled)
 
         val metadata = sut.recordingMetadata.value
         assertNotNull(metadata)
         assertTrue(metadata!!.heartRateRecording)
         assertTrue(metadata.respirationRecording)
-        assertFalse(metadata.fibionRecording)
     }
 
     @Test
@@ -118,7 +107,6 @@ class SensorRecordingRepositoryImplTest {
     @Test
     fun startRecording_esensePulse_whenDisconnected_doesNotEnableNotifications() = runTest(testDispatcher) {
         val sut = createSut()
-        // Default state: bleManager disconnected
         sut.startRecording(testId = 1L, testIdentifier = "BMX-260413-100000")
         assertEquals(0, bleManager.enableHrNotificationsCallCount)
     }
@@ -137,30 +125,6 @@ class SensorRecordingRepositoryImplTest {
         respirationDevice.state.value = DeviceState.Streaming
         sut.startRecording(testId = 1L, testIdentifier = "BMX-260413-100000")
         assertEquals(0, respirationDevice.startStreamingCallCount)
-    }
-
-    @Test
-    fun startRecording_fibion_whenConnected_subscribes() = runTest(testDispatcher) {
-        val sut = createSut()
-        connectFibionFlash()
-        sut.startRecording(testId = 1L, testIdentifier = "BMX-260413-100000")
-
-        assertEquals(1, fibionFlashManager.subscribeHeartRateCallCount)
-        assertEquals(1, fibionFlashManager.subscribeEcgCallCount)
-        assertEquals(125, fibionFlashManager.lastSubscribeEcgSampleRate)
-        assertTrue(sut.recordingMetadata.value!!.fibionRecording)
-    }
-
-    @Test
-    fun startRecording_fibion_whenDisconnected_doesNotSubscribe() = runTest(testDispatcher) {
-        val sut = createSut()
-        // Select Fibion device but leave it disconnected
-        selectedDeviceFlow.value = HeartRateDevice.FIBION_FLASH
-        sut.startRecording(testId = 1L, testIdentifier = "BMX-260413-100000")
-
-        assertEquals(0, fibionFlashManager.subscribeHeartRateCallCount)
-        assertEquals(0, fibionFlashManager.subscribeEcgCallCount)
-        assertFalse(sut.recordingMetadata.value!!.fibionRecording)
     }
 
     // -- Sensor collection --
@@ -220,27 +184,6 @@ class SensorRecordingRepositoryImplTest {
         assertEquals(3, metadata.respirationSampleCount)
     }
 
-    // -- Fibion sensor collection --
-
-    @Test
-    fun fibionSamples_allThreeTypesWritten() = runTest(testDispatcher) {
-        val sut = createSut()
-        connectFibionFlash()
-        sut.startRecording(testId = 1L, testIdentifier = "BMX-260413-100000")
-
-        fibionFlashManager.heartRateSampleFlow.emit(75f)
-        fibionFlashManager.ecgSampleFlow.emit(0.5f)
-        fibionFlashManager.rrIntervalSampleFlow.emit(800f)
-
-        sut.stopRecording()
-
-        val samples = fakeSensorSampleDao.samples
-        assertEquals(3, samples.size)
-        assertEquals(1, samples.count { it.sensorType == SensorType.FIBION_HEART_RATE })
-        assertEquals(1, samples.count { it.sensorType == SensorType.FIBION_ECG })
-        assertEquals(1, samples.count { it.sensorType == SensorType.FIBION_RR_INTERVAL })
-    }
-
     // -- Stop recording --
 
     @Test
@@ -272,11 +215,9 @@ class SensorRecordingRepositoryImplTest {
 
         sut.stopRecording()
 
-        // Recording should be COMPLETED
         val recording = fakeRecordingDao.recordings[0]
         assertEquals(RecordingStatus.COMPLETED, recording.status)
 
-        // All samples flushed to DB
         assertEquals(3, fakeSensorSampleDao.samples.size)
     }
 
@@ -285,13 +226,11 @@ class SensorRecordingRepositoryImplTest {
     @Test
     fun noSensorsConnected_allFlagsDisabledNoSamplesWritten() = runTest(testDispatcher) {
         val sut = createSut()
-        // All sensors disconnected (default state)
         sut.startRecording(testId = 1L, testIdentifier = "BMX-260413-100000")
 
         val metadata = sut.recordingMetadata.value!!
         assertFalse(metadata.heartRateRecording)
         assertFalse(metadata.respirationRecording)
-        assertFalse(metadata.fibionRecording)
 
         sut.stopRecording()
 
@@ -313,9 +252,8 @@ class SensorRecordingRepositoryImplTest {
 
         assertEquals(2, fakeRecordingDao.recordings.size)
         val ids = fakeRecordingDao.recordings.map { it.id }.toSet()
-        assertEquals(2, ids.size) // Different IDs
+        assertEquals(2, ids.size)
 
-        // Both recordings have their samples
         assertEquals(2, fakeSensorSampleDao.samples.size)
     }
 
@@ -327,7 +265,6 @@ class SensorRecordingRepositoryImplTest {
 
         sut.startRecording(testId = 1L, testIdentifier = "BMX-260413-100000")
 
-        // Emit a mix of samples
         bleManager.heartRateSampleFlow.emit(72f)
         bleManager.heartRateSampleFlow.emit(74f)
         bleManager.rrIntervalSampleFlow.emit(833f)
@@ -342,7 +279,6 @@ class SensorRecordingRepositoryImplTest {
         assertEquals(1, samples.count { it.sensorType == SensorType.ESENSE_RR_INTERVAL })
         assertEquals(2, samples.count { it.sensorType == SensorType.RESPIRATION })
 
-        // Recording completed
         assertEquals(RecordingStatus.COMPLETED, fakeRecordingDao.recordings[0].status)
     }
 
@@ -352,8 +288,6 @@ class SensorRecordingRepositoryImplTest {
         connectEsensePulse()
         sut.startRecording(testId = 1L, testIdentifier = "BMX-260413-100000")
 
-        // Emit 55 samples — exceeds the 50-sample batch threshold.
-        // The size-based flush path should write at least 50 to the DAO before stopRecording().
         repeat(55) { bleManager.heartRateSampleFlow.emit(72f + it) }
 
         assertTrue(
@@ -363,19 +297,12 @@ class SensorRecordingRepositoryImplTest {
 
         sut.stopRecording()
 
-        // After stop, all 55 samples should be persisted (final flush on channel close).
         assertEquals(55, fakeSensorSampleDao.samples.size)
     }
 
     // -- Helpers --
 
     private fun connectEsensePulse() {
-        selectedDeviceFlow.value = HeartRateDevice.ESENSE_PULSE
         bleManager.connectionState.value = ConnectionState.CONNECTED
-    }
-
-    private fun connectFibionFlash() {
-        selectedDeviceFlow.value = HeartRateDevice.FIBION_FLASH
-        fibionFlashManager.connectionState.value = ConnectionState.CONNECTED
     }
 }

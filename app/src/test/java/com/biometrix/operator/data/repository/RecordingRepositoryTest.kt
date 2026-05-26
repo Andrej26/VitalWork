@@ -66,31 +66,25 @@ class RecordingRepositoryTest {
             testId = 1L,
             testIdentifier = "BMX-260413-141530",
             heartRateEnabled = true,
-            respirationEnabled = true,
-            fibionEnabled = true
+            respirationEnabled = true
         )
 
         assertTrue(recording.heartRateEnabled)
         assertTrue(recording.respirationEnabled)
-        assertTrue(recording.fibionEnabled)
     }
 
     @Test
-    fun completeRecording_countsAllSixSensorTypes() = runTest {
+    fun completeRecording_countsAllSensorTypes() = runTest {
         val recording = repository.createRecording(
             testId = 1L,
             testIdentifier = "BMX-260413-141530",
             heartRateEnabled = true,
-            respirationEnabled = true,
-            fibionEnabled = true
+            respirationEnabled = true
         )
 
         fakeSensorSampleDao.samples.addAll(listOf(
             sample(recording.id, SensorType.HEART_RATE, count = 3),
             sample(recording.id, SensorType.RESPIRATION, count = 5),
-            sample(recording.id, SensorType.FIBION_HEART_RATE, count = 7),
-            sample(recording.id, SensorType.FIBION_ECG, count = 11),
-            sample(recording.id, SensorType.FIBION_RR_INTERVAL, count = 13),
             sample(recording.id, SensorType.ESENSE_RR_INTERVAL, count = 17)
         ).flatten())
 
@@ -99,9 +93,6 @@ class RecordingRepositoryTest {
         val updated = fakeRecordingDao.getRecordingById(recording.id)!!
         assertEquals(3, updated.heartRateSampleCount)
         assertEquals(5, updated.respirationSampleCount)
-        assertEquals(7, updated.fibionHeartRateSampleCount)
-        assertEquals(11, updated.fibionEcgSampleCount)
-        assertEquals(13, updated.fibionRrIntervalSampleCount)
         assertEquals(17, updated.esenseRrIntervalSampleCount)
     }
 

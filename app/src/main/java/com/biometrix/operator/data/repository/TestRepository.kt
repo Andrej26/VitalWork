@@ -65,9 +65,6 @@ class TestRepository @Inject constructor(
                 recordingCount = recordingCount,
                 totalHeartRateSampleCount = completedRecordings.sumOf { it.heartRateSampleCount },
                 totalRespirationSampleCount = completedRecordings.sumOf { it.respirationSampleCount },
-                totalFibionHeartRateSampleCount = completedRecordings.sumOf { it.fibionHeartRateSampleCount },
-                totalFibionEcgSampleCount = completedRecordings.sumOf { it.fibionEcgSampleCount },
-                totalFibionRrIntervalSampleCount = completedRecordings.sumOf { it.fibionRrIntervalSampleCount },
                 totalEsenseRrIntervalSampleCount = completedRecordings.sumOf { it.esenseRrIntervalSampleCount }
             )
         )

@@ -37,8 +37,7 @@ class RecordingRepository @Inject constructor(
         testId: Long,
         testIdentifier: String,
         heartRateEnabled: Boolean,
-        respirationEnabled: Boolean,
-        fibionEnabled: Boolean = false
+        respirationEnabled: Boolean
     ): RecordingEntity {
         val maxSeq = recordingDao.getMaxSequenceNumber(testId) ?: 0
         val sequenceNumber = maxSeq + 1
@@ -56,8 +55,7 @@ class RecordingRepository @Inject constructor(
             startedAt = System.currentTimeMillis(),
             status = RecordingStatus.RECORDING,
             heartRateEnabled = heartRateEnabled,
-            respirationEnabled = respirationEnabled,
-            fibionEnabled = fibionEnabled
+            respirationEnabled = respirationEnabled
         )
 
         val id = recordingDao.insert(recording)
@@ -81,9 +79,6 @@ class RecordingRepository @Inject constructor(
 
         val hrCount = sensorSampleDao.getSampleCountBySensorType(recordingId, SensorType.HEART_RATE)
         val respCount = sensorSampleDao.getSampleCountBySensorType(recordingId, SensorType.RESPIRATION)
-        val fibionHrCount = sensorSampleDao.getSampleCountBySensorType(recordingId, SensorType.FIBION_HEART_RATE)
-        val fibionEcgCount = sensorSampleDao.getSampleCountBySensorType(recordingId, SensorType.FIBION_ECG)
-        val fibionRrCount = sensorSampleDao.getSampleCountBySensorType(recordingId, SensorType.FIBION_RR_INTERVAL)
         val esenseRrCount = sensorSampleDao.getSampleCountBySensorType(recordingId, SensorType.ESENSE_RR_INTERVAL)
 
         recordingDao.update(
@@ -93,9 +88,6 @@ class RecordingRepository @Inject constructor(
                 status = RecordingStatus.COMPLETED,
                 heartRateSampleCount = hrCount,
                 respirationSampleCount = respCount,
-                fibionHeartRateSampleCount = fibionHrCount,
-                fibionEcgSampleCount = fibionEcgCount,
-                fibionRrIntervalSampleCount = fibionRrCount,
                 esenseRrIntervalSampleCount = esenseRrCount
             )
         )

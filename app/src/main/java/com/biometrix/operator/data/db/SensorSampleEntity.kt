@@ -8,9 +8,6 @@ import androidx.room.PrimaryKey
 enum class SensorType {
     HEART_RATE,
     RESPIRATION,
-    FIBION_HEART_RATE,
-    FIBION_ECG,
-    FIBION_RR_INTERVAL,
     ESENSE_RR_INTERVAL
 }
 

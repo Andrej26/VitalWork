@@ -12,9 +12,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bluetooth
-import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Watch
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -30,7 +28,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.biometrix.operator.data.prefs.HeartRateDevice
 import com.biometrix.operator.presentation.components.SensorTypeCard
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -42,8 +39,6 @@ fun SensorsScreen(
 ) {
     val bleConnectionState by viewModel.bleConnectionState.collectAsState()
     val respirationState by viewModel.respirationState.collectAsState()
-    val fibionFlashConnectionState by viewModel.fibionFlashConnectionState.collectAsState()
-    val selectedHrDevice by viewModel.selectedHeartRateDevice.collectAsState()
 
     Scaffold(
         topBar = {
@@ -90,15 +85,13 @@ fun SensorsScreen(
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                if (selectedHrDevice == HeartRateDevice.ESENSE_PULSE) {
-                    SensorTypeCard(
-                        name = "eSense Pulse",
-                        description = "Heart Rate Monitor (BLE)",
-                        icon = Icons.Default.Bluetooth,
-                        connectionState = bleConnectionState,
-                        onClick = { onNavigateToSensorDetail("esense_pulse") }
-                    )
-                }
+                SensorTypeCard(
+                    name = "eSense Pulse",
+                    description = "Heart Rate Monitor (BLE)",
+                    icon = Icons.Default.Bluetooth,
+                    connectionState = bleConnectionState,
+                    onClick = { onNavigateToSensorDetail("esense_pulse") }
+                )
 
                 SensorTypeCard(
                     name = "eSense Respiration",
@@ -107,16 +100,6 @@ fun SensorsScreen(
                     connectionState = respirationState.toConnectionState(),
                     onClick = { onNavigateToSensorDetail("esense_respiration") }
                 )
-
-                if (selectedHrDevice == HeartRateDevice.FIBION_FLASH) {
-                    SensorTypeCard(
-                        name = "Fibion Flash",
-                        description = "Wearable Sensor (BLE)",
-                        icon = Icons.Default.Watch,
-                        connectionState = fibionFlashConnectionState,
-                        onClick = { onNavigateToSensorDetail("fibion_flash") }
-                    )
-                }
             }
         }
     }
