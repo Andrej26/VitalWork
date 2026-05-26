@@ -4,7 +4,6 @@ import com.biometrix.operator.data.db.RecordingEntity
 import com.biometrix.operator.data.db.SensorSampleEntity
 import com.biometrix.operator.data.db.SensorType
 import com.biometrix.operator.data.db.TestEntity
-import com.biometrix.operator.data.export.model.BloodPressureEventExport
 import com.biometrix.operator.data.export.model.FibionFlashInfo
 import com.biometrix.operator.data.export.model.GapExport
 import com.biometrix.operator.data.export.model.RecordingData
@@ -24,7 +23,6 @@ import com.biometrix.operator.data.recording.detectFibionHeartRateGaps
 import com.biometrix.operator.data.recording.detectFibionRrIntervalGaps
 import com.biometrix.operator.data.recording.detectHeartRateGaps
 import com.biometrix.operator.data.recording.detectRespirationGaps
-import com.biometrix.operator.data.repository.BloodPressureRepository
 import com.biometrix.operator.data.repository.RecordingRepository
 import com.biometrix.operator.data.repository.SudsRepository
 import java.text.SimpleDateFormat
@@ -36,8 +34,7 @@ import javax.inject.Singleton
 @Singleton
 class TestExportMapper @Inject constructor(
     private val recordingRepository: RecordingRepository,
-    private val sudsRepository: SudsRepository,
-    private val bloodPressureRepository: BloodPressureRepository
+    private val sudsRepository: SudsRepository
 ) {
     private val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
 
@@ -54,17 +51,6 @@ class TestExportMapper @Inject constructor(
 
         val sudsEvents = sudsRepository.getEventsForTest(test.id).map { event ->
             SudsEventExport(timestampMs = event.timestampMs, value = event.value)
-        }
-
-        val bpEvents = bloodPressureRepository.getEventsForTest(test.id).map { event ->
-            BloodPressureEventExport(
-                timestampMs = event.timestampMs,
-                elapsedTestMs = event.elapsedTestMs,
-                systolicMmHg = event.systolicMmHg,
-                diastolicMmHg = event.diastolicMmHg,
-                meanArterialMmHg = event.meanArterialMmHg,
-                pulseRateBpm = event.pulseRateBpm
-            )
         }
 
         return TestExport(
@@ -85,11 +71,9 @@ class TestExportMapper @Inject constructor(
                     totalFibionHeartRateSamples = test.totalFibionHeartRateSampleCount,
                     totalFibionEcgSamples = test.totalFibionEcgSampleCount,
                     totalFibionRrIntervalSamples = test.totalFibionRrIntervalSampleCount,
-                    totalEsenseRrIntervalSamples = test.totalEsenseRrIntervalSampleCount,
-                    totalBpEvents = bpEvents.size
+                    totalEsenseRrIntervalSamples = test.totalEsenseRrIntervalSampleCount
                 ),
                 recordings = recordingDataList,
-                bloodPressureEvents = bpEvents,
                 sudsEvents = sudsEvents
             )
         )

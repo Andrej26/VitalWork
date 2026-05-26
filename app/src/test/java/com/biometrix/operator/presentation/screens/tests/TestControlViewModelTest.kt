@@ -1,7 +1,6 @@
 package com.biometrix.operator.presentation.screens.tests
 
 import androidx.lifecycle.SavedStateHandle
-import com.biometrix.operator.data.db.FakeBloodPressureEventDao
 import com.biometrix.operator.data.db.FakeRecordingDao
 import com.biometrix.operator.data.db.FakeSensorSampleDao
 import com.biometrix.operator.data.db.FakeSudsEventDao
@@ -12,13 +11,11 @@ import com.biometrix.operator.data.model.ConnectionState
 import com.biometrix.operator.data.prefs.HeartRateDevice
 import com.biometrix.operator.data.recording.FakeSensorRecordingRepository
 import com.biometrix.operator.data.recording.model.DataRecordingState
-import com.biometrix.operator.data.repository.BloodPressureRepository
 import com.biometrix.operator.data.repository.ConnectionRepository
 import com.biometrix.operator.data.repository.RecordingRepository
 import com.biometrix.operator.data.repository.SudsRepository
 import com.biometrix.operator.data.repository.TestRepository
 import com.biometrix.operator.data.sensor.FakeSensorDevice
-import com.biometrix.operator.data.sensor.ble.FakeBeurerbC87Manager
 import com.biometrix.operator.data.sensor.ble.FakeBleManager
 import com.biometrix.operator.data.sensor.fibion.FakeFibionFlashManager
 import com.biometrix.operator.data.sensor.fibion.FibionFlashEvent
@@ -57,19 +54,16 @@ class TestControlViewModelTest {
     private lateinit var fakeBleManager: FakeBleManager
     private lateinit var fakeRespiration: FakeSensorDevice
     private lateinit var fakeFibion: FakeFibionFlashManager
-    private lateinit var fakeBc87: FakeBeurerbC87Manager
     private lateinit var fakeTestDao: FakeTestDao
     private lateinit var fakeRecordingDao: FakeRecordingDao
     private lateinit var fakeSensorSampleDao: FakeSensorSampleDao
     private lateinit var fakeSudsDao: FakeSudsEventDao
-    private lateinit var fakeBpDao: FakeBloodPressureEventDao
     private lateinit var fakeSensorRecordingRepo: FakeSensorRecordingRepository
     private lateinit var fakeLocationChecker: FakeLocationChecker
     private lateinit var connectionRepository: ConnectionRepository
     private lateinit var testRepository: TestRepository
     private lateinit var recordingRepository: RecordingRepository
     private lateinit var sudsRepository: SudsRepository
-    private lateinit var bloodPressureRepository: BloodPressureRepository
     private lateinit var selectedDeviceFlow: MutableStateFlow<HeartRateDevice>
     private lateinit var lanAvailableFlow: MutableStateFlow<Boolean>
 
@@ -82,12 +76,10 @@ class TestControlViewModelTest {
         fakeBleManager = FakeBleManager()
         fakeRespiration = FakeSensorDevice()
         fakeFibion = FakeFibionFlashManager()
-        fakeBc87 = FakeBeurerbC87Manager()
         fakeTestDao = FakeTestDao()
         fakeRecordingDao = FakeRecordingDao()
         fakeSensorSampleDao = FakeSensorSampleDao()
         fakeSudsDao = FakeSudsEventDao()
-        fakeBpDao = FakeBloodPressureEventDao()
         fakeSensorRecordingRepo = FakeSensorRecordingRepository()
         fakeLocationChecker = FakeLocationChecker(locationEnabled = true)
         selectedDeviceFlow = MutableStateFlow(HeartRateDevice.ESENSE_PULSE)
@@ -98,13 +90,11 @@ class TestControlViewModelTest {
             bleManager = fakeBleManager,
             respirationDevice = fakeRespiration,
             fibionFlashManager = fakeFibion,
-            bc87Manager = fakeBc87,
             lanAvailableFlow = lanAvailableFlow
         )
         recordingRepository = RecordingRepository(fakeRecordingDao, fakeSensorSampleDao)
         testRepository = TestRepository(fakeTestDao, fakeRecordingDao)
         sudsRepository = SudsRepository(fakeSudsDao)
-        bloodPressureRepository = BloodPressureRepository(fakeBpDao)
     }
 
     @After
@@ -132,7 +122,6 @@ class TestControlViewModelTest {
             testRepository = testRepository,
             recordingRepository = recordingRepository,
             sudsRepository = sudsRepository,
-            bloodPressureRepository = bloodPressureRepository,
             vrWebSocketClient = fakeVrClient,
             mdnsDiscovery = fakeDiscovery,
             selectedHeartRateDeviceFlow = selectedDeviceFlow,
@@ -302,7 +291,7 @@ class TestControlViewModelTest {
     // ---- Group E: End-test cleanup ----
 
     @Test
-    fun endTestAndSave_stopsBc87AndRecording_thenCompletesTest() = runTest {
+    fun endTestAndSave_stopsRecording_thenCompletesTest() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         seedActiveTest()
 
@@ -315,7 +304,6 @@ class TestControlViewModelTest {
         vm.endTestAndSave()
         advanceUntilIdle()
 
-        assertEquals(1, fakeBc87.stopScanningCallCount)
         assertEquals(1, fakeSensorRecordingRepo.stopRecordingCallCount)
         assertEquals(TestStatus.COMPLETED, fakeTestDao.tests[0].status)
         assertTrue(vm.endTestResult.value is EndTestResult.Success)
@@ -335,7 +323,6 @@ class TestControlViewModelTest {
         vm.discardTest()
         advanceUntilIdle()
 
-        assertEquals(1, fakeBc87.stopScanningCallCount)
         assertEquals(1, fakeSensorRecordingRepo.stopRecordingCallCount)
         assertTrue("Test should be deleted", fakeTestDao.tests.isEmpty())
     }

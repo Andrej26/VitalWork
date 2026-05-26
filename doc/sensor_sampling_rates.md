@@ -9,7 +9,6 @@ Sampling rates, data types, and synchronization approach for all sensors in BioM
 | eSense Pulse | Mindfield | BLE | Heart Rate (BPM), R-R Intervals (ms) | ≈ 4.5 Hz (225 ms period; nominal 5 Hz) |
 | eSense Respiration | Mindfield | Audio Jack | Respiration Amplitude (RA) | 5 Hz (configured) |
 | Fibion Flash | Fibion | BLE (Movesense MDS) | Heart Rate (BPM), R-R Intervals (ms), ECG (mV) | HR: ~1/heartbeat (≈ 1.0–1.4 Hz at rest); ECG: 125 Hz (default; configurable) |
-| Beurer BC87 | Beurer | BLE | Blood Pressure (mmHg), Pulse Rate (bpm) | Episodic (one-shot) |
 
 ## Per-Sensor Details
 
@@ -53,21 +52,11 @@ See [sensor_esense_respiration.md](sensor_esense_respiration.md) for protocol de
 
 See [sensor_fibion_flash.md](sensor_fibion_flash.md) for protocol details.
 
-### Beurer BC87 (Blood Pressure)
-
-**Rate: Episodic** — one measurement per patient-initiated reading, not a continuous stream.
-
-- Device advertises for ~30 seconds after each measurement
-- App retrieves the latest reading via GATT indications
-- Data stored in a separate `blood_pressure_events` table (test-scoped, not recording-scoped)
-
-See [sensor_beurer_bc87.md](sensor_beurer_bc87.md) for protocol details.
-
 ## Data Collection
 
 `SensorRecordingRepositoryImpl` collects samples from all connected sensors concurrently.
 
-**Only one HR sensor (eSense Pulse XOR Fibion Flash) feeds the recording at a time** — the diagram lists both paths but exactly one HR branch is live per session, selected via `HeartRateDevicePreferences`. Respiration and Blood Pressure run independently alongside whichever HR sensor is active.
+**Only one HR sensor (eSense Pulse XOR Fibion Flash) feeds the recording at a time** — the diagram lists both paths but exactly one HR branch is live per session, selected via `HeartRateDevicePreferences`. Respiration runs independently alongside whichever HR sensor is active.
 
 ```
 eSense Pulse ──(~4.5 Hz)──► heartRateSampleFlow ────────► HEART_RATE
@@ -76,7 +65,6 @@ eSense Respiration ──(5 Hz)──► sampleFlow ─────────�
 Fibion Flash ──(125 Hz default)──► ecgSampleFlow ──────► FIBION_ECG
              ──(~1/heartbeat)──► heartRateSampleFlow ──► FIBION_HEART_RATE
                                ► rrIntervalSampleFlow ─► FIBION_RR_INTERVAL
-Beurer BC87 ──(episodic)──► readingFlow ───────────────► blood_pressure_events (separate table)
 ```
 
 Each sample is stored with:
@@ -94,7 +82,6 @@ Sensors run at their native rates. Alignment is handled via timestamp-based stor
 - **eSense Pulse (~4.5 Hz) + Respiration (5 Hz)** are close enough in cadence that samples remain co-located on the timeline at the typical sub-second analysis resolution; precise alignment is done by per-sample timestamp regardless
 - **Fibion ECG** at 125 Hz is stored at full resolution for post-processing
 - **R-R intervals** (both eSense and Fibion) arrive at variable rates tied to heartbeat timing
-- **Blood pressure** is episodic and stored separately by test, not by recording
 
 All continuous sensor samples share the same `sensor_samples` table with per-sample timestamps, so downstream analysis can align across rates as needed.
 

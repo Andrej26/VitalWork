@@ -23,7 +23,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.biometrix.operator.presentation.screens.sensors.beurer.bc87.BeurerBc87Screen
 import com.biometrix.operator.presentation.screens.sensors.fibion.flash.FibionFlashScreen
 import com.biometrix.operator.presentation.screens.sensors.mindfield.pulse.EsensePulseScreen
 import com.biometrix.operator.presentation.screens.sensors.mindfield.respiration.EsenseRespirationScreen
@@ -43,8 +42,6 @@ fun SensorDetailScreen(
         "esense_respiration" -> EsenseRespirationScreen(onNavigateBack = onNavigateBack)
         // Fibion sensors
         "fibion_flash" -> FibionFlashScreen(onNavigateBack = onNavigateBack)
-        // Beurer sensors
-        "beurer_bc87" -> BeurerBc87Screen(onNavigateBack = onNavigateBack)
         else -> UnknownSensorScreen(sensorId = sensorId, onNavigateBack = onNavigateBack)
     }
 }

@@ -1,4 +1,4 @@
-package com.biometrix.operator.presentation.screens.tutorial
+﻿package com.biometrix.operator.presentation.screens.tutorial
 
 import android.Manifest
 import android.bluetooth.BluetoothAdapter
@@ -103,10 +103,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.biometrix.operator.R
 import com.biometrix.operator.data.prefs.HeartRateDevice
-import com.biometrix.operator.data.model.BloodPressureReading
 import com.biometrix.operator.data.model.ConnectionState
 import com.biometrix.operator.data.sensor.DeviceState
-import com.biometrix.operator.data.sensor.ble.Bc87State
 import com.biometrix.operator.data.sensor.ble.model.BleDevice
 import com.biometrix.operator.data.vr.model.DiscoveredVrDevice
 import com.biometrix.operator.presentation.screens.sensors.components.BleDeviceItem
@@ -120,11 +118,11 @@ import androidx.compose.ui.viewinterop.AndroidView
 // ─────────────────────────────────────────────────────────────────────────────
 
 private enum class SlideType {
-    WELCOME, DEVICE_SELECTION, INFO, INTERACTIVE_BLE, INTERACTIVE_RESP, INTERACTIVE_BC87, INTERACTIVE_FIBION, INTERACTIVE_VR, COMPLETE
+    WELCOME, DEVICE_SELECTION, INFO, INTERACTIVE_BLE, INTERACTIVE_RESP, INTERACTIVE_FIBION, INTERACTIVE_VR, COMPLETE
 }
 
 private enum class SlidePhase {
-    WELCOME, HEART_RATE, RESPIRATION, BLOOD_PRESSURE, FIBION_FLASH, VR, COMPLETE
+    WELCOME, HEART_RATE, RESPIRATION, FIBION_FLASH, VR, COMPLETE
 }
 
 private data class TutorialSlide(
@@ -233,38 +231,6 @@ private val ALL_TUTORIAL_SLIDES = listOf(
         body = "Connect to the eSense Respiration sensor via the audio jack."
     ),
 
-    // ── Blood Pressure — 4 slides ────────────────────────────────────────────
-    TutorialSlide(
-        type = SlideType.INFO,
-        phase = SlidePhase.BLOOD_PRESSURE,
-        title = "Prepare the BP Monitor",
-        body = "Insert the two AAA batteries — keep a spare set on hand, as the device will display a low battery warning and refuse to take a measurement if they run out. With the device off, hold the OK button for approximately 5 seconds to open the settings menu. Use M1/M2 to change each value and OK to confirm and advance:\n\n1. Hour format — 12h or 24h\n2–6. Date and time — year, month, day, hour, minutes\n7. Bluetooth — set to ON (required for the app to find the device)\n8. User — select M1 or M2 (the memory slot where readings will be saved)\n\nThe device saves all settings and returns to standby automatically after step 8.",
-        imageRes = R.drawable.tutorial_bc87_prepare,
-        imageCaption = "BC 87 device with battery compartment open and Bluetooth settings menu visible"
-    ),
-    TutorialSlide(
-        type = SlideType.INFO,
-        phase = SlidePhase.BLOOD_PRESSURE,
-        title = "Wear the Wrist BP Monitor",
-        body = "Place the BC 87 on your left wrist, 1–2 cm above the wrist bone, display facing up. Fasten the strap snugly — one finger should fit underneath.\n\nRaise your forearm to heart level until the OK button lights up green, confirming the correct setting. Keep your arm still and relaxed throughout the measurement.",
-        imageRes = R.drawable.tutorial_bc87_wear,
-        imageCaption = "BC 87 on inside of wrist, 1–2 cm above wrist bone, display facing upward"
-    ),
-    TutorialSlide(
-        type = SlideType.INFO,
-        phase = SlidePhase.BLOOD_PRESSURE,
-        title = "Take a Blood Pressure Reading",
-        body = "Press OK to start. Keep your arm still while the cuff inflates and deflates (~30–60 s).\n\nWhen the result appears, press OK again — this saves the reading to device memory and activates Bluetooth transmission (limited to 30 seconds), after which it will turn itself off.\n\nIn the next step, you can try out how this whole process works.",
-        imageRes = R.drawable.tutorial_bc87_reading,
-        imageCaption = "BC 87 display showing systolic/diastolic reading; OK button highlighted"
-    ),
-    TutorialSlide(
-        type = SlideType.INTERACTIVE_BC87,
-        phase = SlidePhase.BLOOD_PRESSURE,
-        title = "Connect Blood Pressure Monitor",
-        body = "Test the BC 87 connection by taking a measurement and letting the app retrieve it."
-    ),
-
     // ── VR Headset — 4 slides ───────────────────────────────────────────────
     TutorialSlide(
         type = SlideType.INFO,
@@ -325,7 +291,6 @@ private fun filteredTutorialSlides(
 
 private val PhaseColorHR      = Color(0xFFE57373)   // Red 300        — Heart Rate
 private val PhaseColorResp    = Color(0xFF4DB6AC)   // Teal 300       — Respiration
-private val PhaseColorBP      = Color(0xFF7986CB)   // Indigo 300     — Blood Pressure
 private val PhaseColorFibion  = Color(0xFF81C784)   // Green 300      — Fibion Flash
 private val PhaseColorVR      = Color(0xFFFFB74D)   // Orange 300     — VR
 private val PhaseColorDefault = Color(0xFF9575CD)   // Deep Purple 300 — Welcome / Complete
@@ -333,7 +298,6 @@ private val PhaseColorDefault = Color(0xFF9575CD)   // Deep Purple 300 — Welco
 private fun phaseAccentColor(phase: SlidePhase): Color = when (phase) {
     SlidePhase.HEART_RATE      -> PhaseColorHR
     SlidePhase.RESPIRATION     -> PhaseColorResp
-    SlidePhase.BLOOD_PRESSURE  -> PhaseColorBP
     SlidePhase.FIBION_FLASH    -> PhaseColorFibion
     SlidePhase.VR              -> PhaseColorVR
     SlidePhase.WELCOME, SlidePhase.COMPLETE -> PhaseColorDefault
@@ -499,18 +463,6 @@ fun TutorialScreen(
                         },
                         onToggle = viewModel::toggleRespirationConnection
                     )
-                    SlideType.INTERACTIVE_BC87 -> TutorialBc87ConnectStep(
-                        uiState = uiState,
-                        onRequestPermissions = { blePermissionLauncher.launch(blePermissions) },
-                        onEnableBluetooth = {
-                            enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
-                        },
-                        onOpenLocationSettings = {
-                            locationSettingsLauncher.launch(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
-                        },
-                        onStartScan = viewModel::startBc87Scanning,
-                        onStopScan = viewModel::stopBc87Scanning
-                    )
                     SlideType.INTERACTIVE_FIBION -> TutorialFibionFlashConnectStep(
                         uiState = uiState,
                         onRequestPermissions = { blePermissionLauncher.launch(blePermissions) },
@@ -543,7 +495,7 @@ fun TutorialScreen(
             val currentSlide = slides.getOrNull(uiState.currentStep)
             val isConnectionStep = currentSlide?.type in setOf(
                 SlideType.INTERACTIVE_BLE, SlideType.INTERACTIVE_RESP,
-                SlideType.INTERACTIVE_BC87, SlideType.INTERACTIVE_FIBION,
+                SlideType.INTERACTIVE_FIBION,
                 SlideType.INTERACTIVE_VR
             )
             TutorialNavigationBar(
@@ -582,7 +534,6 @@ private fun PhaseProgressHeader(
         SlidePhase.WELCOME         -> "Overview"
         SlidePhase.HEART_RATE      -> "Heart Rate Sensor"
         SlidePhase.RESPIRATION     -> "Breathing Sensor"
-        SlidePhase.BLOOD_PRESSURE  -> "Blood Pressure"
         SlidePhase.FIBION_FLASH    -> "Fibion Flash"
         SlidePhase.VR              -> "VR Headset"
         SlidePhase.COMPLETE        -> "Complete"
@@ -600,7 +551,7 @@ private fun PhaseProgressHeader(
     val phaseSize = phaseSlidesIndices.size
     val isInteractive = currentSlide?.type in setOf(
         SlideType.INTERACTIVE_BLE, SlideType.INTERACTIVE_RESP,
-        SlideType.INTERACTIVE_BC87, SlideType.INTERACTIVE_FIBION,
+        SlideType.INTERACTIVE_FIBION,
         SlideType.INTERACTIVE_VR
     )
     val phaseStepLabel = when {
@@ -827,7 +778,7 @@ private fun TutorialWelcomeStep() {
                 number = "1",
                 icon = Icons.Default.Sensors,
                 label = "Prepare & connect biosensors",
-                detail = "eSense Pulse, eSense Respiration, Beurer BC 87, and Fibion Flash"
+                detail = "eSense Pulse, eSense Respiration, and Fibion Flash"
             )
             SessionOverviewItem(
                 number = "2",
@@ -1529,495 +1480,6 @@ private fun TutorialRespirationConnectStep(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            }
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Step 11 – Connect BC 87 Blood Pressure Monitor (BLE)
-// ─────────────────────────────────────────────────────────────────────────────
-
-@Composable
-private fun TutorialBc87ConnectStep(
-    uiState: TutorialUiState,
-    onRequestPermissions: () -> Unit,
-    onEnableBluetooth: () -> Unit,
-    onOpenLocationSettings: () -> Unit,
-    onStartScan: () -> Unit,
-    onStopScan: () -> Unit
-) {
-    // Stop scanning automatically once a reading is received
-    LaunchedEffect(uiState.bc87LastReading) {
-        if (uiState.bc87LastReading != null && uiState.bc87State !is Bc87State.Idle) {
-            onStopScan()
-        }
-    }
-
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val pad = if (maxWidth < 600.dp) 16.dp else 24.dp
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(pad),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(
-                text = "Connect Blood Pressure Monitor",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
-
-            // BC 87 status card
-            Bc87StatusCard(state = uiState.bc87State)
-
-            // 1. Permissions status
-            if (uiState.blePermissionsGranted) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFF4CAF50).copy(alpha = 0.15f)
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = Color(0xFF4CAF50),
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Text(
-                            text = "Bluetooth & Location permissions already granted",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
-            } else {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = "Bluetooth & Location permissions required",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Text(
-                            text = "Grant Bluetooth and Location permissions so the app can scan for and connect to the BC 87.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Button(
-                            onClick = onRequestPermissions,
-                            modifier = Modifier.align(Alignment.End)
-                        ) {
-                            Text("Grant Permissions")
-                        }
-                    }
-                }
-            }
-
-            // 2. Bluetooth disabled warning
-            if (uiState.blePermissionsGranted && !uiState.bluetoothEnabled) {
-                Card(
-                    onClick = onEnableBluetooth,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.BluetoothDisabled,
-                            contentDescription = null,
-                            modifier = Modifier.size(32.dp),
-                            tint = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Bluetooth Disabled",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                            Text(
-                                text = "Bluetooth must be enabled to scan for the BC 87.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
-                }
-            }
-
-            // 3. Location disabled warning
-            if (uiState.blePermissionsGranted && !uiState.locationEnabled) {
-                Card(
-                    onClick = onOpenLocationSettings,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.LocationOff,
-                            contentDescription = null,
-                            modifier = Modifier.size(32.dp),
-                            tint = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Location Services Disabled",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                            Text(
-                                text = "Location Services must be enabled for BLE scanning to work.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
-                }
-            }
-
-            // 4. Scan control (only when prerequisites are met)
-            if (uiState.blePermissionsGranted && uiState.bluetoothEnabled && uiState.locationEnabled) {
-                when (uiState.bc87State) {
-                    is Bc87State.Idle -> {
-                        // Instructions card
-                        if (uiState.bc87LastReading == null) {
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.secondaryContainer
-                                )
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(16.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Text(
-                                        text = "How it works",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                                    )
-                                    Text(
-                                        text = "Press Start Scanning below, then take a measurement on the BC 87 and press OK to save. The device will briefly activate Bluetooth and the app will retrieve your reading automatically.",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                                    )
-                                }
-                            }
-                        }
-
-                        Button(
-                            onClick = onStartScan,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Start Scanning")
-                        }
-                    }
-
-                    is Bc87State.Scanning -> {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp
-                            )
-                            Text(
-                                text = "Waiting for BC 87 to transmit...\nTake a measurement on the device and press OK to save.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-
-                        OutlinedButton(
-                            onClick = onStopScan
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Stop,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Stop Scanning")
-                        }
-                    }
-
-                    is Bc87State.Connecting -> {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp
-                            )
-                            Text(
-                                text = "Connecting to BC 87...",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-
-                    is Bc87State.Receiving -> {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp
-                            )
-                            Text(
-                                text = "Receiving blood pressure data...",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-
-                    is Bc87State.Error -> {
-                        Text(
-                            text = "Error: ${uiState.bc87State.message}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                        Button(
-                            onClick = onStartScan,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Retry Scan")
-                        }
-                    }
-                }
-            }
-
-            // 5. Reading display (shown whenever a reading exists)
-            uiState.bc87LastReading?.let { reading ->
-                Bc87ReadingCard(reading = reading)
-
-                if (uiState.bc87State is Bc87State.Idle) {
-                    OutlinedButton(
-                        onClick = onStartScan,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Scan Again")
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun Bc87StatusCard(state: Bc87State) {
-    val (statusText, dotColor) = when (state) {
-        is Bc87State.Idle -> "Ready" to Color.Gray
-        is Bc87State.Scanning -> "Scanning..." to Color(0xFFFFA000)
-        is Bc87State.Connecting -> "Connecting..." to Color(0xFFFFA000)
-        is Bc87State.Receiving -> "Receiving..." to Color(0xFF2196F3)
-        is Bc87State.Error -> "Error" to Color(0xFFF44336)
-    }
-
-    val isAnimating = state is Bc87State.Scanning || state is Bc87State.Connecting || state is Bc87State.Receiving
-    val infiniteTransition = rememberInfiniteTransition(label = "bc87_pulse")
-    val pulseAlpha by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 0.3f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(800),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "bc87_dot_pulse"
-    )
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            if (isAnimating) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    strokeWidth = 2.dp,
-                    color = dotColor
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .size(12.dp)
-                        .background(dotColor.copy(alpha = if (isAnimating) pulseAlpha else 1f), CircleShape)
-                )
-            }
-            Column {
-                Text(
-                    text = "Beurer BC 87",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = statusText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (state is Bc87State.Error) MaterialTheme.colorScheme.error
-                    else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun Bc87ReadingCard(reading: BloodPressureReading) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF4CAF50).copy(alpha = 0.12f)
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.CheckCircle,
-                    contentDescription = null,
-                    tint = Color(0xFF4CAF50),
-                    modifier = Modifier.size(20.dp)
-                )
-                Text(
-                    text = "Reading Received",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF2E7D32)
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.Bottom
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "${reading.systolicMmHg}/${reading.diastolicMmHg}",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "mmHg",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                reading.pulseRateBpm?.let { pulse ->
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "$pulse",
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "Pulse bpm",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                reading.meanArterialMmHg?.let { map ->
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "$map",
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "MAP mmHg",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
             }
         }
     }

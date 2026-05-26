@@ -14,7 +14,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.MonitorHeart
 import androidx.compose.material.icons.filled.Watch
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -44,7 +43,6 @@ fun SensorsScreen(
     val bleConnectionState by viewModel.bleConnectionState.collectAsState()
     val respirationState by viewModel.respirationState.collectAsState()
     val fibionFlashConnectionState by viewModel.fibionFlashConnectionState.collectAsState()
-    val bc87State by viewModel.bc87State.collectAsState()
     val selectedHrDevice by viewModel.selectedHeartRateDevice.collectAsState()
 
     Scaffold(
@@ -119,14 +117,6 @@ fun SensorsScreen(
                         onClick = { onNavigateToSensorDetail("fibion_flash") }
                     )
                 }
-
-                SensorTypeCard(
-                    name = "Beurer BC 87",
-                    description = "Blood Pressure Monitor (BLE)",
-                    icon = Icons.Default.MonitorHeart,
-                    connectionState = bc87State.toConnectionState(),
-                    onClick = { onNavigateToSensorDetail("beurer_bc87") }
-                )
             }
         }
     }

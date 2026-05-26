@@ -6,9 +6,6 @@ import com.biometrix.operator.data.sensor.DeviceState
 import com.biometrix.operator.data.sensor.SensorDevice
 import com.biometrix.operator.data.sensor.audio.LowSignalWarning
 import com.biometrix.operator.data.sensor.audio.MindfieldRespiration
-import com.biometrix.operator.data.model.BloodPressureReading
-import com.biometrix.operator.data.sensor.ble.Bc87State
-import com.biometrix.operator.data.sensor.ble.BeurerbC87Manager
 import com.biometrix.operator.data.sensor.ble.BleEvent
 import com.biometrix.operator.data.sensor.ble.BleManager
 import com.biometrix.operator.data.sensor.ble.model.BleDevice
@@ -34,7 +31,6 @@ class ConnectionRepository @Inject constructor(
     private val bleManager: BleManager,
     @Named("respiration") private val respirationDevice: SensorDevice,
     private val fibionFlashManager: FibionFlashManager,
-    private val bc87Manager: BeurerbC87Manager,
     @Named("lanAvailable") private val lanAvailableFlow: StateFlow<Boolean>
 ) {
     /** VR headset WebSocket connection state */
@@ -210,30 +206,4 @@ class ConnectionRepository @Inject constructor(
     fun readFibionFlashBatteryLevel() {
         fibionFlashManager.readBatteryLevel()
     }
-
-    // --- Beurer BC 87 ---
-
-    /** BC87 blood pressure monitor state */
-    val bc87State: StateFlow<Bc87State> = bc87Manager.state
-
-    /** Most recent BC87 reading */
-    val bc87LastReading: StateFlow<BloodPressureReading?> = bc87Manager.lastReading
-
-    /** Flow of all BC87 readings as they arrive */
-    val bc87ReadingFlow: SharedFlow<BloodPressureReading> = bc87Manager.readingFlow
-
-    /** BC87 debug log flow: (message, isError) */
-    val bc87LogFlow: SharedFlow<Pair<String, Boolean>> = bc87Manager.logFlow
-
-    /** Whether Bluetooth is currently enabled (from BC87 manager; mirrors adapter state). */
-    val bc87BluetoothEnabled: StateFlow<Boolean> = bc87Manager.bluetoothEnabled
-
-    fun startBc87Scanning() {
-        bc87Manager.startScanning()
-    }
-
-    fun stopBc87Scanning() {
-        bc87Manager.stopScanning()
-    }
-
 }

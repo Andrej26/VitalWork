@@ -96,12 +96,4 @@ class TestRepository @Inject constructor(
      */
     suspend fun getCompletedRecordingCount(testId: Long): Int =
         recordingDao.getCompletedRecordingCount(testId)
-
-    /**
-     * Updates the blood pressure event count for a test.
-     */
-    suspend fun updateBpEventCount(id: Long, count: Int) {
-        val test = testDao.getTestById(id) ?: return
-        testDao.update(test.copy(bpEventCount = count))
-    }
 }

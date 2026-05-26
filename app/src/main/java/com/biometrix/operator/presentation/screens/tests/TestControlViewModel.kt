@@ -15,11 +15,8 @@ import com.biometrix.operator.data.recording.model.DataRecordingState
 import com.biometrix.operator.data.repository.ConnectionRepository
 import com.biometrix.operator.data.sensor.audio.LowSignalWarning
 import com.biometrix.operator.data.repository.RecordingRepository
-import com.biometrix.operator.data.model.BloodPressureReading
-import com.biometrix.operator.data.repository.BloodPressureRepository
 import com.biometrix.operator.data.repository.SudsRepository
 import com.biometrix.operator.data.repository.TestRepository
-import com.biometrix.operator.data.sensor.ble.Bc87State
 import com.biometrix.operator.data.sensor.DeviceState
 import com.biometrix.operator.data.sensor.ble.BleEvent
 import com.biometrix.operator.data.sensor.fibion.FibionFlashEvent
@@ -56,7 +53,6 @@ class TestControlViewModel @Inject constructor(
     private val testRepository: TestRepository,
     private val recordingRepository: RecordingRepository,
     private val sudsRepository: SudsRepository,
-    private val bloodPressureRepository: BloodPressureRepository,
     private val vrWebSocketClient: VRConnectionManager,
     private val mdnsDiscovery: VrDeviceDiscovery,
     selectedHeartRateDeviceFlow: @JvmSuppressWildcards StateFlow<HeartRateDevice>,
@@ -237,16 +233,6 @@ class TestControlViewModel @Inject constructor(
     val fibionScanTimeoutReached: StateFlow<Boolean> = _fibionScanTimeoutReached.asStateFlow()
 
     private var fibionScanTimeoutJob: Job? = null
-
-    /** Beurer BC 87 blood pressure monitor state */
-    val bc87State: StateFlow<Bc87State> = connectionRepository.bc87State
-
-    /** Most recent BC87 reading */
-    val bc87LastReading: StateFlow<BloodPressureReading?> = connectionRepository.bc87LastReading
-
-    /** Number of BP readings collected in this test */
-    private val _bpReadingCount = MutableStateFlow(0)
-    val bpReadingCount: StateFlow<Int> = _bpReadingCount.asStateFlow()
 
     /** Recording UI state combining repository state with connection states */
     val recordingUiState: StateFlow<RecordingUiState> = combine(
@@ -474,19 +460,6 @@ class TestControlViewModel @Inject constructor(
             }
         }
 
-        // Start BC87 blood pressure scanning for the test lifetime
-        connectionRepository.startBc87Scanning()
-
-        // Collect BC87 readings and save to database
-        viewModelScope.launch {
-            connectionRepository.bc87ReadingFlow.collect { reading ->
-                val test = _test.value ?: return@collect
-                bloodPressureRepository.saveReading(test.id, reading, test.createdAt)
-                val count = bloodPressureRepository.countForTest(test.id)
-                _bpReadingCount.value = count
-                testRepository.updateBpEventCount(test.id, count)
-            }
-        }
     }
 
     private fun handleVrBiofeedbackEvent(eventName: String, value: Int?) {
@@ -599,9 +572,6 @@ class TestControlViewModel @Inject constructor(
         viewModelScope.launch {
             _isEndingTest.value = true
             try {
-                // Stop BC87 scanning
-                connectionRepository.stopBc87Scanning()
-
                 // Stop recording if active
                 if (sensorRecordingRepository.recordingState.value == DataRecordingState.RECORDING) {
                     sensorRecordingRepository.stopRecording()
@@ -624,7 +594,6 @@ class TestControlViewModel @Inject constructor(
 
     fun discardTest() {
         viewModelScope.launch {
-            connectionRepository.stopBc87Scanning()
             if (sensorRecordingRepository.recordingState.value == DataRecordingState.RECORDING) {
                 sensorRecordingRepository.stopRecording()
             }
@@ -831,7 +800,6 @@ class TestControlViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
-        connectionRepository.stopBc87Scanning()
         mdnsDiscovery.stopDiscovery()
     }
 }

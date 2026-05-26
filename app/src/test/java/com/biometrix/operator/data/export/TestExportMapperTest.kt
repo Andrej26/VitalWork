@@ -1,7 +1,5 @@
 package com.biometrix.operator.data.export
 
-import com.biometrix.operator.data.db.BloodPressureEventEntity
-import com.biometrix.operator.data.db.FakeBloodPressureEventDao
 import com.biometrix.operator.data.db.FakeRecordingDao
 import com.biometrix.operator.data.db.FakeSensorSampleDao
 import com.biometrix.operator.data.db.FakeSudsEventDao
@@ -12,7 +10,6 @@ import com.biometrix.operator.data.db.SensorType
 import com.biometrix.operator.data.db.SudsEventEntity
 import com.biometrix.operator.data.db.TestEntity
 import com.biometrix.operator.data.db.TestStatus
-import com.biometrix.operator.data.repository.BloodPressureRepository
 import com.biometrix.operator.data.repository.RecordingRepository
 import com.biometrix.operator.data.repository.SudsRepository
 import kotlinx.coroutines.test.runTest
@@ -28,11 +25,9 @@ class TestExportMapperTest {
     private lateinit var fakeRecordingDao: FakeRecordingDao
     private lateinit var fakeSensorSampleDao: FakeSensorSampleDao
     private lateinit var fakeSudsEventDao: FakeSudsEventDao
-    private lateinit var fakeBpDao: FakeBloodPressureEventDao
 
     private lateinit var recordingRepository: RecordingRepository
     private lateinit var sudsRepository: SudsRepository
-    private lateinit var bpRepository: BloodPressureRepository
 
     private lateinit var mapper: TestExportMapper
 
@@ -41,13 +36,11 @@ class TestExportMapperTest {
         fakeRecordingDao = FakeRecordingDao()
         fakeSensorSampleDao = FakeSensorSampleDao()
         fakeSudsEventDao = FakeSudsEventDao()
-        fakeBpDao = FakeBloodPressureEventDao()
 
         recordingRepository = RecordingRepository(fakeRecordingDao, fakeSensorSampleDao)
         sudsRepository = SudsRepository(fakeSudsEventDao)
-        bpRepository = BloodPressureRepository(fakeBpDao)
 
-        mapper = TestExportMapper(recordingRepository, sudsRepository, bpRepository)
+        mapper = TestExportMapper(recordingRepository, sudsRepository)
     }
 
     // -- Sensor type mapping --
@@ -220,46 +213,6 @@ class TestExportMapperTest {
         assertEquals(3, result.test.sudsEvents[0].value)
         assertEquals(7, result.test.sudsEvents[1].value)
         assertEquals(2, result.test.statistics.totalSudsEvents)
-    }
-
-    @Test
-    fun buildExportData_bloodPressureEventsMapped() = runTest {
-        val test = testEntity()
-        fakeBpDao.events.addAll(listOf(
-            BloodPressureEventEntity(
-                testId = test.id, timestampMs = 1000L, elapsedTestMs = 500L,
-                systolicMmHg = 120, diastolicMmHg = 80,
-                meanArterialMmHg = 93, pulseRateBpm = 72
-            )
-        ))
-
-        val result = mapper.buildExportData(test, emptyList())
-
-        assertEquals(1, result.test.bloodPressureEvents.size)
-        val bp = result.test.bloodPressureEvents[0]
-        assertEquals(120, bp.systolicMmHg)
-        assertEquals(80, bp.diastolicMmHg)
-        assertEquals(93, bp.meanArterialMmHg)
-        assertEquals(72, bp.pulseRateBpm)
-        assertEquals(1, result.test.statistics.totalBpEvents)
-    }
-
-    @Test
-    fun buildExportData_bpWithNullOptionalFields() = runTest {
-        val test = testEntity()
-        fakeBpDao.events.addAll(listOf(
-            BloodPressureEventEntity(
-                testId = test.id, timestampMs = 1000L, elapsedTestMs = 500L,
-                systolicMmHg = 130, diastolicMmHg = 85,
-                meanArterialMmHg = null, pulseRateBpm = null
-            )
-        ))
-
-        val result = mapper.buildExportData(test, emptyList())
-
-        val bp = result.test.bloodPressureEvents[0]
-        assertNull(bp.meanArterialMmHg)
-        assertNull(bp.pulseRateBpm)
     }
 
     // -- Recording data in export --

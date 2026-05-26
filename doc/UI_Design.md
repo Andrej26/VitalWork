@@ -50,7 +50,6 @@ List of supported sensor types.
 - **eSense Pulse card** (Heart Rate + R-R, BLE) — shows connection status
 - **eSense Respiration card** (Breathing, Audio Jack) — shows connection status
 - **Fibion Flash card** (ECG / HR / R-R, BLE) — shows connection status
-- **Beurer BC87 card** (Blood Pressure, BLE) — shows connection status
 - Tap card -> opens Sensor Detail
 
 ### 4. Sensor Detail Screen
@@ -59,7 +58,6 @@ Configuration for a specific sensor. Routes to vendor-specific screens based on 
 - `esense_pulse` -> EsensePulseScreen (BLE scan, connect, HR + R-R monitoring)
 - `esense_respiration` -> EsenseRespirationScreen (audio connection, breathing rate)
 - `fibion_flash` -> FibionFlashScreen (BLE scan, connect, ECG + HR + R-R monitoring)
-- `beurer_bc87` -> BeurerBc87Screen (BLE scan, blood pressure readings)
 
 ### 5. VR Control Screen
 Configure and test VR headset connection.
@@ -96,7 +94,6 @@ Main operational screen during active therapy. This is where researchers spend m
   - eSense Pulse status
   - eSense Respiration status
   - Fibion Flash status
-  - Beurer BC87 status (scanner active during test)
 - **VR Controls:**
   - Tutorial button (trigger_event)
   - StressChamber button (load scene)
@@ -111,7 +108,6 @@ View completed test data and export.
 - Route: `tests/review/{testId}`
 - Test summary: duration, sample counts per sensor, recording count
 - Timeline chart (HR and respiration data)
-- Blood pressure readings
 - SUDs events
 - Export button (CSV + JSON)
 - Delete button
@@ -187,8 +183,7 @@ presentation/
     │   ├── components/                # Shared sensor UI components
     │   ├── mindfield/pulse/           # eSense Pulse (HR + R-R)
     │   ├── mindfield/respiration/     # eSense Respiration
-    │   ├── fibion/flash/              # Fibion Flash (ECG + HR + R-R)
-    │   └── beurer/bc87/              # Beurer BC87 (Blood Pressure)
+    │   └── fibion/flash/              # Fibion Flash (ECG + HR + R-R)
     ├── vr/
     │   ├── VRConnectionScreen.kt
     │   └── VRConnectionViewModel.kt

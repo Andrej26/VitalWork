@@ -21,7 +21,6 @@ data class TestData(
     val notes: String,
     val statistics: TestStatistics,
     val recordings: List<RecordingData>,
-    val bloodPressureEvents: List<BloodPressureEventExport> = emptyList(),
     val sudsEvents: List<SudsEventExport> = emptyList()
 )
 
@@ -34,8 +33,7 @@ data class TestStatistics(
     @SerialName("fibion_totalHeartRateSamples") val totalFibionHeartRateSamples: Int = 0,
     @SerialName("fibion_totalEcgSamples") val totalFibionEcgSamples: Int = 0,
     @SerialName("fibion_totalRrIntervalSamples") val totalFibionRrIntervalSamples: Int = 0,
-    @SerialName("esensePulse_totalRrIntervalSamples") val totalEsenseRrIntervalSamples: Int = 0,
-    val totalBpEvents: Int = 0
+    @SerialName("esensePulse_totalRrIntervalSamples") val totalEsenseRrIntervalSamples: Int = 0
 )
 
 @Serializable
@@ -114,12 +112,3 @@ data class SensorSample(
     val sensorType: String
 )
 
-@Serializable
-data class BloodPressureEventExport(
-    val timestampMs: Long,
-    val elapsedTestMs: Long,
-    val systolicMmHg: Int,
-    val diastolicMmHg: Int,
-    val meanArterialMmHg: Int?,
-    val pulseRateBpm: Int?
-)

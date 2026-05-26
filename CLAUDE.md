@@ -62,8 +62,8 @@ MainActivity (entry point)
 The app has three main responsibilities:
 
 1. **VR Control** — WebSocket client connecting to the BioMetrix VR app on a Meta Quest headset over local Wi-Fi
-2. **Sensor Data Collection** — Gather physiological data (heart rate, RR intervals, ECG, respiration, blood pressure) from BLE and audio jack sensors
-3. **Test Management** — Organize anonymous clinical test sessions with recordings, SUDS scores, blood pressure events, local storage, and JSON/CSV export
+2. **Sensor Data Collection** — Gather physiological data (heart rate, RR intervals, ECG, respiration) from BLE and audio jack sensors
+3. **Test Management** — Organize anonymous clinical test sessions with recordings, SUDS scores, local storage, and JSON/CSV export
 
 **Target devices:** Android tablet and phone
 
@@ -95,7 +95,6 @@ The app has three main responsibilities:
 | eSense Pulse | Mindfield | BLE | Heart rate (BPM), RR intervals |
 | eSense Respiration | Mindfield | Audio jack | Respiration rate |
 | Fibion Flash | Fibion (Movesense) | BLE | Heart rate (BPM), ECG (125 Hz), RR intervals |
-| Beurer BC 87 | Beurer | BLE (episodic) | Systolic/diastolic blood pressure, mean arterial pressure, pulse rate |
 
 **BLE Requirements:**
 - Android 12+: `BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT` permissions
@@ -111,7 +110,7 @@ com.biometrix.operator/
 ├── di/
 │   └── AppModule.kt                        # Hilt dependency injection module
 ├── data/
-│   ├── db/                                 # Room database (v5, 5 entities, 5 DAOs)
+│   ├── db/                                 # Room database (v1, 4 entities, 4 DAOs)
 │   │   ├── AppDatabase.kt
 │   │   ├── Converters.kt                   # Enum type converters
 │   │   ├── TestEntity.kt                   # Test + TestStatus enum
@@ -121,16 +120,13 @@ com.biometrix.operator/
 │   │   ├── SensorSampleEntity.kt           # Sensor samples + SensorType enum
 │   │   ├── SensorSampleDao.kt
 │   │   ├── SudsEventEntity.kt              # SUDS score events
-│   │   ├── SudsEventDao.kt
-│   │   ├── BloodPressureEventEntity.kt     # Blood pressure measurements
-│   │   └── BloodPressureEventDao.kt
+│   │   └── SudsEventDao.kt
 │   ├── export/                             # Test data export (JSON + CSV)
 │   │   ├── TestExportService.kt
 │   │   └── model/
 │   │       └── TestExportModel.kt
 │   ├── model/
-│   │   ├── ConnectionState.kt
-│   │   └── BloodPressureReading.kt
+│   │   └── ConnectionState.kt
 │   ├── network/
 │   │   └── NetworkChecker.kt               # LAN connectivity checker
 │   ├── prefs/
@@ -143,7 +139,6 @@ com.biometrix.operator/
 │   │   └── model/
 │   │       └── RecordingSession.kt
 │   ├── repository/
-│   │   ├── BloodPressureRepository.kt
 │   │   ├── ConnectionRepository.kt
 │   │   ├── RecordingRepository.kt
 │   │   ├── SudsRepository.kt
@@ -155,8 +150,6 @@ com.biometrix.operator/
 │   │   ├── ble/
 │   │   │   ├── BleManager.kt               # eSense Pulse BLE interface
 │   │   │   ├── BleManagerImpl.kt            # eSense Pulse BLE implementation
-│   │   │   ├── BeurerbC87Manager.kt         # Beurer BC 87 interface
-│   │   │   ├── BeurerbC87ManagerImpl.kt     # Beurer BC 87 implementation
 │   │   │   └── model/
 │   │   │       ├── BleDevice.kt
 │   │   │       └── BleGattService.kt
@@ -202,10 +195,6 @@ com.biometrix.operator/
 │       │   │   ├── BleServiceExplorer.kt
 │       │   │   ├── HeartRateDisplay.kt
 │       │   │   └── RrIntervalDisplay.kt
-│       │   ├── beurer/
-│       │   │   └── bc87/
-│       │   │       ├── BeurerBc87Screen.kt
-│       │   │       └── BeurerBc87ViewModel.kt
 │       │   ├── fibion/
 │       │   │   └── flash/
 │       │   │       ├── FibionFlashScreen.kt
@@ -258,7 +247,7 @@ com.biometrix.operator/
 
 ## Database Schema
 
-Room database (version 5) with 5 entities:
+Room database (version 1) with 4 entities:
 
 | Entity | Table | Purpose |
 |--------|-------|---------|
@@ -266,7 +255,6 @@ Room database (version 5) with 5 entities:
 | RecordingEntity | `recordings` | Individual recordings within a test (FK → tests) |
 | SensorSampleEntity | `sensor_samples` | Time-series sensor data points (FK → recordings) |
 | SudsEventEntity | `suds_events` | Subjective Units of Distress scores (FK → tests) |
-| BloodPressureEventEntity | `blood_pressure_events` | Blood pressure measurements (FK → tests) |
 
 **SensorType enum:** HEART_RATE, RESPIRATION, FIBION_HEART_RATE, FIBION_ECG, FIBION_RR_INTERVAL, ESENSE_RR_INTERVAL
 
@@ -279,7 +267,6 @@ Meta Quest VR ◄──WebSocket──► VRWebSocketClient ──► VRConnecti
 
 eSense Pulse  ◄────BLE──────► BleManager ──────────► EsensePulseViewModel ──► UI
 Fibion Flash  ◄────BLE/MDS──► FibionFlashManager ──► FibionFlashViewModel ──► UI
-Beurer BC 87  ◄────BLE──────► BeurerbC87Manager ───► BeurerBc87ViewModel ──► UI
 eSense Resp.  ◄────Audio────► MindfieldRespiration ► EsenseRespirationViewModel ► UI
 
 All sensors ──► SensorRecordingRepository ──► Room DB ──► TestExportService ──► JSON/CSV
@@ -331,7 +318,7 @@ Unit tests live under `app/src/test/` and run on the host JVM (no device/emulato
 | `data/vr/model/WebSocketMessageTest.kt` | `WebSocketMessage.kt` | 8 | `ServerMessage` JSON serialization: minimal/full/failure decoding, round-trip, malformed JSON, missing fields, unknown fields |
 | `data/repository/TestRepositoryTest.kt` | `TestRepository.kt` | 7 | Test lifecycle: creation format (BMX-yyMMdd-HHmmss), sample count aggregation from completed recordings, status transitions, notes persistence, deletion |
 | `data/repository/RecordingRepositoryTest.kt` | `RecordingRepository.kt` | 8 | Recording lifecycle: identifier format (BMX-...-R01), sequence auto-increment, sensor flags, sample count aggregation per sensor type, duration/status on complete, batch sample insert |
-| `data/export/TestExportMapperTest.kt` | `TestExportMapper.kt` | 16 | Export data transformation: sensor type mapping (6 types), sensor enable/disable flags, Fibion sub-sensor population, gap detection conditional logic, statistics aggregation, SUDS/BP event mapping, null optional fields, recording sample inclusion, test field mapping |
+| `data/export/TestExportMapperTest.kt` | `TestExportMapper.kt` | 14 | Export data transformation: sensor type mapping (6 types), sensor enable/disable flags, Fibion sub-sensor population, gap detection conditional logic, statistics aggregation, SUDS event mapping, recording sample inclusion, test field mapping |
 | `data/sensor/audio/MindfieldRespirationTest.kt` | `MindfieldRespiration.kt` | 12 | Zero-crossing breathing rate algorithm (edge cases, accuracy at normal/rapid rates, buffer windowing), signal verification logic (insufficient samples, out-of-range, no movement, valid signal transition) |
 | `presentation/screens/vr/VRConnectionViewModelTest.kt` | `VRConnectionViewModel.kt` | 23 | VR connection state machine, command sending with validation, discovery lifecycle, error flow, log management |
 

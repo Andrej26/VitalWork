@@ -14,9 +14,6 @@ import com.biometrix.operator.data.prefs.HeartRateDevicePreferences
 import com.biometrix.operator.data.prefs.TutorialPreferencesRepository
 import com.biometrix.operator.data.sensor.DeviceState
 import com.biometrix.operator.data.sensor.SensorDevice
-import com.biometrix.operator.data.model.BloodPressureReading
-import com.biometrix.operator.data.sensor.ble.Bc87State
-import com.biometrix.operator.data.sensor.ble.BeurerbC87Manager
 import com.biometrix.operator.data.sensor.ble.BleManager
 import com.biometrix.operator.data.sensor.ble.model.BleDevice
 import com.biometrix.operator.data.sensor.fibion.FibionFlashManager
@@ -50,9 +47,6 @@ data class TutorialUiState(
     val fibionScannedDevices: List<BleDevice> = emptyList(),
     val fibionIsScanning: Boolean = false,
     val fibionDeviceSerial: String? = null,
-    // BC 87 Blood Pressure
-    val bc87State: Bc87State = Bc87State.Idle,
-    val bc87LastReading: BloodPressureReading? = null,
     // VR
     val vrConnectionState: ConnectionState = ConnectionState.DISCONNECTED,
     val discoveredVrDevices: List<DiscoveredVrDevice> = emptyList(),
@@ -66,7 +60,6 @@ class TutorialViewModel @Inject constructor(
     private val bleManager: BleManager,
     @Named("respiration") private val respirationSensor: SensorDevice,
     private val fibionFlashManager: FibionFlashManager,
-    private val bc87Manager: BeurerbC87Manager,
     private val vrWebSocketClient: VRConnectionManager,
     private val mdnsDiscovery: VrDeviceDiscovery,
     private val tutorialPreferences: TutorialPreferencesRepository,
@@ -83,9 +76,9 @@ class TutorialViewModel @Inject constructor(
     /** True if the device selection slide is included in this tutorial session */
     val showDeviceSelectionSlide: Boolean get() = showDeviceSelection
 
-    /** Total steps: 18 with device selection slide, 17 without */
+    /** Total steps: 13 with device selection slide, 12 without */
     val totalSteps: Int
-        get() = if (showDeviceSelection) 18 else 17
+        get() = if (showDeviceSelection) 13 else 12
 
     fun selectHeartRateDevice(device: HeartRateDevice) {
         heartRateDevicePreferences.select(device)
@@ -111,7 +104,6 @@ class TutorialViewModel @Inject constructor(
         observeBleState()
         observeRespirationState()
         observeFibionState()
-        observeBc87State()
         observeVrState()
         mdnsDiscovery.startDiscovery()
     }
@@ -260,19 +252,6 @@ class TutorialViewModel @Inject constructor(
         }
     }
 
-    private fun observeBc87State() {
-        viewModelScope.launch {
-            bc87Manager.state.collect { state ->
-                _uiState.update { it.copy(bc87State = state) }
-            }
-        }
-        viewModelScope.launch {
-            bc87Manager.lastReading.collect { reading ->
-                _uiState.update { it.copy(bc87LastReading = reading) }
-            }
-        }
-    }
-
     // ── Fibion Flash ──────────────────────────────────────────────────────────
 
     fun toggleFibionScan() {
@@ -289,16 +268,6 @@ class TutorialViewModel @Inject constructor(
 
     fun disconnectFibion() {
         fibionFlashManager.disconnect()
-    }
-
-    // ── BC 87 Blood Pressure ──────────────────────────────────────────────────
-
-    fun startBc87Scanning() {
-        bc87Manager.startScanning()
-    }
-
-    fun stopBc87Scanning() {
-        bc87Manager.stopScanning()
     }
 
     // ── VR ───────────────────────────────────────────────────────────────────
@@ -336,7 +305,6 @@ class TutorialViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         context.unregisterReceiver(locationReceiver)
-        bc87Manager.stopScanning()
         mdnsDiscovery.stopDiscovery()
     }
 

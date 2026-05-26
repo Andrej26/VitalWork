@@ -9,10 +9,9 @@ import androidx.room.TypeConverters
         TestEntity::class,
         RecordingEntity::class,
         SensorSampleEntity::class,
-        SudsEventEntity::class,
-        BloodPressureEventEntity::class
+        SudsEventEntity::class
     ],
-    version = 5,
+    version = 1,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -21,5 +20,4 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun recordingDao(): RecordingDao
     abstract fun sensorSampleDao(): SensorSampleDao
     abstract fun sudsEventDao(): SudsEventDao
-    abstract fun bloodPressureEventDao(): BloodPressureEventDao
 }

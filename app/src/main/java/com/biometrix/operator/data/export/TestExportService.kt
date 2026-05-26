@@ -10,15 +10,12 @@ import android.provider.MediaStore
 import androidx.annotation.RequiresApi
 import com.biometrix.operator.data.db.RecordingEntity
 import com.biometrix.operator.data.db.SensorType
-import com.biometrix.operator.data.db.TestEntity
-import com.biometrix.operator.data.db.BloodPressureEventEntity
 import com.biometrix.operator.data.recording.detectFibionEcgGaps
 import com.biometrix.operator.data.recording.detectFibionHeartRateGaps
 import com.biometrix.operator.data.recording.detectFibionRrIntervalGaps
 import com.biometrix.operator.data.recording.detectEsenseRrIntervalGaps
 import com.biometrix.operator.data.recording.detectHeartRateGaps
 import com.biometrix.operator.data.recording.detectRespirationGaps
-import com.biometrix.operator.data.repository.BloodPressureRepository
 import com.biometrix.operator.data.repository.RecordingRepository
 import com.biometrix.operator.data.repository.TestRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -42,7 +39,6 @@ class TestExportService @Inject constructor(
     @ApplicationContext private val context: Context,
     private val testRepository: TestRepository,
     private val recordingRepository: RecordingRepository,
-    private val bloodPressureRepository: BloodPressureRepository,
     private val mapper: TestExportMapper
 ) : TestExporter {
     private val json = Json {
@@ -71,12 +67,6 @@ class TestExportService @Inject constructor(
             // Also export individual CSV files for each recording
             for (recording in recordings) {
                 exportRecordingCsv(recording, folderName)
-            }
-
-            // Export blood pressure CSV if any events exist
-            val bpEvents = bloodPressureRepository.getEventsForTest(testId)
-            if (bpEvents.isNotEmpty()) {
-                exportBloodPressureCsv(bpEvents, test, folderName)
             }
 
             Result.success(outputPath)
@@ -162,26 +152,6 @@ class TestExportService @Inject constructor(
         }
 
         val fileName = "${recording.recordingIdentifier}.csv"
-        writeToDocuments(folderName, fileName, csvContent.toByteArray())
-    }
-
-    private fun exportBloodPressureCsv(
-        bpEvents: List<BloodPressureEventEntity>,
-        test: TestEntity,
-        folderName: String
-    ) {
-        val csvContent = buildString {
-            appendLine("timestamp_ms,elapsed_test_ms,systolic_mmhg,diastolic_mmhg,map_mmhg,pulse_bpm")
-            bpEvents.forEach { event ->
-                appendLine(
-                    "${event.timestampMs},${event.elapsedTestMs}," +
-                    "${event.systolicMmHg},${event.diastolicMmHg}," +
-                    "${event.meanArterialMmHg ?: ""},${event.pulseRateBpm ?: ""}"
-                )
-            }
-        }
-
-        val fileName = "${test.testIdentifier}_bp.csv"
         writeToDocuments(folderName, fileName, csvContent.toByteArray())
     }
 

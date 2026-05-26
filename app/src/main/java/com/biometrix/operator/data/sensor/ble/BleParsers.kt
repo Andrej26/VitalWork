@@ -1,8 +1,6 @@
 package com.biometrix.operator.data.sensor.ble
 
-import com.biometrix.operator.data.model.BloodPressureReading
 import java.util.UUID
-import kotlin.math.pow
 
 internal const val ESENSE_MANUFACTURER_ID = 0xFF0C
 
@@ -15,14 +13,6 @@ internal object BleParsers {
         val heartRate: Int,
         val rrIntervals: List<Float>  // in milliseconds
     )
-
-    /** Parsed RACP (Record Access Control Point) Response Code frame (opcode 0x06). */
-    data class RacpResponse(val requestOpcode: Int, val responseCode: Int) {
-        companion object {
-            const val RESPONSE_SUCCESS = 0x01
-            const val RESPONSE_NO_RECORDS = 0x06
-        }
-    }
 
     /**
      * Parse BLE Heart Rate Measurement characteristic per Bluetooth SIG specification.
@@ -95,7 +85,6 @@ internal object BleParsers {
         "180D" -> "Heart Rate"
         "180E" -> "Phone Alert Status"
         "180F" -> "Battery Service"
-        "1810" -> "Blood Pressure"
         "1811" -> "Alert Notification"
         "1812" -> "Human Interface Device"
         "1813" -> "Scan Parameters"
@@ -111,74 +100,6 @@ internal object BleParsers {
         "181E" -> "Bond Management"
         "181F" -> "Continuous Glucose Monitoring"
         else -> null
-    }
-
-    /**
-     * Parse the 0x2A35 Blood Pressure Measurement characteristic (Bluetooth SIG BLP 1.1.1).
-     *
-     * Byte layout:
-     *   [Flags: 1]  bit 1 = timestamp present, bit 2 = pulse rate present
-     *   [Systolic SFLOAT: 2], [Diastolic SFLOAT: 2], [MAP SFLOAT: 2] (device MAP is unreliable, recomputed)
-     *   [Timestamp: 7 if flag bit 1]
-     *   [Pulse Rate SFLOAT: 2 if flag bit 2]
-     */
-    fun parseBpMeasurement(value: ByteArray): BloodPressureReading? {
-        if (value.size < 7) return null
-
-        val flags = value[0].toInt() and 0xFF
-        val hasTimestamp = (flags and 0x02) != 0
-        val hasPulseRate = (flags and 0x04) != 0
-
-        val systolic = sfloatToInt(value[1], value[2]) ?: return null
-        val diastolic = sfloatToInt(value[3], value[4]) ?: return null
-
-        var offset = 7
-        if (hasTimestamp) offset += 7
-
-        val pulseRate = if (hasPulseRate && offset + 1 < value.size) {
-            sfloatToInt(value[offset], value[offset + 1])
-        } else {
-            null
-        }
-
-        return BloodPressureReading(
-            systolicMmHg = systolic,
-            diastolicMmHg = diastolic,
-            meanArterialMmHg = calculateMap(systolic, diastolic),
-            pulseRateBpm = pulseRate
-        )
-    }
-
-    /** Standard clinical MAP estimate: (systolic + 2 * diastolic) / 3. */
-    fun calculateMap(systolic: Int, diastolic: Int): Int = (systolic + 2 * diastolic) / 3
-
-    /**
-     * Decode an IEEE 11073 SFLOAT (16-bit): top 4 bits = signed exponent, bottom 12 bits = signed mantissa.
-     * Value = mantissa × 10^exponent. Returns null for NaN / NRes / ±INFINITY.
-     */
-    fun sfloatToInt(lsb: Byte, msb: Byte): Int? {
-        val raw = (lsb.toInt() and 0xFF) or ((msb.toInt() and 0xFF) shl 8)
-        var exponent = raw shr 12
-        if (exponent > 7) exponent -= 16
-        var mantissa = raw and 0x0FFF
-        if (mantissa > 0x07FF) mantissa -= 0x1000
-
-        // NaN (0x07FF), NRes (-0x800 = 0x0800), +INF (0x07FE), -INF (-0x7FE = 0x0802)
-        if (mantissa == 0x07FF || mantissa == -0x800 || mantissa == 0x07FE || mantissa == -0x7FE) {
-            return null
-        }
-
-        return (mantissa * 10.0.pow(exponent)).toInt()
-    }
-
-    /** Parse a RACP Response Code frame (opcode 0x06). Returns null for malformed or non-response-code frames. */
-    fun parseRacpResponse(value: ByteArray): RacpResponse? {
-        if (value.size < 4) return null
-        val opcode = value[0].toInt() and 0xFF
-        if (opcode != 0x06) return null
-        val requestOpcode = value[2].toInt() and 0xFF
-        val responseCode = value[3].toInt() and 0xFF
-        return RacpResponse(requestOpcode, responseCode)
     }
 
     fun getCharacteristicName(uuid: UUID): String? = when (uuid.toString().uppercase().substring(4, 8)) {
@@ -208,7 +129,6 @@ internal object BleParsers {
         "2A46" -> "New Alert"
         "2A47" -> "Supported New Alert Category"
         "2A48" -> "Supported Unread Alert Category"
-        "2A49" -> "Blood Pressure Feature"
         "2A4A" -> "HID Information"
         "2A4B" -> "Report Map"
         "2A4C" -> "HID Control Point"

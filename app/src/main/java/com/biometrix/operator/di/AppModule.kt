@@ -16,9 +16,6 @@ import com.biometrix.operator.data.recording.SensorRecordingRepositoryImpl
 import com.biometrix.operator.data.repository.RecordingRepository
 import com.biometrix.operator.data.sensor.SensorDevice
 import com.biometrix.operator.data.sensor.audio.MindfieldRespiration
-import com.biometrix.operator.data.db.BloodPressureEventDao
-import com.biometrix.operator.data.sensor.ble.BeurerbC87Manager
-import com.biometrix.operator.data.sensor.ble.BeurerbC87ManagerImpl
 import com.biometrix.operator.data.sensor.ble.BleManager
 import com.biometrix.operator.data.sensor.ble.BleManagerImpl
 import com.biometrix.operator.data.sensor.fibion.FibionFlashManager
@@ -76,7 +73,7 @@ object AppModule {
         return Room.databaseBuilder(
             context,
             AppDatabase::class.java,
-            "claustroff_database"
+            "biometrix_database"
         )
             .fallbackToDestructiveMigration()
             .build()
@@ -108,12 +105,6 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideBloodPressureEventDao(database: AppDatabase): BloodPressureEventDao {
-        return database.bloodPressureEventDao()
-    }
-
-    @Provides
-    @Singleton
     fun provideVRConnectionManager(networkChecker: NetworkChecker): VRConnectionManager {
         return VRWebSocketClient(networkChecker)
     }
@@ -137,14 +128,6 @@ object AppModule {
     @Named("respiration")
     fun provideMindfieldRespiration(): SensorDevice {
         return MindfieldRespiration
-    }
-
-    @Provides
-    @Singleton
-    fun provideBeurerbC87Manager(
-        @ApplicationContext context: Context
-    ): BeurerbC87Manager {
-        return BeurerbC87ManagerImpl(context)
     }
 
     @Provides

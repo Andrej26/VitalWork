@@ -36,7 +36,6 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.MonitorHeart
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Vrpano
 import androidx.compose.material.icons.filled.WifiOff
@@ -82,7 +81,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.biometrix.operator.data.model.ConnectionState
 import com.biometrix.operator.data.prefs.HeartRateDevice
 import com.biometrix.operator.data.recording.model.DataRecordingState
-import com.biometrix.operator.data.sensor.ble.Bc87State
 import com.biometrix.operator.data.sensor.ble.model.BleDevice
 import com.biometrix.operator.data.sensor.audio.LowSignalWarning
 import android.Manifest
@@ -126,9 +124,6 @@ fun TestControlScreen(
     val pulseLatestRr by viewModel.pulseLatestRr.collectAsState()
     val fibionLatestRr by viewModel.fibionLatestRr.collectAsState()
     val fibionBatteryLevel by viewModel.fibionBatteryLevel.collectAsState()
-    val bc87State by viewModel.bc87State.collectAsState()
-    val bc87LastReading by viewModel.bc87LastReading.collectAsState()
-    val bpReadingCount by viewModel.bpReadingCount.collectAsState()
     val showFibionScanDialog by viewModel.showFibionScanDialog.collectAsState()
     val fibionDiscoveredDevices by viewModel.fibionDiscoveredDevices.collectAsState()
     val fibionIsScanning by viewModel.fibionIsScanning.collectAsState()
@@ -579,89 +574,6 @@ fun TestControlScreen(
                         onClick = { viewModel.onFibionCardClick() },
                         modifier = Modifier.fillMaxWidth()
                     )
-                }
-            }
-
-            // Blood Pressure (BC87) Section
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.MonitorHeart,
-                            contentDescription = null,
-                            modifier = Modifier.size(24.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Blood Pressure (BC87)",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Text(
-                            text = when (bc87State) {
-                                is Bc87State.Idle -> "Idle"
-                                is Bc87State.Scanning -> "Scanning..."
-                                is Bc87State.Connecting -> "Connecting..."
-                                is Bc87State.Receiving -> "Receiving..."
-                                is Bc87State.Error -> "Error"
-                            },
-                            style = MaterialTheme.typography.labelMedium,
-                            color = when (bc87State) {
-                                is Bc87State.Error -> MaterialTheme.colorScheme.error
-                                is Bc87State.Receiving -> MaterialTheme.colorScheme.primary
-                                else -> MaterialTheme.colorScheme.onSurfaceVariant
-                            }
-                        )
-                    }
-
-                    if (bpReadingCount > 0) {
-                        Text(
-                            text = "$bpReadingCount reading${if (bpReadingCount != 1) "s" else ""} collected",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    bc87LastReading?.let { reading ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = "${reading.systolicMmHg}/${reading.diastolicMmHg} mmHg",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Column(horizontalAlignment = Alignment.End) {
-                                reading.pulseRateBpm?.let { pulse ->
-                                    Text(
-                                        text = "Pulse: $pulse bpm",
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                }
-                                reading.meanArterialMmHg?.let { map ->
-                                    Text(
-                                        text = "MAP: $map mmHg",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-                    }
                 }
             }
 
