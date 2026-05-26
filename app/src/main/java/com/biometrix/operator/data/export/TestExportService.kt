@@ -1,0 +1,265 @@
+package com.biometrix.operator.data.export
+
+import android.content.ContentUris
+import android.content.ContentValues
+import android.content.Context
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
+import androidx.annotation.RequiresApi
+import com.biometrix.operator.data.db.RecordingEntity
+import com.biometrix.operator.data.db.SensorType
+import com.biometrix.operator.data.db.TestEntity
+import com.biometrix.operator.data.db.BloodPressureEventEntity
+import com.biometrix.operator.data.recording.detectFibionEcgGaps
+import com.biometrix.operator.data.recording.detectFibionHeartRateGaps
+import com.biometrix.operator.data.recording.detectFibionRrIntervalGaps
+import com.biometrix.operator.data.recording.detectEsenseRrIntervalGaps
+import com.biometrix.operator.data.recording.detectHeartRateGaps
+import com.biometrix.operator.data.recording.detectRespirationGaps
+import com.biometrix.operator.data.repository.BloodPressureRepository
+import com.biometrix.operator.data.repository.RecordingRepository
+import com.biometrix.operator.data.repository.TestRepository
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import javax.inject.Inject
+import javax.inject.Singleton
+
+interface TestExporter {
+    suspend fun exportTest(testId: Long): Result<String>
+}
+
+@Singleton
+class TestExportService @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val testRepository: TestRepository,
+    private val recordingRepository: RecordingRepository,
+    private val bloodPressureRepository: BloodPressureRepository,
+    private val mapper: TestExportMapper
+) : TestExporter {
+    private val json = Json {
+        prettyPrint = true
+        encodeDefaults = true
+    }
+
+    private val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
+
+    override suspend fun exportTest(testId: Long): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val test = testRepository.getTestById(testId)
+                ?: return@withContext Result.failure(IllegalArgumentException("Test not found"))
+
+            val recordings = recordingRepository.getRecordingsForTestOnce(testId)
+
+            val exportData = mapper.buildExportData(test, recordings)
+            val jsonContent = json.encodeToString(exportData)
+
+            // Write to Documents folder
+            val fileName = "${test.testIdentifier}_export.json"
+            val folderName = test.testIdentifier
+
+            val outputPath = writeToDocuments(folderName, fileName, jsonContent.toByteArray())
+
+            // Also export individual CSV files for each recording
+            for (recording in recordings) {
+                exportRecordingCsv(recording, folderName)
+            }
+
+            // Export blood pressure CSV if any events exist
+            val bpEvents = bloodPressureRepository.getEventsForTest(testId)
+            if (bpEvents.isNotEmpty()) {
+                exportBloodPressureCsv(bpEvents, test, folderName)
+            }
+
+            Result.success(outputPath)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private suspend fun exportRecordingCsv(
+        recording: RecordingEntity,
+        folderName: String
+    ) {
+        val samples = recordingRepository.getSamplesForRecording(recording.id)
+        if (samples.isEmpty()) return
+
+        val hrGaps       = if (recording.heartRateEnabled) detectHeartRateGaps(samples) else emptyList()
+        val esenseRrGaps = if (recording.heartRateEnabled && recording.esenseRrIntervalSampleCount > 0) detectEsenseRrIntervalGaps(samples) else emptyList()
+        val respGaps     = if (recording.respirationEnabled) detectRespirationGaps(samples) else emptyList()
+        val fibHrGaps    = if (recording.fibionEnabled && recording.fibionHeartRateSampleCount > 0) detectFibionHeartRateGaps(samples) else emptyList()
+        val fibEcgGaps   = if (recording.fibionEnabled && recording.fibionEcgSampleCount > 0) detectFibionEcgGaps(samples) else emptyList()
+        val fibRrGaps    = if (recording.fibionEnabled && recording.fibionRrIntervalSampleCount > 0) detectFibionRrIntervalGaps(samples) else emptyList()
+
+        val csvContent = buildString {
+            // Metadata header
+            appendLine("# recording_id,${recording.recordingIdentifier}")
+            appendLine("# test_id,$folderName")
+            appendLine("# sequence,${recording.sequenceNumber}")
+            appendLine("# start_time,${isoFormat.format(Date(recording.startedAt))}")
+            recording.endedAt?.let {
+                appendLine("# end_time,${isoFormat.format(Date(it))}")
+            }
+            appendLine("# duration_ms,${recording.durationMs}")
+            appendLine("# esense_pulse_hr_samples,${recording.heartRateSampleCount}")
+            if (recording.esenseRrIntervalSampleCount > 0) {
+                appendLine("# esense_pulse_rr_samples,${recording.esenseRrIntervalSampleCount}")
+            }
+            appendLine("# esense_resp_samples,${recording.respirationSampleCount}")
+            if (recording.fibionEnabled) {
+                appendLine("# fibion_hr_samples,${recording.fibionHeartRateSampleCount}")
+                appendLine("# fibion_ecg_samples,${recording.fibionEcgSampleCount}")
+                appendLine("# fibion_rr_samples,${recording.fibionRrIntervalSampleCount}")
+            }
+            if (hrGaps.isNotEmpty()) {
+                appendLine("# esense_pulse_hr_gaps,${hrGaps.size}")
+                appendLine("# esense_pulse_hr_gap_total_ms,${hrGaps.sumOf { it.gapMs }}")
+            }
+            if (esenseRrGaps.isNotEmpty()) {
+                appendLine("# esense_pulse_rr_gaps,${esenseRrGaps.size}")
+                appendLine("# esense_pulse_rr_gap_total_ms,${esenseRrGaps.sumOf { it.gapMs }}")
+            }
+            if (respGaps.isNotEmpty()) {
+                appendLine("# esense_resp_gaps,${respGaps.size}")
+                appendLine("# esense_resp_gap_total_ms,${respGaps.sumOf { it.gapMs }}")
+            }
+            if (fibHrGaps.isNotEmpty()) {
+                appendLine("# fibion_hr_gaps,${fibHrGaps.size}")
+                appendLine("# fibion_hr_gap_total_ms,${fibHrGaps.sumOf { it.gapMs }}")
+            }
+            if (fibEcgGaps.isNotEmpty()) {
+                appendLine("# fibion_ecg_gaps,${fibEcgGaps.size}")
+                appendLine("# fibion_ecg_gap_total_ms,${fibEcgGaps.sumOf { it.gapMs }}")
+            }
+            if (fibRrGaps.isNotEmpty()) {
+                appendLine("# fibion_rr_gaps,${fibRrGaps.size}")
+                appendLine("# fibion_rr_gap_total_ms,${fibRrGaps.sumOf { it.gapMs }}")
+            }
+
+            // Header row
+            appendLine("timestamp_ms,elapsed_ms,value,sensor_type")
+
+            // Data rows
+            samples.forEach { sample ->
+                val sensorType = when (sample.sensorType) {
+                    SensorType.HEART_RATE -> "esense_pulse_hr"
+                    SensorType.ESENSE_RR_INTERVAL -> "esense_pulse_rr_interval"
+                    SensorType.RESPIRATION -> "esense_resp"
+                    SensorType.FIBION_HEART_RATE -> "fibion_heart_rate"
+                    SensorType.FIBION_ECG -> "fibion_ecg"
+                    SensorType.FIBION_RR_INTERVAL -> "fibion_rr_interval"
+                }
+                appendLine("${sample.timestampMs},${sample.elapsedMs},${sample.value},$sensorType")
+            }
+        }
+
+        val fileName = "${recording.recordingIdentifier}.csv"
+        writeToDocuments(folderName, fileName, csvContent.toByteArray())
+    }
+
+    private fun exportBloodPressureCsv(
+        bpEvents: List<BloodPressureEventEntity>,
+        test: TestEntity,
+        folderName: String
+    ) {
+        val csvContent = buildString {
+            appendLine("timestamp_ms,elapsed_test_ms,systolic_mmhg,diastolic_mmhg,map_mmhg,pulse_bpm")
+            bpEvents.forEach { event ->
+                appendLine(
+                    "${event.timestampMs},${event.elapsedTestMs}," +
+                    "${event.systolicMmHg},${event.diastolicMmHg}," +
+                    "${event.meanArterialMmHg ?: ""},${event.pulseRateBpm ?: ""}"
+                )
+            }
+        }
+
+        val fileName = "${test.testIdentifier}_bp.csv"
+        writeToDocuments(folderName, fileName, csvContent.toByteArray())
+    }
+
+    private fun writeToDocuments(folderName: String, fileName: String, content: ByteArray): String {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            writeToDocumentsMediaStore(folderName, fileName, content)
+        } else {
+            writeToDocumentsLegacy(folderName, fileName, content)
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun writeToDocumentsMediaStore(
+        folderName: String,
+        fileName: String,
+        content: ByteArray
+    ): String {
+        val mimeType = if (fileName.endsWith(".json")) "application/json" else "text/csv"
+        val relativePath = "Documents/BioMetrix/$folderName"
+
+        // Check if a file with the same name already exists to avoid creating duplicates
+        val existingUri = findExistingMediaStoreFile(fileName, relativePath)
+
+        val uri = if (existingUri != null) {
+            existingUri
+        } else {
+            val contentValues = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+                put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
+            }
+            context.contentResolver.insert(
+                MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), contentValues
+            ) ?: throw Exception("Failed to create $fileName in Documents")
+        }
+
+        context.contentResolver.openOutputStream(uri, "wt")?.use {
+            it.write(content)
+        } ?: throw Exception("Failed to write $fileName")
+
+        return "$relativePath/$fileName"
+    }
+
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun findExistingMediaStoreFile(fileName: String, relativePath: String): Uri? {
+        val collection = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        val projection = arrayOf(MediaStore.Files.FileColumns._ID)
+        val selection = "${MediaStore.Files.FileColumns.DISPLAY_NAME} = ? AND " +
+                "${MediaStore.Files.FileColumns.RELATIVE_PATH} = ?"
+        val selectionArgs = arrayOf(fileName, "$relativePath/")
+
+        context.contentResolver.query(
+            collection, projection, selection, selectionArgs, null
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val id = cursor.getLong(
+                    cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID)
+                )
+                return ContentUris.withAppendedId(collection, id)
+            }
+        }
+        return null
+    }
+
+    private fun writeToDocumentsLegacy(
+        folderName: String,
+        fileName: String,
+        content: ByteArray
+    ): String {
+        val dir = File(
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS),
+            "BioMetrix/$folderName"
+        )
+        dir.mkdirs()
+
+        val file = File(dir, fileName)
+        file.writeBytes(content)
+
+        return file.absolutePath
+    }
+}

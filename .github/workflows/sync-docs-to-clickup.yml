@@ -1,0 +1,126 @@
+name: Sync docs to ClickUp
+
+on:
+  push:
+    paths:
+      - 'doc/**'
+    branches:
+      - main
+      - dev
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      CLICKUP_TOKEN: ${{ secrets.CLICKUP_API_TOKEN }}
+      WORKSPACE_ID: "90151012412"
+      DOC_ID: "2kyppj1w-2535"
+      PARENT_PAGE_ID: "2kyppj1w-1795"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync markdown files to ClickUp
+        run: |
+          set -euo pipefail
+
+          echo "Fetching existing sub-pages under Technical Documentation..."
+
+          # Get existing pages under the parent page
+          EXISTING_PAGES=$(curl -s -X GET \
+            "https://api.clickup.com/api/v3/workspaces/${WORKSPACE_ID}/docs/${DOC_ID}/pages" \
+            -H "Authorization: ${CLICKUP_TOKEN}" \
+            -H "Content-Type: application/json")
+
+          echo "Scanning doc/ folder for markdown files..."
+
+          SYNCED_NAMES=()
+
+          for file in doc/*.md; do
+            [ -f "$file" ] || continue
+
+            # Extract filename without path and extension for page title
+            FILENAME=$(basename "$file" .md)
+            # Convert kebab-case/snake_case to Title Case for page name
+            PAGE_NAME=$(echo "$FILENAME" | sed 's/[-_]/ /g' | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) tolower(substr($i,2))}1')
+
+            SYNCED_NAMES+=("$PAGE_NAME")
+            echo "Processing: $file -> '$PAGE_NAME'"
+
+            # Read file content
+            CONTENT=$(cat "$file")
+
+            # Check if page already exists (search by name in existing pages)
+            PAGE_ID=$(echo "$EXISTING_PAGES" | jq -r --arg name "$PAGE_NAME" \
+              '.. | objects | select(.name == $name and .parent_page_id == env.PARENT_PAGE_ID) | .id // empty' \
+              2>/dev/null | head -1)
+
+            if [ -n "$PAGE_ID" ] && [ "$PAGE_ID" != "null" ]; then
+              echo "  Updating existing page: $PAGE_ID"
+              curl -s -X PUT \
+                "https://api.clickup.com/api/v3/workspaces/${WORKSPACE_ID}/docs/${DOC_ID}/pages/${PAGE_ID}" \
+                -H "Authorization: ${CLICKUP_TOKEN}" \
+                -H "Content-Type: application/json" \
+                -d "$(jq -n \
+                  --arg name "$PAGE_NAME" \
+                  --arg content "$CONTENT" \
+                  '{
+                    name: $name,
+                    content: $content,
+                    content_format: "text/md",
+                    content_edit_mode: "replace"
+                  }')" > /dev/null
+              echo "  Updated"
+            else
+              echo "  Creating new page..."
+              curl -s -X POST \
+                "https://api.clickup.com/api/v3/workspaces/${WORKSPACE_ID}/docs/${DOC_ID}/pages" \
+                -H "Authorization: ${CLICKUP_TOKEN}" \
+                -H "Content-Type: application/json" \
+                -d "$(jq -n \
+                  --arg name "$PAGE_NAME" \
+                  --arg content "$CONTENT" \
+                  --arg parent "$PARENT_PAGE_ID" \
+                  '{
+                    name: $name,
+                    content: $content,
+                    content_format: "text/md",
+                    parent_page_id: $parent
+                  }')" > /dev/null
+              echo "  Created"
+            fi
+
+            # Small delay to avoid rate limiting
+            sleep 1
+          done
+
+          # Clean up orphaned pages (e.g. from renamed files)
+          echo ""
+          echo "Cleaning up orphaned pages..."
+          CHILD_PAGES=$(echo "$EXISTING_PAGES" | jq -c --arg parent "$PARENT_PAGE_ID" \
+            '[.. | objects | select(.parent_page_id == $parent) | {id: .id, name: .name}]')
+
+          echo "$CHILD_PAGES" | jq -c '.[]' | while IFS= read -r row; do
+            NAME=$(echo "$row" | jq -r '.name')
+            ID=$(echo "$row" | jq -r '.id')
+
+            FOUND=false
+            for synced in "${SYNCED_NAMES[@]}"; do
+              if [ "$synced" = "$NAME" ]; then
+                FOUND=true
+                break
+              fi
+            done
+
+            if [ "$FOUND" = false ]; then
+              echo "  Deleting orphaned page: '$NAME' ($ID)"
+              curl -s -X DELETE \
+                "https://api.clickup.com/api/v3/workspaces/${WORKSPACE_ID}/docs/${DOC_ID}/pages/${ID}" \
+                -H "Authorization: ${CLICKUP_TOKEN}" > /dev/null
+              sleep 1
+            fi
+          done
+
+          echo ""
+          echo "Sync complete!"
