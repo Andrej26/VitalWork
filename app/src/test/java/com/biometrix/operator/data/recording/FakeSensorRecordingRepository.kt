@@ -1,4 +1,4 @@
-package com.biometrix.operator.data.recording
+﻿package com.biometrix.operator.data.recording
 
 import com.biometrix.operator.data.recording.model.DataRecordingState
 import com.biometrix.operator.data.recording.model.RecordingMetadata
@@ -14,19 +14,19 @@ class FakeSensorRecordingRepository : SensorRecordingRepository {
         private set
     var stopRecordingCallCount = 0
         private set
-    var lastStartTestId: Long? = null
+    var lastStartsessionId: Long? = null
         private set
-    var lastStartTestIdentifier: String? = null
+    var lastStartsessionIdentifier: String? = null
         private set
 
-    override suspend fun startRecording(testId: Long, testIdentifier: String) {
+    override suspend fun startRecording(sessionId: Long, sessionIdentifier: String) {
         startRecordingCallCount++
-        lastStartTestId = testId
-        lastStartTestIdentifier = testIdentifier
+        lastStartsessionId = sessionId
+        lastStartsessionIdentifier = sessionIdentifier
         recordingState.value = DataRecordingState.RECORDING
         recordingMetadata.value = RecordingMetadata(
             recordingId = 1L,
-            recordingIdentifier = "$testIdentifier-R01",
+            recordingIdentifier = "$sessionIdentifier-R01",
             startTimestampMs = System.currentTimeMillis()
         )
     }

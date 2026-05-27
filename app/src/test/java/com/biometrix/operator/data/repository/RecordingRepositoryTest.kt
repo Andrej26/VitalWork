@@ -1,4 +1,4 @@
-package com.biometrix.operator.data.repository
+﻿package com.biometrix.operator.data.repository
 
 import com.biometrix.operator.data.db.FakeRecordingDao
 import com.biometrix.operator.data.db.FakeSensorSampleDao
@@ -29,8 +29,8 @@ class RecordingRepositoryTest {
     @Test
     fun createRecording_firstRecording_identifierEndsWithR01() = runTest {
         val recording = repository.createRecording(
-            testId = 1L,
-            testIdentifier = "BMX-260413-141530",
+            sessionId = 1L,
+            sessionIdentifier = "BMX-260413-141530",
             heartRateEnabled = true,
             respirationEnabled = false
         )
@@ -38,20 +38,20 @@ class RecordingRepositoryTest {
         assertEquals("BMX-260413-141530-R01", recording.recordingIdentifier)
         assertEquals(1, recording.sequenceNumber)
         assertEquals(RecordingStatus.RECORDING, recording.status)
-        assertEquals(1L, recording.testId)
+        assertEquals(1L, recording.sessionId)
     }
 
     @Test
     fun createRecording_secondRecording_identifierEndsWithR02() = runTest {
         repository.createRecording(
-            testId = 1L,
-            testIdentifier = "BMX-260413-141530",
+            sessionId = 1L,
+            sessionIdentifier = "BMX-260413-141530",
             heartRateEnabled = true,
             respirationEnabled = false
         )
         val second = repository.createRecording(
-            testId = 1L,
-            testIdentifier = "BMX-260413-141530",
+            sessionId = 1L,
+            sessionIdentifier = "BMX-260413-141530",
             heartRateEnabled = true,
             respirationEnabled = false
         )
@@ -63,8 +63,8 @@ class RecordingRepositoryTest {
     @Test
     fun createRecording_sensorFlags_persisted() = runTest {
         val recording = repository.createRecording(
-            testId = 1L,
-            testIdentifier = "BMX-260413-141530",
+            sessionId = 1L,
+            sessionIdentifier = "BMX-260413-141530",
             heartRateEnabled = true,
             respirationEnabled = true
         )
@@ -76,8 +76,8 @@ class RecordingRepositoryTest {
     @Test
     fun completeRecording_countsAllSensorTypes() = runTest {
         val recording = repository.createRecording(
-            testId = 1L,
-            testIdentifier = "BMX-260413-141530",
+            sessionId = 1L,
+            sessionIdentifier = "BMX-260413-141530",
             heartRateEnabled = true,
             respirationEnabled = true
         )
@@ -99,8 +99,8 @@ class RecordingRepositoryTest {
     @Test
     fun completeRecording_setsDurationAndStatus() = runTest {
         val recording = repository.createRecording(
-            testId = 1L,
-            testIdentifier = "BMX-260413-141530",
+            sessionId = 1L,
+            sessionIdentifier = "BMX-260413-141530",
             heartRateEnabled = true,
             respirationEnabled = false
         )

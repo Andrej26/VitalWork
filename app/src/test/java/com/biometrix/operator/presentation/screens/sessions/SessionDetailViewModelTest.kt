@@ -1,15 +1,15 @@
-package com.biometrix.operator.presentation.screens.tests
+﻿package com.biometrix.operator.presentation.screens.sessions
 
 import androidx.lifecycle.SavedStateHandle
 import com.biometrix.operator.data.db.FakeRecordingDao
 import com.biometrix.operator.data.db.FakeSensorSampleDao
-import com.biometrix.operator.data.db.FakeTestDao
+import com.biometrix.operator.data.db.FakeSessionDao
 import com.biometrix.operator.data.db.RecordingEntity
-import com.biometrix.operator.data.db.TestEntity
-import com.biometrix.operator.data.db.TestStatus
-import com.biometrix.operator.data.export.TestExporter
+import com.biometrix.operator.data.db.SessionEntity
+import com.biometrix.operator.data.db.SessionStatus
+import com.biometrix.operator.data.export.SessionUploader
 import com.biometrix.operator.data.repository.RecordingRepository
-import com.biometrix.operator.data.repository.TestRepository
+import com.biometrix.operator.data.repository.SessionRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -27,26 +27,26 @@ import org.junit.Before
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class TestDetailViewModelTest {
+class SessionDetailViewModelTest {
 
-    private lateinit var fakeTestDao: FakeTestDao
+    private lateinit var fakeSessionDao: FakeSessionDao
     private lateinit var fakeRecordingDao: FakeRecordingDao
     private lateinit var fakeSampleDao: FakeSensorSampleDao
-    private lateinit var testRepository: TestRepository
+    private lateinit var sessionRepository: SessionRepository
     private lateinit var recordingRepository: RecordingRepository
-    private lateinit var exportService: FakeTestExporter
+    private lateinit var exportService: FakeSessionUploader
 
-    private val testId = 1L
+    private val sessionId = 1L
 
     @Before
     fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
-        fakeTestDao = FakeTestDao()
+        fakeSessionDao = FakeSessionDao()
         fakeRecordingDao = FakeRecordingDao()
         fakeSampleDao = FakeSensorSampleDao()
-        testRepository = TestRepository(fakeTestDao, fakeRecordingDao)
+        sessionRepository = SessionRepository(fakeSessionDao, fakeRecordingDao)
         recordingRepository = RecordingRepository(fakeRecordingDao, fakeSampleDao)
-        exportService = FakeTestExporter()
+        exportService = FakeSessionUploader()
     }
 
     @After
@@ -54,15 +54,15 @@ class TestDetailViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun seedTest(status: TestStatus = TestStatus.COMPLETED): TestEntity {
-        val test = TestEntity(
-            id = testId,
-            testNumber = "260101-120000",
-            testIdentifier = "BMX-260101-120000",
+    private fun seedTest(status: SessionStatus = SessionStatus.COMPLETED): SessionEntity {
+        val test = SessionEntity(
+            id = sessionId,
+            sessionNumber = "260101-120000",
+            sessionIdentifier = "BMX-260101-120000",
             createdAt = 1_000L,
             status = status
         )
-        fakeTestDao.tests.add(test)
+        fakeSessionDao.tests.add(test)
         return test
     }
 
@@ -70,7 +70,7 @@ class TestDetailViewModelTest {
         fakeRecordingDao.recordings.add(
             RecordingEntity(
                 id = id,
-                testId = testId,
+                sessionId = sessionId,
                 recordingIdentifier = "BMX-260101-120000-R%02d".format(seq),
                 sequenceNumber = seq,
                 startedAt = 2_000L
@@ -78,9 +78,9 @@ class TestDetailViewModelTest {
         )
     }
 
-    private fun newViewModel(): TestDetailViewModel {
-        val handle = SavedStateHandle(mapOf("testId" to testId))
-        return TestDetailViewModel(testRepository, recordingRepository, exportService, handle)
+    private fun newViewModel(): SessionDetailViewModel {
+        val handle = SavedStateHandle(mapOf("testId" to sessionId))
+        return SessionDetailViewModel(sessionRepository, recordingRepository, exportService, handle)
     }
 
     @Test
@@ -112,7 +112,7 @@ class TestDetailViewModelTest {
 
     @Test
     fun `exportTest success marks test EXPORTED and surfaces path in exportResult`() = runTest {
-        seedTest(TestStatus.COMPLETED)
+        seedTest(SessionStatus.COMPLETED)
         exportService.result = Result.success("Documents/BioMetrix/BMX-260101-120000/...json")
 
         val vm = newViewModel()
@@ -122,14 +122,14 @@ class TestDetailViewModelTest {
 
         val state = vm.uiState.value
         assertFalse(state.isExporting)
-        assertEquals(TestStatus.EXPORTED, state.test?.status)
-        assertEquals(TestStatus.EXPORTED, fakeTestDao.tests.single().status)
+        assertEquals(SessionStatus.EXPORTED, state.test?.status)
+        assertEquals(SessionStatus.EXPORTED, fakeSessionDao.tests.single().status)
         assertEquals("Exported to: Documents/BioMetrix/BMX-260101-120000/...json", state.exportResult)
     }
 
     @Test
     fun `exportTest failure leaves status unchanged and surfaces error`() = runTest {
-        seedTest(TestStatus.COMPLETED)
+        seedTest(SessionStatus.COMPLETED)
         exportService.result = Result.failure(IllegalStateException("disk full"))
 
         val vm = newViewModel()
@@ -139,8 +139,8 @@ class TestDetailViewModelTest {
 
         val state = vm.uiState.value
         assertFalse(state.isExporting)
-        assertEquals(TestStatus.COMPLETED, state.test?.status)
-        assertEquals(TestStatus.COMPLETED, fakeTestDao.tests.single().status)
+        assertEquals(SessionStatus.COMPLETED, state.test?.status)
+        assertEquals(SessionStatus.COMPLETED, fakeSessionDao.tests.single().status)
         assertEquals("Export failed: disk full", state.exportResult)
     }
 
@@ -160,22 +160,22 @@ class TestDetailViewModelTest {
     }
 
     @Test
-    fun `deleteTest removes row and invokes callback`() = runTest {
+    fun `deleteSession removes row and invokes callback`() = runTest {
         seedTest()
         var called = false
 
         val vm = newViewModel()
         advanceUntilIdle()
-        vm.deleteTest { called = true }
+        vm.deleteSession { called = true }
         advanceUntilIdle()
 
         assertTrue(called)
-        assertTrue(fakeTestDao.tests.isEmpty())
+        assertTrue(fakeSessionDao.tests.isEmpty())
         assertTrue(vm.uiState.value.isDeleting)
     }
 
-    private class FakeTestExporter : TestExporter {
+    private class FakeSessionUploader : SessionUploader {
         var result: Result<String> = Result.success("")
-        override suspend fun exportTest(testId: Long): Result<String> = result
+        override suspend fun upload(sessionId: Long): Result<String> = result
     }
 }

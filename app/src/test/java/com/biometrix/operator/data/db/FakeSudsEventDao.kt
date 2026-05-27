@@ -1,4 +1,4 @@
-package com.biometrix.operator.data.db
+﻿package com.biometrix.operator.data.db
 
 class FakeSudsEventDao : SudsEventDao {
 
@@ -9,10 +9,10 @@ class FakeSudsEventDao : SudsEventDao {
         events.add(event.copy(id = nextId++))
     }
 
-    override suspend fun getByTestId(testId: Long): List<SudsEventEntity> =
-        events.filter { it.testId == testId }.sortedBy { it.timestampMs }
+    override suspend fun getByTestId(sessionId: Long): List<SudsEventEntity> =
+        events.filter { it.sessionId == sessionId }.sortedBy { it.timestampMs }
 
-    override suspend fun deleteByTestId(testId: Long) {
-        events.removeAll { it.testId == testId }
+    override suspend fun deleteByTestId(sessionId: Long) {
+        events.removeAll { it.sessionId == sessionId }
     }
 }

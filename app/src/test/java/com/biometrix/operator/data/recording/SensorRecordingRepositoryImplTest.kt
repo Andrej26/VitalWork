@@ -1,4 +1,4 @@
-package com.biometrix.operator.data.recording
+﻿package com.biometrix.operator.data.recording
 
 import com.biometrix.operator.data.db.FakeRecordingDao
 import com.biometrix.operator.data.db.FakeSensorSampleDao
@@ -67,13 +67,13 @@ class SensorRecordingRepositoryImplTest {
         connectEsensePulse()
         respirationDevice.state.value = DeviceState.Streaming
 
-        sut.startRecording(testId = 1L, testIdentifier = "BMX-260413-100000")
+        sut.startRecording(sessionId = 1L, sessionIdentifier = "BMX-260413-100000")
 
         assertEquals(DataRecordingState.RECORDING, sut.recordingState.value)
         assertEquals(1, fakeRecordingDao.recordings.size)
 
         val recording = fakeRecordingDao.recordings[0]
-        assertEquals(1L, recording.testId)
+        assertEquals(1L, recording.sessionId)
         assertTrue(recording.heartRateEnabled)
         assertTrue(recording.respirationEnabled)
 
@@ -88,8 +88,8 @@ class SensorRecordingRepositoryImplTest {
         val sut = createSut()
         connectEsensePulse()
 
-        sut.startRecording(testId = 1L, testIdentifier = "BMX-260413-100000")
-        sut.startRecording(testId = 1L, testIdentifier = "BMX-260413-100000")
+        sut.startRecording(sessionId = 1L, sessionIdentifier = "BMX-260413-100000")
+        sut.startRecording(sessionId = 1L, sessionIdentifier = "BMX-260413-100000")
 
         assertEquals(1, fakeRecordingDao.recordings.size)
     }
@@ -100,14 +100,14 @@ class SensorRecordingRepositoryImplTest {
     fun startRecording_esensePulse_whenConnected_enablesNotifications() = runTest(testDispatcher) {
         val sut = createSut()
         connectEsensePulse()
-        sut.startRecording(testId = 1L, testIdentifier = "BMX-260413-100000")
+        sut.startRecording(sessionId = 1L, sessionIdentifier = "BMX-260413-100000")
         assertEquals(1, bleManager.enableHrNotificationsCallCount)
     }
 
     @Test
     fun startRecording_esensePulse_whenDisconnected_doesNotEnableNotifications() = runTest(testDispatcher) {
         val sut = createSut()
-        sut.startRecording(testId = 1L, testIdentifier = "BMX-260413-100000")
+        sut.startRecording(sessionId = 1L, sessionIdentifier = "BMX-260413-100000")
         assertEquals(0, bleManager.enableHrNotificationsCallCount)
     }
 
@@ -115,7 +115,7 @@ class SensorRecordingRepositoryImplTest {
     fun startRecording_respiration_whenConnectedOnly_autoStartsStreaming() = runTest(testDispatcher) {
         val sut = createSut()
         respirationDevice.state.value = DeviceState.Connected
-        sut.startRecording(testId = 1L, testIdentifier = "BMX-260413-100000")
+        sut.startRecording(sessionId = 1L, sessionIdentifier = "BMX-260413-100000")
         assertEquals(1, respirationDevice.startStreamingCallCount)
     }
 
@@ -123,7 +123,7 @@ class SensorRecordingRepositoryImplTest {
     fun startRecording_respiration_whenAlreadyStreaming_doesNotCallStartStreaming() = runTest(testDispatcher) {
         val sut = createSut()
         respirationDevice.state.value = DeviceState.Streaming
-        sut.startRecording(testId = 1L, testIdentifier = "BMX-260413-100000")
+        sut.startRecording(sessionId = 1L, sessionIdentifier = "BMX-260413-100000")
         assertEquals(0, respirationDevice.startStreamingCallCount)
     }
 
@@ -135,7 +135,7 @@ class SensorRecordingRepositoryImplTest {
         connectEsensePulse()
         respirationDevice.state.value = DeviceState.Streaming
 
-        sut.startRecording(testId = 1L, testIdentifier = "BMX-260413-100000")
+        sut.startRecording(sessionId = 1L, sessionIdentifier = "BMX-260413-100000")
 
         bleManager.heartRateSampleFlow.emit(72f)
         bleManager.rrIntervalSampleFlow.emit(833f)
@@ -154,7 +154,7 @@ class SensorRecordingRepositoryImplTest {
     fun sampleEntity_hasCorrectRecordingIdAndTimestamps() = runTest(testDispatcher) {
         val sut = createSut()
         connectEsensePulse()
-        sut.startRecording(testId = 1L, testIdentifier = "BMX-260413-100000")
+        sut.startRecording(sessionId = 1L, sessionIdentifier = "BMX-260413-100000")
 
         val recordingId = fakeRecordingDao.recordings[0].id
 
@@ -174,7 +174,7 @@ class SensorRecordingRepositoryImplTest {
         connectEsensePulse()
         respirationDevice.state.value = DeviceState.Streaming
 
-        sut.startRecording(testId = 1L, testIdentifier = "BMX-260413-100000")
+        sut.startRecording(sessionId = 1L, sessionIdentifier = "BMX-260413-100000")
 
         repeat(5) { bleManager.heartRateSampleFlow.emit(72f) }
         repeat(3) { respirationDevice.sampleFlow.emit(15f) }
@@ -197,7 +197,7 @@ class SensorRecordingRepositoryImplTest {
     fun stopRecording_resetsStateAndMetadata() = runTest(testDispatcher) {
         val sut = createSut()
         connectEsensePulse()
-        sut.startRecording(testId = 1L, testIdentifier = "BMX-260413-100000")
+        sut.startRecording(sessionId = 1L, sessionIdentifier = "BMX-260413-100000")
         sut.stopRecording()
 
         assertEquals(DataRecordingState.IDLE, sut.recordingState.value)
@@ -209,7 +209,7 @@ class SensorRecordingRepositoryImplTest {
     fun stopRecording_completesRecordingAndFlushesSamples() = runTest(testDispatcher) {
         val sut = createSut()
         connectEsensePulse()
-        sut.startRecording(testId = 1L, testIdentifier = "BMX-260413-100000")
+        sut.startRecording(sessionId = 1L, sessionIdentifier = "BMX-260413-100000")
 
         repeat(3) { bleManager.heartRateSampleFlow.emit(72f + it) }
 
@@ -226,7 +226,7 @@ class SensorRecordingRepositoryImplTest {
     @Test
     fun noSensorsConnected_allFlagsDisabledNoSamplesWritten() = runTest(testDispatcher) {
         val sut = createSut()
-        sut.startRecording(testId = 1L, testIdentifier = "BMX-260413-100000")
+        sut.startRecording(sessionId = 1L, sessionIdentifier = "BMX-260413-100000")
 
         val metadata = sut.recordingMetadata.value!!
         assertFalse(metadata.heartRateRecording)
@@ -242,11 +242,11 @@ class SensorRecordingRepositoryImplTest {
         val sut = createSut()
         connectEsensePulse()
 
-        sut.startRecording(testId = 1L, testIdentifier = "BMX-260413-100000")
+        sut.startRecording(sessionId = 1L, sessionIdentifier = "BMX-260413-100000")
         bleManager.heartRateSampleFlow.emit(72f)
         sut.stopRecording()
 
-        sut.startRecording(testId = 1L, testIdentifier = "BMX-260413-100000")
+        sut.startRecording(sessionId = 1L, sessionIdentifier = "BMX-260413-100000")
         bleManager.heartRateSampleFlow.emit(75f)
         sut.stopRecording()
 
@@ -263,7 +263,7 @@ class SensorRecordingRepositoryImplTest {
         connectEsensePulse()
         respirationDevice.state.value = DeviceState.Streaming
 
-        sut.startRecording(testId = 1L, testIdentifier = "BMX-260413-100000")
+        sut.startRecording(sessionId = 1L, sessionIdentifier = "BMX-260413-100000")
 
         bleManager.heartRateSampleFlow.emit(72f)
         bleManager.heartRateSampleFlow.emit(74f)
@@ -286,7 +286,7 @@ class SensorRecordingRepositoryImplTest {
     fun manySamples_flushedInBatchesBeforeStop() = runTest(testDispatcher) {
         val sut = createSut()
         connectEsensePulse()
-        sut.startRecording(testId = 1L, testIdentifier = "BMX-260413-100000")
+        sut.startRecording(sessionId = 1L, sessionIdentifier = "BMX-260413-100000")
 
         repeat(55) { bleManager.heartRateSampleFlow.emit(72f + it) }
 

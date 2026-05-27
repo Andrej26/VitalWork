@@ -1,4 +1,4 @@
-package com.biometrix.operator.data.export
+﻿package com.biometrix.operator.data.export
 
 import com.biometrix.operator.data.db.FakeRecordingDao
 import com.biometrix.operator.data.db.FakeSensorSampleDao
@@ -8,8 +8,8 @@ import com.biometrix.operator.data.db.RecordingStatus
 import com.biometrix.operator.data.db.SensorSampleEntity
 import com.biometrix.operator.data.db.SensorType
 import com.biometrix.operator.data.db.SudsEventEntity
-import com.biometrix.operator.data.db.TestEntity
-import com.biometrix.operator.data.db.TestStatus
+import com.biometrix.operator.data.db.SessionEntity
+import com.biometrix.operator.data.db.SessionStatus
 import com.biometrix.operator.data.repository.RecordingRepository
 import com.biometrix.operator.data.repository.SudsRepository
 import kotlinx.coroutines.test.runTest
@@ -20,7 +20,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-class TestExportMapperTest {
+class SessionExportMapperTest {
 
     private lateinit var fakeRecordingDao: FakeRecordingDao
     private lateinit var fakeSensorSampleDao: FakeSensorSampleDao
@@ -29,7 +29,7 @@ class TestExportMapperTest {
     private lateinit var recordingRepository: RecordingRepository
     private lateinit var sudsRepository: SudsRepository
 
-    private lateinit var mapper: TestExportMapper
+    private lateinit var mapper: SessionExportMapper
 
     @Before
     fun setUp() {
@@ -40,7 +40,7 @@ class TestExportMapperTest {
         recordingRepository = RecordingRepository(fakeRecordingDao, fakeSensorSampleDao)
         sudsRepository = SudsRepository(fakeSudsEventDao)
 
-        mapper = TestExportMapper(recordingRepository, sudsRepository)
+        mapper = SessionExportMapper(recordingRepository, sudsRepository)
     }
 
     // -- Sensor type mapping --
@@ -131,8 +131,8 @@ class TestExportMapperTest {
     // -- buildExportData: statistics and event mapping --
 
     @Test
-    fun buildExportData_statisticsReflectTestEntity() = runTest {
-        val test = testEntity(
+    fun buildExportData_statisticsReflectSessionEntity() = runTest {
+        val test = SessionEntity(
             recordingCount = 2,
             totalHeartRateSampleCount = 100,
             totalRespirationSampleCount = 50,
@@ -150,10 +150,10 @@ class TestExportMapperTest {
 
     @Test
     fun buildExportData_sudsEventsMapped() = runTest {
-        val test = testEntity()
+        val test = SessionEntity()
         fakeSudsEventDao.events.addAll(listOf(
-            SudsEventEntity(testId = test.id, timestampMs = 1000L, value = 3),
-            SudsEventEntity(testId = test.id, timestampMs = 2000L, value = 7)
+            SudsEventEntity(sessionId = test.id, timestampMs = 1000L, value = 3),
+            SudsEventEntity(sessionId = test.id, timestampMs = 2000L, value = 7)
         ))
 
         val result = mapper.buildExportData(test, emptyList())
@@ -168,7 +168,7 @@ class TestExportMapperTest {
 
     @Test
     fun buildExportData_recordingSamplesIncluded() = runTest {
-        val test = testEntity()
+        val test = SessionEntity()
         val recording = recording(heartRateEnabled = true, heartRateSampleCount = 2)
         fakeSensorSampleDao.samples.addAll(listOf(
             sample(recording.id, SensorType.HEART_RATE, value = 72f),
@@ -184,7 +184,7 @@ class TestExportMapperTest {
 
     @Test
     fun buildExportData_emptyRecordings_emptyList() = runTest {
-        val test = testEntity()
+        val test = SessionEntity()
 
         val result = mapper.buildExportData(test, emptyList())
 
@@ -193,17 +193,17 @@ class TestExportMapperTest {
 
     @Test
     fun buildExportData_testFieldsMapped() = runTest {
-        val test = testEntity(
-            testIdentifier = "BMX-260413-141530",
-            testNumber = "260413-141530",
-            status = TestStatus.COMPLETED,
+        val test = SessionEntity(
+            sessionIdentifier = "BMX-260413-141530",
+            sessionNumber = "260413-141530",
+            status = SessionStatus.COMPLETED,
             notes = "Patient improved"
         )
 
         val result = mapper.buildExportData(test, emptyList())
 
         assertEquals("BMX-260413-141530", result.test.id)
-        assertEquals("260413-141530", result.test.testNumber)
+        assertEquals("260413-141530", result.test.sessionNumber)
         assertEquals("COMPLETED", result.test.status)
         assertEquals("Patient improved", result.test.notes)
         assertEquals("1.0.0", result.version)
@@ -214,7 +214,7 @@ class TestExportMapperTest {
     private var nextRecordingId = 1L
 
     private fun recording(
-        testId: Long = 1L,
+        sessionId: Long = 1L,
         heartRateEnabled: Boolean = false,
         respirationEnabled: Boolean = false,
         heartRateSampleCount: Int = 0,
@@ -224,7 +224,7 @@ class TestExportMapperTest {
         val id = nextRecordingId++
         return RecordingEntity(
             id = id,
-            testId = testId,
+            sessionId = sessionId,
             recordingIdentifier = "BMX-260413-141530-R${String.format("%02d", id)}",
             sequenceNumber = id.toInt(),
             startedAt = 1000000L,
@@ -252,19 +252,19 @@ class TestExportMapperTest {
         value = value
     )
 
-    private fun testEntity(
-        testIdentifier: String = "BMX-260413-141530",
-        testNumber: String = "260413-141530",
-        status: TestStatus = TestStatus.COMPLETED,
+    private fun SessionEntity(
+        sessionIdentifier: String = "BMX-260413-141530",
+        sessionNumber: String = "260413-141530",
+        status: SessionStatus = SessionStatus.COMPLETED,
         notes: String = "",
         recordingCount: Int = 0,
         totalHeartRateSampleCount: Int = 0,
         totalRespirationSampleCount: Int = 0,
         totalEsenseRrIntervalSampleCount: Int = 0
-    ) = TestEntity(
+    ) = SessionEntity(
         id = 1L,
-        testNumber = testNumber,
-        testIdentifier = testIdentifier,
+        sessionNumber = sessionNumber,
+        sessionIdentifier = sessionIdentifier,
         createdAt = 1000000L,
         endedAt = 1060000L,
         durationMs = 60000L,
