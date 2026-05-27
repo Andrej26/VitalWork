@@ -1,4 +1,4 @@
-package com.biometrix.operator.data.repository
+﻿package com.biometrix.operator.data.repository
 
 import com.biometrix.operator.data.db.SudsEventDao
 import com.biometrix.operator.data.db.SudsEventEntity
@@ -9,16 +9,16 @@ import javax.inject.Singleton
 class SudsRepository @Inject constructor(
     private val sudsEventDao: SudsEventDao
 ) {
-    suspend fun saveEvent(testId: Long, value: Int) {
+    suspend fun saveEvent(sessionId: Long, value: Int) {
         sudsEventDao.insert(
             SudsEventEntity(
-                testId = testId,
+                sessionId = sessionId,
                 timestampMs = System.currentTimeMillis(),
                 value = value
             )
         )
     }
 
-    suspend fun getEventsForTest(testId: Long): List<SudsEventEntity> =
-        sudsEventDao.getByTestId(testId)
+    suspend fun getEventsForTest(sessionId: Long): List<SudsEventEntity> =
+        sudsEventDao.getByTestId(sessionId)
 }

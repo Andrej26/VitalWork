@@ -1,4 +1,4 @@
-package com.biometrix.operator.di
+﻿package com.biometrix.operator.di
 
 import android.content.Context
 import androidx.room.Room
@@ -6,9 +6,10 @@ import com.biometrix.operator.data.db.AppDatabase
 import com.biometrix.operator.data.db.RecordingDao
 import com.biometrix.operator.data.db.SensorSampleDao
 import com.biometrix.operator.data.db.SudsEventDao
-import com.biometrix.operator.data.db.TestDao
-import com.biometrix.operator.data.export.TestExportService
-import com.biometrix.operator.data.export.TestExporter
+import com.biometrix.operator.data.db.SessionDao
+import com.biometrix.operator.data.export.SessionExportService
+import com.biometrix.operator.data.export.SessionExporter
+import com.biometrix.operator.data.export.SessionUploader
 import com.biometrix.operator.data.recording.SensorRecordingRepository
 import com.biometrix.operator.data.recording.SensorRecordingRepositoryImpl
 import com.biometrix.operator.data.repository.RecordingRepository
@@ -42,7 +43,11 @@ abstract class AppBindsModule {
 
     @Binds
     @Singleton
-    abstract fun bindTestExporter(impl: TestExportService): TestExporter
+    abstract fun bindSessionExporter(impl: SessionExportService): SessionExporter
+
+    @Binds
+    @Singleton
+    abstract fun bindSessionUploader(impl: SessionExportService): SessionUploader
 }
 
 @Module
@@ -71,8 +76,8 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideTestDao(database: AppDatabase): TestDao {
-        return database.testDao()
+    fun provideSessionDao(database: AppDatabase): SessionDao {
+        return database.sessionDao()
     }
 
     @Provides

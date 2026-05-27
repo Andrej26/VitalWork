@@ -1,4 +1,4 @@
-package com.biometrix.operator.data.export
+﻿package com.biometrix.operator.data.export
 
 import android.content.ContentUris
 import android.content.ContentValues
@@ -14,7 +14,7 @@ import com.biometrix.operator.data.recording.detectEsenseRrIntervalGaps
 import com.biometrix.operator.data.recording.detectHeartRateGaps
 import com.biometrix.operator.data.recording.detectRespirationGaps
 import com.biometrix.operator.data.repository.RecordingRepository
-import com.biometrix.operator.data.repository.TestRepository
+import com.biometrix.operator.data.repository.SessionRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -27,17 +27,20 @@ import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
-interface TestExporter {
-    suspend fun exportTest(testId: Long): Result<String>
+interface SessionExporter {
+    suspend fun exportTest(sessionId: Long): Result<String>
 }
 
 @Singleton
-class TestExportService @Inject constructor(
+class SessionExportService @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val testRepository: TestRepository,
+    private val sessionRepository: SessionRepository,
     private val recordingRepository: RecordingRepository,
-    private val mapper: TestExportMapper
-) : TestExporter {
+    private val mapper: SessionExportMapper
+) : SessionExporter, SessionUploader {
+
+    override suspend fun upload(sessionId: Long): Result<String> = exportTest(sessionId)
+
     private val json = Json {
         prettyPrint = true
         encodeDefaults = true
@@ -45,19 +48,19 @@ class TestExportService @Inject constructor(
 
     private val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
 
-    override suspend fun exportTest(testId: Long): Result<String> = withContext(Dispatchers.IO) {
+    override suspend fun exportTest(sessionId: Long): Result<String> = withContext(Dispatchers.IO) {
         try {
-            val test = testRepository.getTestById(testId)
+            val test = sessionRepository.getSessionById(sessionId)
                 ?: return@withContext Result.failure(IllegalArgumentException("Test not found"))
 
-            val recordings = recordingRepository.getRecordingsForTestOnce(testId)
+            val recordings = recordingRepository.getRecordingsForTestOnce(sessionId)
 
             val exportData = mapper.buildExportData(test, recordings)
             val jsonContent = json.encodeToString(exportData)
 
             // Write to Documents folder
-            val fileName = "${test.testIdentifier}_export.json"
-            val folderName = test.testIdentifier
+            val fileName = "${test.sessionIdentifier}_export.json"
+            val folderName = test.sessionIdentifier
 
             val outputPath = writeToDocuments(folderName, fileName, jsonContent.toByteArray())
 

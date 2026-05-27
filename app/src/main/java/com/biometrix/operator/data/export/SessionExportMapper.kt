@@ -1,9 +1,9 @@
-package com.biometrix.operator.data.export
+﻿package com.biometrix.operator.data.export
 
 import com.biometrix.operator.data.db.RecordingEntity
 import com.biometrix.operator.data.db.SensorSampleEntity
 import com.biometrix.operator.data.db.SensorType
-import com.biometrix.operator.data.db.TestEntity
+import com.biometrix.operator.data.db.SessionEntity
 import com.biometrix.operator.data.export.model.GapExport
 import com.biometrix.operator.data.export.model.RecordingData
 import com.biometrix.operator.data.export.model.RecordingGaps
@@ -28,14 +28,14 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class TestExportMapper @Inject constructor(
+class SessionExportMapper @Inject constructor(
     private val recordingRepository: RecordingRepository,
     private val sudsRepository: SudsRepository
 ) {
     private val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
 
     suspend fun buildExportData(
-        test: TestEntity,
+        test: SessionEntity,
         recordings: List<RecordingEntity>
     ): TestExport {
         val recordingDataList = mutableListOf<RecordingData>()
@@ -52,8 +52,8 @@ class TestExportMapper @Inject constructor(
         return TestExport(
             exportedAt = isoFormat.format(Date()),
             test = TestData(
-                id = test.testIdentifier,
-                testNumber = test.testNumber,
+                id = test.sessionIdentifier,
+                sessionNumber = test.sessionNumber,
                 createdAt = isoFormat.format(Date(test.createdAt)),
                 endedAt = test.endedAt?.let { isoFormat.format(Date(it)) },
                 durationMs = test.durationMs,

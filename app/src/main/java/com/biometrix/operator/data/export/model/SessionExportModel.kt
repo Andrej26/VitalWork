@@ -1,4 +1,4 @@
-package com.biometrix.operator.data.export.model
+﻿package com.biometrix.operator.data.export.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -13,7 +13,7 @@ data class TestExport(
 @Serializable
 data class TestData(
     val id: String,
-    val testNumber: String,
+    val sessionNumber: String,
     val createdAt: String,
     val endedAt: String?,
     val durationMs: Long,

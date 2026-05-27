@@ -1,4 +1,4 @@
-package com.biometrix.operator.data.recording
+﻿package com.biometrix.operator.data.recording
 
 import com.biometrix.operator.data.db.SensorSampleEntity
 import com.biometrix.operator.data.db.SensorType
@@ -48,7 +48,7 @@ class SensorRecordingRepositoryImpl(
     private var currentRecordingId: Long = 0L
 
 
-    override suspend fun startRecording(testId: Long, testIdentifier: String) {
+    override suspend fun startRecording(sessionId: Long, sessionIdentifier: String) {
         if (_recordingState.value == DataRecordingState.RECORDING) return
 
         startTimeMs = System.currentTimeMillis()
@@ -68,8 +68,8 @@ class SensorRecordingRepositoryImpl(
 
         // Create recording entity in database
         val recording = recordingRepository.createRecording(
-            testId = testId,
-            testIdentifier = testIdentifier,
+            sessionId = sessionId,
+            sessionIdentifier = sessionIdentifier,
             heartRateEnabled = shouldRecordHr,
             respirationEnabled = shouldRecordResp
         )

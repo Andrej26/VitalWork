@@ -1,4 +1,4 @@
-package com.biometrix.operator.data.repository
+﻿package com.biometrix.operator.data.repository
 
 import com.biometrix.operator.data.db.RecordingDao
 import com.biometrix.operator.data.db.RecordingEntity
@@ -17,14 +17,14 @@ class RecordingRepository @Inject constructor(
     private val sensorSampleDao: SensorSampleDao
 ) {
 
-    fun getRecordingsForTest(testId: Long): Flow<List<RecordingEntity>> =
-        recordingDao.getRecordingsForTest(testId)
+    fun getRecordingsForTest(sessionId: Long): Flow<List<RecordingEntity>> =
+        recordingDao.getRecordingsForTest(sessionId)
 
-    suspend fun getRecordingsForTestOnce(testId: Long): List<RecordingEntity> =
-        recordingDao.getRecordingsForTestOnce(testId)
+    suspend fun getRecordingsForTestOnce(sessionId: Long): List<RecordingEntity> =
+        recordingDao.getRecordingsForTestOnce(sessionId)
 
-    fun getActiveRecording(testId: Long): Flow<RecordingEntity?> =
-        recordingDao.getActiveRecording(testId)
+    fun getActiveRecording(sessionId: Long): Flow<RecordingEntity?> =
+        recordingDao.getActiveRecording(sessionId)
 
     suspend fun getRecordingById(id: Long): RecordingEntity? =
         recordingDao.getRecordingById(id)
@@ -34,22 +34,22 @@ class RecordingRepository @Inject constructor(
      * Generates recordingIdentifier in format: BMX-YYYY-NNN-RNN
      */
     suspend fun createRecording(
-        testId: Long,
-        testIdentifier: String,
+        sessionId: Long,
+        sessionIdentifier: String,
         heartRateEnabled: Boolean,
         respirationEnabled: Boolean
     ): RecordingEntity {
-        val maxSeq = recordingDao.getMaxSequenceNumber(testId) ?: 0
+        val maxSeq = recordingDao.getMaxSequenceNumber(sessionId) ?: 0
         val sequenceNumber = maxSeq + 1
         val recordingIdentifier = String.format(
             Locale.US,
             "%s-R%02d",
-            testIdentifier,
+            sessionIdentifier,
             sequenceNumber
         )
 
         val recording = RecordingEntity(
-            testId = testId,
+            sessionId = sessionId,
             recordingIdentifier = recordingIdentifier,
             sequenceNumber = sequenceNumber,
             startedAt = System.currentTimeMillis(),

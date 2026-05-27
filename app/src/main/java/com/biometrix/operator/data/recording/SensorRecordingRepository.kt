@@ -1,4 +1,4 @@
-package com.biometrix.operator.data.recording
+﻿package com.biometrix.operator.data.recording
 
 import com.biometrix.operator.data.recording.model.DataRecordingState
 import com.biometrix.operator.data.recording.model.RecordingMetadata
@@ -17,9 +17,9 @@ interface SensorRecordingRepository {
      * Sensor data is written directly to the database.
      *
      * @param testId The database ID of the test
-     * @param testIdentifier The unique identifier (BMX-YYYY-NNN) for generating recording ID
+     * @param sessionIdentifier The unique identifier (BMX-YYYY-NNN) for generating recording ID
      */
-    suspend fun startRecording(testId: Long, testIdentifier: String)
+    suspend fun startRecording(sessionId: Long, sessionIdentifier: String)
 
     /**
      * Stops the current recording. Sample counts and metadata are finalized in the database.
