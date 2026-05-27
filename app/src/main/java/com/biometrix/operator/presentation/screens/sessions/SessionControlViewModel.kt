@@ -13,7 +13,6 @@ import com.biometrix.operator.data.recording.model.DataRecordingState
 import com.biometrix.operator.data.repository.ConnectionRepository
 import com.biometrix.operator.data.sensor.audio.LowSignalWarning
 import com.biometrix.operator.data.repository.RecordingRepository
-import com.biometrix.operator.data.repository.SudsRepository
 import com.biometrix.operator.data.repository.SessionRepository
 import com.biometrix.operator.data.sensor.DeviceState
 import com.biometrix.operator.data.sensor.ble.BleEvent
@@ -49,7 +48,6 @@ class SessionControlViewModel @Inject constructor(
     private val sensorRecordingRepository: SensorRecordingRepository,
     private val sessionRepository: SessionRepository,
     private val recordingRepository: RecordingRepository,
-    private val sudsRepository: SudsRepository,
     private val vrWebSocketClient: VRConnectionManager,
     private val mdnsDiscovery: VrDeviceDiscovery,
     private val locationChecker: LocationChecker,
@@ -59,7 +57,6 @@ class SessionControlViewModel @Inject constructor(
     companion object {
         private const val VR_EVENT_START_BIOFEEDBACK = "start_recording"
         private const val VR_EVENT_STOP_BIOFEEDBACK = "stop_recording"
-        private const val VR_EVENT_SUDS = "suds"
     }
 
     val sessionId: Long = savedStateHandle.get<Long>("testId") ?: -1L
@@ -158,16 +155,6 @@ class SessionControlViewModel @Inject constructor(
 
     /** Whether the StressChamber scene is currently active (shared via ConnectionRepository) */
     val isStressChamberSceneActive: StateFlow<Boolean> = connectionRepository.isStressChamberSceneActive
-
-    /** SUDS events received in the current StressChamber session (unlock triggers on 3rd) */
-    private var sudsCountInSession = 0
-
-    /** True while tutorial is active — SUDS received in this window are not saved */
-    private var isTutorialActive = false
-
-    /** Last SUDs value received from VR during this session */
-    private val _lastSudsValue = MutableStateFlow<Int?>(null)
-    val lastSudsValue: StateFlow<Int?> = _lastSudsValue.asStateFlow()
 
     /** VR devices discovered via mDNS */
     val discoveredVrDevices: StateFlow<List<DiscoveredVrDevice>> = mdnsDiscovery.discoveredDevices
@@ -278,9 +265,7 @@ class SessionControlViewModel @Inject constructor(
         viewModelScope.launch {
             connectionRepository.vrConnectionState.collect { state ->
                 if (state == ConnectionState.DISCONNECTED || state == ConnectionState.ERROR) {
-                    isTutorialActive = false
                     connectionRepository.setStressChamberSceneActive(false)
-                    sudsCountInSession = 0
                 }
             }
         }
@@ -377,22 +362,6 @@ class SessionControlViewModel @Inject constructor(
                 )
                 stopRecordingFromVr()
             }
-            VR_EVENT_SUDS -> {
-                val sudsValue = value ?: return
-                if (isTutorialActive) return
-                if (connectionRepository.isStressChamberSceneActive.value) {
-                    sudsCountInSession++
-                    if (sudsCountInSession >= 3) {
-                        connectionRepository.setStressChamberSceneActive(false)
-                        sudsCountInSession = 0
-                    }
-                }
-                viewModelScope.launch {
-                    val test = _test.value ?: return@launch
-                    sudsRepository.saveEvent(test.id, sudsValue)
-                    _lastSudsValue.value = sudsValue
-                }
-            }
         }
     }
 
@@ -404,7 +373,6 @@ class SessionControlViewModel @Inject constructor(
     }
 
     private fun startRecordingFromVr() {
-        isTutorialActive = false
         viewModelScope.launch {
             val test = _test.value ?: return@launch
             val currentState = sensorRecordingRepository.recordingState.value
@@ -421,7 +389,6 @@ class SessionControlViewModel @Inject constructor(
 
     private fun stopRecordingFromVr() {
         connectionRepository.setStressChamberSceneActive(false)
-        sudsCountInSession = 0
         viewModelScope.launch {
             val currentState = sensorRecordingRepository.recordingState.value
 
@@ -616,7 +583,6 @@ class SessionControlViewModel @Inject constructor(
     }
 
     fun sendTutorialCommand() {
-        isTutorialActive = true
         vrWebSocketClient.sendCommand(
             "trigger_event",
             mapOf("target" to "NCEvents", "eventName" to "StartTutorial")
@@ -624,8 +590,6 @@ class SessionControlViewModel @Inject constructor(
     }
 
     fun sendStartSceneCommand() {
-        isTutorialActive = false
-        sudsCountInSession = 0
         connectionRepository.setStressChamberSceneActive(true)
         vrWebSocketClient.sendCommand(
             "scene",

@@ -3,7 +3,6 @@
 import androidx.lifecycle.SavedStateHandle
 import com.biometrix.operator.data.db.FakeRecordingDao
 import com.biometrix.operator.data.db.FakeSensorSampleDao
-import com.biometrix.operator.data.db.FakeSudsEventDao
 import com.biometrix.operator.data.db.FakeSessionDao
 import com.biometrix.operator.data.db.SessionEntity
 import com.biometrix.operator.data.db.SessionStatus
@@ -12,7 +11,6 @@ import com.biometrix.operator.data.recording.FakeSensorRecordingRepository
 import com.biometrix.operator.data.recording.model.DataRecordingState
 import com.biometrix.operator.data.repository.ConnectionRepository
 import com.biometrix.operator.data.repository.RecordingRepository
-import com.biometrix.operator.data.repository.SudsRepository
 import com.biometrix.operator.data.repository.SessionRepository
 import com.biometrix.operator.data.sensor.FakeSensorDevice
 import com.biometrix.operator.data.sensor.ble.FakeBleManager
@@ -53,13 +51,11 @@ class SessionControlViewModelTest {
     private lateinit var fakeSessionDao: FakeSessionDao
     private lateinit var fakeRecordingDao: FakeRecordingDao
     private lateinit var fakeSensorSampleDao: FakeSensorSampleDao
-    private lateinit var fakeSudsDao: FakeSudsEventDao
     private lateinit var fakeSensorRecordingRepo: FakeSensorRecordingRepository
     private lateinit var fakeLocationChecker: FakeLocationChecker
     private lateinit var connectionRepository: ConnectionRepository
     private lateinit var sessionRepository: SessionRepository
     private lateinit var recordingRepository: RecordingRepository
-    private lateinit var sudsRepository: SudsRepository
     private lateinit var lanAvailableFlow: MutableStateFlow<Boolean>
 
     private val sessionId = 1L
@@ -73,7 +69,6 @@ class SessionControlViewModelTest {
         fakeSessionDao = FakeSessionDao()
         fakeRecordingDao = FakeRecordingDao()
         fakeSensorSampleDao = FakeSensorSampleDao()
-        fakeSudsDao = FakeSudsEventDao()
         fakeSensorRecordingRepo = FakeSensorRecordingRepository()
         fakeLocationChecker = FakeLocationChecker(locationEnabled = true)
         lanAvailableFlow = MutableStateFlow(true)
@@ -86,7 +81,6 @@ class SessionControlViewModelTest {
         )
         recordingRepository = RecordingRepository(fakeRecordingDao, fakeSensorSampleDao)
         sessionRepository = SessionRepository(fakeSessionDao, fakeRecordingDao)
-        sudsRepository = SudsRepository(fakeSudsDao)
     }
 
     @After
@@ -113,7 +107,6 @@ class SessionControlViewModelTest {
             sensorRecordingRepository = fakeSensorRecordingRepo,
             sessionRepository = sessionRepository,
             recordingRepository = recordingRepository,
-            sudsRepository = sudsRepository,
             vrWebSocketClient = fakeVrClient,
             mdnsDiscovery = fakeDiscovery,
             locationChecker = fakeLocationChecker,
@@ -209,51 +202,7 @@ class SessionControlViewModelTest {
         assertFalse(connectionRepository.isStressChamberSceneActive.value)
     }
 
-    @Test
-    fun vrSudsEvent_thirdInSession_deactivatesStressChamber() = runTest {
-        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
-        seedactiveSession()
-
-        val vm = createVm()
-        advanceUntilIdle()
-
-        connectionRepository.setStressChamberSceneActive(true)
-
-        fakeVrClient.messages.emit(vrEvent("suds", 5))
-        fakeVrClient.messages.emit(vrEvent("suds", 6))
-        advanceUntilIdle()
-        assertTrue(connectionRepository.isStressChamberSceneActive.value)
-
-        fakeVrClient.messages.emit(vrEvent("suds", 7))
-        advanceUntilIdle()
-        assertFalse(connectionRepository.isStressChamberSceneActive.value)
-
-        // All three SUDS events were persisted (scene was active, not tutorial)
-        assertEquals(3, fakeSudsDao.events.size)
-    }
-
-    // ---- Group C: SUDS vs. tutorial gating ----
-
-    @Test
-    fun vrSudsEvent_duringTutorial_doesNotSaveToDb() = runTest {
-        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
-        seedactiveSession()
-        fakeVrClient.connectionState.value = ConnectionState.CONNECTED
-
-        val vm = createVm()
-        advanceUntilIdle()
-
-        // sendTutorialCommand flips isTutorialActive = true
-        vm.sendTutorialCommand()
-        advanceUntilIdle()
-
-        fakeVrClient.messages.emit(vrEvent("suds", 4))
-        advanceUntilIdle()
-
-        assertTrue("No SUDS event should be saved during tutorial", fakeSudsDao.events.isEmpty())
-    }
-
-    // ---- Group D: Scan timeout ----
+    // ---- Group C: Scan timeout ----
 
     @Test
     fun bleScan_noDevicesAfter15s_flagsTimeout() = runTest {

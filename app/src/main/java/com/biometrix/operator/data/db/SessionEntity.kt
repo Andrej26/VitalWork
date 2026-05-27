@@ -42,8 +42,5 @@ data class SessionEntity(
     val totalRespirationSampleCount: Int = 0,
 
     /** Total eSense Pulse R-R interval samples across all recordings */
-    val totalEsenseRrIntervalSampleCount: Int = 0,
-
-    /** Number of blood pressure events in this test */
-    val bpEventCount: Int = 0
+    val totalEsenseRrIntervalSampleCount: Int = 0
 )

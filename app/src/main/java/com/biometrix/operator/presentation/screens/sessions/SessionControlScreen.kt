@@ -176,7 +176,6 @@ fun SessionControlScreen(
     // VR biofeedback state
     val vrTriggeredRecording by viewModel.vrTriggeredRecording.collectAsState()
     val lastVrBiofeedbackEvent by viewModel.lastVrBiofeedbackEvent.collectAsState()
-    val lastSudsValue by viewModel.lastSudsValue.collectAsState()
 
     // Low signal warning
     val respirationLowSignalWarning by viewModel.respirationLowSignalWarning.collectAsState()
@@ -768,17 +767,6 @@ fun SessionControlScreen(
                         }
                     }
 
-                    if (lastSudsValue != null) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            SuggestionChip(
-                                onClick = {},
-                                label = { Text("Last SUDs: $lastSudsValue") }
-                            )
-                        }
-                    }
                 }
             }
 

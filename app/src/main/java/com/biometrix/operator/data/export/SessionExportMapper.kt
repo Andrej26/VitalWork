@@ -11,7 +11,6 @@ import com.biometrix.operator.data.export.model.SensorData
 import com.biometrix.operator.data.export.model.SensorGapInfo
 import com.biometrix.operator.data.export.model.SensorInfo
 import com.biometrix.operator.data.export.model.SensorSample
-import com.biometrix.operator.data.export.model.SudsEventExport
 import com.biometrix.operator.data.export.model.TestData
 import com.biometrix.operator.data.export.model.TestExport
 import com.biometrix.operator.data.export.model.TestStatistics
@@ -20,7 +19,6 @@ import com.biometrix.operator.data.recording.detectEsenseRrIntervalGaps
 import com.biometrix.operator.data.recording.detectHeartRateGaps
 import com.biometrix.operator.data.recording.detectRespirationGaps
 import com.biometrix.operator.data.repository.RecordingRepository
-import com.biometrix.operator.data.repository.SudsRepository
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -29,8 +27,7 @@ import javax.inject.Singleton
 
 @Singleton
 class SessionExportMapper @Inject constructor(
-    private val recordingRepository: RecordingRepository,
-    private val sudsRepository: SudsRepository
+    private val recordingRepository: RecordingRepository
 ) {
     private val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
 
@@ -43,10 +40,6 @@ class SessionExportMapper @Inject constructor(
         for (recording in recordings) {
             val samples = recordingRepository.getSamplesForRecording(recording.id)
             recordingDataList.add(buildRecordingData(recording, samples))
-        }
-
-        val sudsEvents = sudsRepository.getEventsForTest(test.id).map { event ->
-            SudsEventExport(timestampMs = event.timestampMs, value = event.value)
         }
 
         return TestExport(
@@ -63,11 +56,9 @@ class SessionExportMapper @Inject constructor(
                     recordingCount = test.recordingCount,
                     totalHeartRateSamples = test.totalHeartRateSampleCount,
                     totalRespirationSamples = test.totalRespirationSampleCount,
-                    totalSudsEvents = sudsEvents.size,
                     totalEsenseRrIntervalSamples = test.totalEsenseRrIntervalSampleCount
                 ),
-                recordings = recordingDataList,
-                sudsEvents = sudsEvents
+                recordings = recordingDataList
             )
         )
     }

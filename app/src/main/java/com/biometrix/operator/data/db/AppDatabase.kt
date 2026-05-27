@@ -8,8 +8,7 @@ import androidx.room.TypeConverters
     entities = [
         SessionEntity::class,
         RecordingEntity::class,
-        SensorSampleEntity::class,
-        SudsEventEntity::class
+        SensorSampleEntity::class
     ],
     version = 1,
     exportSchema = false
@@ -19,5 +18,4 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun sessionDao(): SessionDao
     abstract fun recordingDao(): RecordingDao
     abstract fun sensorSampleDao(): SensorSampleDao
-    abstract fun sudsEventDao(): SudsEventDao
 }

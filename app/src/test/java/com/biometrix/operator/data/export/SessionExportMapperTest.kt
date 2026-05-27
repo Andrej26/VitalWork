@@ -2,16 +2,13 @@
 
 import com.biometrix.operator.data.db.FakeRecordingDao
 import com.biometrix.operator.data.db.FakeSensorSampleDao
-import com.biometrix.operator.data.db.FakeSudsEventDao
 import com.biometrix.operator.data.db.RecordingEntity
 import com.biometrix.operator.data.db.RecordingStatus
 import com.biometrix.operator.data.db.SensorSampleEntity
 import com.biometrix.operator.data.db.SensorType
-import com.biometrix.operator.data.db.SudsEventEntity
 import com.biometrix.operator.data.db.SessionEntity
 import com.biometrix.operator.data.db.SessionStatus
 import com.biometrix.operator.data.repository.RecordingRepository
-import com.biometrix.operator.data.repository.SudsRepository
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -24,10 +21,8 @@ class SessionExportMapperTest {
 
     private lateinit var fakeRecordingDao: FakeRecordingDao
     private lateinit var fakeSensorSampleDao: FakeSensorSampleDao
-    private lateinit var fakeSudsEventDao: FakeSudsEventDao
 
     private lateinit var recordingRepository: RecordingRepository
-    private lateinit var sudsRepository: SudsRepository
 
     private lateinit var mapper: SessionExportMapper
 
@@ -35,12 +30,10 @@ class SessionExportMapperTest {
     fun setUp() {
         fakeRecordingDao = FakeRecordingDao()
         fakeSensorSampleDao = FakeSensorSampleDao()
-        fakeSudsEventDao = FakeSudsEventDao()
 
         recordingRepository = RecordingRepository(fakeRecordingDao, fakeSensorSampleDao)
-        sudsRepository = SudsRepository(fakeSudsEventDao)
 
-        mapper = SessionExportMapper(recordingRepository, sudsRepository)
+        mapper = SessionExportMapper(recordingRepository)
     }
 
     // -- Sensor type mapping --
@@ -146,22 +139,6 @@ class SessionExportMapperTest {
         assertEquals(100, stats.totalHeartRateSamples)
         assertEquals(50, stats.totalRespirationSamples)
         assertEquals(80, stats.totalEsenseRrIntervalSamples)
-    }
-
-    @Test
-    fun buildExportData_sudsEventsMapped() = runTest {
-        val test = SessionEntity()
-        fakeSudsEventDao.events.addAll(listOf(
-            SudsEventEntity(sessionId = test.id, timestampMs = 1000L, value = 3),
-            SudsEventEntity(sessionId = test.id, timestampMs = 2000L, value = 7)
-        ))
-
-        val result = mapper.buildExportData(test, emptyList())
-
-        assertEquals(2, result.test.sudsEvents.size)
-        assertEquals(3, result.test.sudsEvents[0].value)
-        assertEquals(7, result.test.sudsEvents[1].value)
-        assertEquals(2, result.test.statistics.totalSudsEvents)
     }
 
     // -- Recording data in export --

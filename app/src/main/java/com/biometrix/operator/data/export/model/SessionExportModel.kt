@@ -20,8 +20,7 @@ data class TestData(
     val status: String,
     val notes: String,
     val statistics: TestStatistics,
-    val recordings: List<RecordingData>,
-    val sudsEvents: List<SudsEventExport> = emptyList()
+    val recordings: List<RecordingData>
 )
 
 @Serializable
@@ -29,14 +28,7 @@ data class TestStatistics(
     val recordingCount: Int,
     @SerialName("esensePulse_totalSamples") val totalHeartRateSamples: Int,
     @SerialName("esenseResp_totalSamples") val totalRespirationSamples: Int,
-    val totalSudsEvents: Int,
     @SerialName("esensePulse_totalRrIntervalSamples") val totalEsenseRrIntervalSamples: Int = 0
-)
-
-@Serializable
-data class SudsEventExport(
-    @SerialName("t") val timestampMs: Long,
-    @SerialName("v") val value: Int
 )
 
 @Serializable

@@ -5,7 +5,6 @@ import androidx.room.Room
 import com.biometrix.operator.data.db.AppDatabase
 import com.biometrix.operator.data.db.RecordingDao
 import com.biometrix.operator.data.db.SensorSampleDao
-import com.biometrix.operator.data.db.SudsEventDao
 import com.biometrix.operator.data.db.SessionDao
 import com.biometrix.operator.data.export.SessionExportService
 import com.biometrix.operator.data.export.SessionExporter
@@ -90,12 +89,6 @@ object AppModule {
     @Singleton
     fun provideSensorSampleDao(database: AppDatabase): SensorSampleDao {
         return database.sensorSampleDao()
-    }
-
-    @Provides
-    @Singleton
-    fun provideSudsEventDao(database: AppDatabase): SudsEventDao {
-        return database.sudsEventDao()
     }
 
     @Provides
