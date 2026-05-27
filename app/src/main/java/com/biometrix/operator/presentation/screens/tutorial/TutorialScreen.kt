@@ -259,7 +259,7 @@ private fun phaseAccentColor(phase: SlidePhase): Color = when (phase) {
 @Composable
 fun TutorialScreen(
     onNavigateBack: () -> Unit,
-    onNavigateToTests: () -> Unit,
+    onNavigateToSessions: () -> Unit,
     viewModel: TutorialViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -418,7 +418,7 @@ fun TutorialScreen(
                         onDisconnect = viewModel::disconnectVr,
                         onOpenWifiSettings = { wifiSettingsLauncher.launch(wifiSettingsIntent) }
                     )
-                    SlideType.COMPLETE -> TutorialCompleteStep(onGoToTests = onNavigateToTests)
+                    SlideType.COMPLETE -> TutorialCompleteStep(onGoToTests = onNavigateToSessions)
                 }
             }
 

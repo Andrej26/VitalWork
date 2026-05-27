@@ -1,4 +1,4 @@
-package com.biometrix.operator.presentation.navigation
+﻿package com.biometrix.operator.presentation.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
@@ -11,9 +11,9 @@ import com.biometrix.operator.presentation.screens.vr.VRConnectionScreen
 import com.biometrix.operator.presentation.screens.home.HomeScreen
 import com.biometrix.operator.presentation.screens.sensors.SensorDetailScreen
 import com.biometrix.operator.presentation.screens.sensors.SensorsScreen
-import com.biometrix.operator.presentation.screens.tests.TestControlScreen
-import com.biometrix.operator.presentation.screens.tests.TestDetailScreen
-import com.biometrix.operator.presentation.screens.tests.TestsScreen
+import com.biometrix.operator.presentation.screens.sessions.SessionControlScreen
+import com.biometrix.operator.presentation.screens.sessions.SessionDetailScreen
+import com.biometrix.operator.presentation.screens.sessions.SessionsScreen
 import com.biometrix.operator.presentation.screens.tutorial.TutorialScreen
 
 sealed class Route(val route: String) {
@@ -23,13 +23,13 @@ sealed class Route(val route: String) {
         fun createRoute(sensorId: String) = "sensors/$sensorId"
     }
     data object VrControl : Route("vr_control")
-    data object Tests : Route("tests")
-    data object TestActive : Route("tests/active/{testId}") {
-        fun createRoute(testId: Long) = "tests/active/$testId"
+    data object Sessions : Route("sessions")
+    data object SessionActive : Route("tests/active/{testId}") {
+        fun createRoute(sessionId: Long) = "tests/active/$sessionId"
     }
-    data object TestReview : Route("tests/review/{testId}?showCsvSaved={showCsvSaved}") {
-        fun createRoute(testId: Long, showCsvSaved: Boolean = false) =
-            "tests/review/$testId?showCsvSaved=$showCsvSaved"
+    data object SessionReview : Route("tests/review/{testId}?showCsvSaved={showCsvSaved}") {
+        fun createRoute(sessionId: Long, showCsvSaved: Boolean = false) =
+            "tests/review/$sessionId?showCsvSaved=$showCsvSaved"
     }
     data object Tutorial : Route("tutorial")
 }
@@ -47,15 +47,21 @@ fun AppNavigation(
                 onNavigateToTutorial = { navController.navigate(Route.Tutorial.route) },
                 onNavigateToSensors = { navController.navigate(Route.Sensors.route) },
                 onNavigateToVrControl = { navController.navigate(Route.VrControl.route) },
-                onNavigateToTests = { navController.navigate(Route.Tests.route) }
+                onNavigateToSessions = { navController.navigate(Route.Sessions.route) },
+                onNavigateToSessionActive = { sessionId ->
+                    navController.navigate(Route.SessionActive.createRoute(sessionId))
+                },
+                onNavigateToSessionReview = { sessionId ->
+                    navController.navigate(Route.SessionReview.createRoute(sessionId))
+                }
             )
         }
 
         composable(Route.Tutorial.route) {
             TutorialScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToTests = {
-                    navController.navigate(Route.Tests.route) {
+                onNavigateToSessions = {
+                    navController.navigate(Route.Sessions.route) {
                         popUpTo(Route.Home.route)
                     }
                 }
@@ -88,39 +94,38 @@ fun AppNavigation(
             )
         }
 
-        composable(Route.Tests.route) {
-            TestsScreen(
+        composable(Route.Sessions.route) {
+            SessionsScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onOpenTest = { testId ->
-                    navController.navigate(Route.TestReview.createRoute(testId))
+                onOpenSession = { sessionId ->
+                    navController.navigate(Route.SessionReview.createRoute(sessionId))
                 },
-                onOpenActiveTest = { testId ->
-                    navController.navigate(Route.TestActive.createRoute(testId))
+                onOpenactiveSession = { sessionId ->
+                    navController.navigate(Route.SessionActive.createRoute(sessionId))
                 }
             )
         }
 
         composable(
-            route = Route.TestActive.route,
+            route = Route.SessionActive.route,
             arguments = listOf(
                 navArgument("testId") { type = NavType.LongType }
             )
         ) { backStackEntry ->
-            val testId = backStackEntry.arguments?.getLong("testId") ?: -1L
-            TestControlScreen(
-                testId = testId,
+            val sessionId = backStackEntry.arguments?.getLong("testId") ?: -1L
+            SessionControlScreen(
+                sessionId = sessionId,
                 onNavigateBack = { navController.popBackStack() },
-                onTestEnded = { endedTestId ->
-                    // Navigate to review screen, replacing the active test in the back stack
-                    navController.navigate(Route.TestReview.createRoute(endedTestId, showCsvSaved = true)) {
-                        popUpTo(Route.Tests.route)
+                onSessionEnded = { endedSessionId ->
+                    navController.navigate(Route.SessionReview.createRoute(endedSessionId, showCsvSaved = true)) {
+                        popUpTo(Route.Home.route)
                     }
                 }
             )
         }
 
         composable(
-            route = Route.TestReview.route,
+            route = Route.SessionReview.route,
             arguments = listOf(
                 navArgument("testId") { type = NavType.LongType },
                 navArgument("showCsvSaved") {
@@ -129,10 +134,10 @@ fun AppNavigation(
                 }
             )
         ) { backStackEntry ->
-            val testId = backStackEntry.arguments?.getLong("testId") ?: -1L
+            val sessionId = backStackEntry.arguments?.getLong("testId") ?: -1L
             val showCsvSaved = backStackEntry.arguments?.getBoolean("showCsvSaved") ?: false
-            TestDetailScreen(
-                testId = testId,
+            SessionDetailScreen(
+                sessionId = sessionId,
                 showCsvSaved = showCsvSaved,
                 onNavigateBack = { navController.popBackStack() }
             )

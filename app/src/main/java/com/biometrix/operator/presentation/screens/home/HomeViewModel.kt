@@ -1,50 +1,63 @@
-package com.biometrix.operator.presentation.screens.home
+﻿package com.biometrix.operator.presentation.screens.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.biometrix.operator.data.db.SessionEntity
 import com.biometrix.operator.data.model.ConnectionState
 import com.biometrix.operator.data.prefs.TutorialPreferencesRepository
 import com.biometrix.operator.data.repository.ConnectionRepository
-import com.biometrix.operator.data.repository.TestRepository
-import com.biometrix.operator.data.sensor.DeviceState
+import com.biometrix.operator.data.repository.SessionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     connectionRepository: ConnectionRepository,
-    testRepository: TestRepository,
+    private val sessionRepository: SessionRepository,
     private val tutorialPreferences: TutorialPreferencesRepository
 ) : ViewModel() {
 
-    /** VR headset connection state */
     val vrConnectionState: StateFlow<ConnectionState> = connectionRepository.vrConnectionState
 
-    /** BLE sensor (eSense Pulse) connection state */
-    val bleConnectionState: StateFlow<ConnectionState> = connectionRepository.bleConnectionState
+    val activeSession: StateFlow<SessionEntity?> = sessionRepository.activeSession
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    /** Audio sensor (eSense Respiration) state */
-    val respirationState: StateFlow<DeviceState> = connectionRepository.respirationState
+    private val _isStarting = MutableStateFlow(false)
+    val isStarting: StateFlow<Boolean> = _isStarting.asStateFlow()
 
-    /** Whether there is an active test */
-    val hasActiveTest: StateFlow<Boolean> = testRepository.activeTest
-        .map { it != null }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
-
-    /** True on first launch; drives auto-navigation to the Tutorial screen. */
     private val _shouldAutoShowTutorial = MutableStateFlow(tutorialPreferences.isFirstLaunchPending())
     val shouldAutoShowTutorial: StateFlow<Boolean> = _shouldAutoShowTutorial.asStateFlow()
 
-    /** Call once the Tutorial screen has been auto-navigated to. */
     fun onTutorialAutoShown() {
         tutorialPreferences.markFirstLaunchDone()
         _shouldAutoShowTutorial.update { false }
+    }
+
+    fun startNewSession(
+        onCreated: (Long) -> Unit,
+        onAlreadyActive: (Long) -> Unit
+    ) {
+        if (_isStarting.value) return
+        viewModelScope.launch {
+            _isStarting.value = true
+            try {
+                val created = sessionRepository.createSessionIfNoneActive()
+                if (created != null) {
+                    onCreated(created.id)
+                } else {
+                    sessionRepository.activeSession.firstOrNull()?.let { onAlreadyActive(it.id) }
+                }
+            } finally {
+                _isStarting.value = false
+            }
+        }
     }
 }

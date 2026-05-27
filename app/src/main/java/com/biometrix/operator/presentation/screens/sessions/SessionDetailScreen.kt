@@ -1,4 +1,4 @@
-package com.biometrix.operator.presentation.screens.tests
+﻿package com.biometrix.operator.presentation.screens.sessions
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -48,18 +48,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.biometrix.operator.data.db.TestStatus
+import com.biometrix.operator.data.db.SessionStatus
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TestDetailScreen(
-    testId: Long,
+fun SessionDetailScreen(
+    sessionId: Long,
     onNavigateBack: () -> Unit,
     showCsvSaved: Boolean = false,
-    viewModel: TestDetailViewModel = hiltViewModel()
+    viewModel: SessionDetailViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -116,7 +116,7 @@ fun TestDetailScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showDeleteConfirmation = false
-                    viewModel.deleteTest { onNavigateBack() }
+                    viewModel.deleteSession { onNavigateBack() }
                 }) {
                     Text("Delete", color = MaterialTheme.colorScheme.error)
                 }
@@ -160,7 +160,7 @@ fun TestDetailScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = uiState.test?.let { "Test #${it.testNumber}" } ?: "Test",
+                            text = uiState.test?.let { "Test #${it.sessionNumber}" } ?: "Test",
                             fontWeight = FontWeight.SemiBold
                         )
                         uiState.test?.status?.let { status ->
@@ -271,7 +271,7 @@ fun TestDetailScreen(
                     // Export button
                     Button(
                         onClick = {
-                            if (test.status == TestStatus.EXPORTED) {
+                            if (test.status == SessionStatus.EXPORTED) {
                                 showReExportConfirmation = true
                             } else {
                                 viewModel.exportTest()
@@ -293,7 +293,7 @@ fun TestDetailScreen(
                             )
                         }
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text(if (test.status == TestStatus.EXPORTED) "Re-export" else "Export to Documents")
+                        Text(if (test.status == SessionStatus.EXPORTED) "Re-export" else "Export to Documents")
                     }
 
                     // Delete button
@@ -322,19 +322,19 @@ fun TestDetailScreen(
 }
 
 @Composable
-private fun StatusBadge(status: TestStatus) {
+private fun StatusBadge(status: SessionStatus) {
     val (backgroundColor, textColor, text) = when (status) {
-        TestStatus.ACTIVE -> Triple(
+        SessionStatus.ACTIVE -> Triple(
             MaterialTheme.colorScheme.primaryContainer,
             MaterialTheme.colorScheme.onPrimaryContainer,
             "Active"
         )
-        TestStatus.COMPLETED -> Triple(
+        SessionStatus.COMPLETED -> Triple(
             MaterialTheme.colorScheme.secondaryContainer,
             MaterialTheme.colorScheme.onSecondaryContainer,
             "Completed"
         )
-        TestStatus.EXPORTED -> Triple(
+        SessionStatus.EXPORTED -> Triple(
             MaterialTheme.colorScheme.tertiaryContainer,
             MaterialTheme.colorScheme.onTertiaryContainer,
             "Exported"

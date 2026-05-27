@@ -1,4 +1,4 @@
-package com.biometrix.operator.presentation.screens.tests
+﻿package com.biometrix.operator.presentation.screens.sessions
 
 import com.biometrix.operator.data.recording.model.DataRecordingState
 

@@ -1,4 +1,4 @@
-package com.biometrix.operator.presentation.screens.tests
+﻿package com.biometrix.operator.presentation.screens.sessions
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.RepeatMode
@@ -94,17 +94,17 @@ import com.biometrix.operator.presentation.components.DialogAction
 import com.biometrix.operator.presentation.components.LowSignalWarningBanner
 import com.biometrix.operator.presentation.screens.sensors.components.BleDeviceItem
 import com.biometrix.operator.presentation.screens.sensors.toConnectionState
-import com.biometrix.operator.presentation.screens.tests.components.DeviceSensorGroup
-import com.biometrix.operator.presentation.screens.tests.components.LiveSensorCard
-import com.biometrix.operator.presentation.screens.tests.components.TestNotesField
+import com.biometrix.operator.presentation.screens.sessions.components.DeviceSensorGroup
+import com.biometrix.operator.presentation.screens.sessions.components.LiveSensorCard
+import com.biometrix.operator.presentation.screens.sessions.components.SessionNotesField
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TestControlScreen(
-    testId: Long,
+fun SessionControlScreen(
+    sessionId: Long,
     onNavigateBack: () -> Unit,
-    onTestEnded: (testId: Long) -> Unit,
-    viewModel: TestControlViewModel = hiltViewModel()
+    onSessionEnded: (sessionId: Long) -> Unit,
+    viewModel: SessionControlViewModel = hiltViewModel()
 ) {
     // Connection states
     val vrConnectionState by viewModel.vrConnectionState.collectAsState()
@@ -227,7 +227,7 @@ fun TestControlScreen(
         when (val result = endTestResult) {
             is EndTestResult.Success -> {
                 viewModel.clearEndTestResult()
-                onTestEnded(result.testId)
+                onSessionEnded(result.sessionId)
             }
             is EndTestResult.Error -> {
                 snackbarHostState.showSnackbar(
@@ -395,7 +395,7 @@ fun TestControlScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = test?.let { "Test #${it.testNumber}" } ?: "New Test",
+                        text = test?.let { "Test #${it.sessionNumber}" } ?: "New Test",
                         fontWeight = FontWeight.SemiBold,
                         color = if (isRecording) Color.White
                             else MaterialTheme.colorScheme.onSurface
@@ -783,7 +783,7 @@ fun TestControlScreen(
             }
 
             // Notes section
-            TestNotesField(
+            SessionNotesField(
                 notes = notes,
                 onNotesChange = { viewModel.updateNotes(it) },
                 saveStatus = notesSaveStatus

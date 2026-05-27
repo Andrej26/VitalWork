@@ -1,4 +1,4 @@
-package com.biometrix.operator.presentation.screens.tests.components
+﻿package com.biometrix.operator.presentation.screens.sessions.components
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -42,7 +42,7 @@ import androidx.compose.ui.unit.dp
 enum class NotesSaveStatus { Idle, Saving, Saved }
 
 @Composable
-fun TestNotesField(
+fun SessionNotesField(
     notes: String,
     onNotesChange: (String) -> Unit,
     readOnly: Boolean = false,

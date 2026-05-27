@@ -1,11 +1,11 @@
-package com.biometrix.operator.presentation.screens.tests
+﻿package com.biometrix.operator.presentation.screens.sessions
 
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.biometrix.operator.data.db.RecordingEntity
-import com.biometrix.operator.data.db.TestEntity
+import com.biometrix.operator.data.db.SessionEntity
 import com.biometrix.operator.data.model.ConnectionState
 import com.biometrix.operator.data.recording.SensorRecordingRepository
 import com.biometrix.operator.data.system.LocationChecker
@@ -14,7 +14,7 @@ import com.biometrix.operator.data.repository.ConnectionRepository
 import com.biometrix.operator.data.sensor.audio.LowSignalWarning
 import com.biometrix.operator.data.repository.RecordingRepository
 import com.biometrix.operator.data.repository.SudsRepository
-import com.biometrix.operator.data.repository.TestRepository
+import com.biometrix.operator.data.repository.SessionRepository
 import com.biometrix.operator.data.sensor.DeviceState
 import com.biometrix.operator.data.sensor.ble.BleEvent
 import com.biometrix.operator.data.sensor.ble.model.BleDevice
@@ -25,7 +25,7 @@ import com.biometrix.operator.data.vr.model.WebSocketMessage
 import com.biometrix.operator.presentation.components.BleDialogState
 import com.biometrix.operator.presentation.components.DialogAction
 import com.biometrix.operator.presentation.components.gattStatusToString
-import com.biometrix.operator.presentation.screens.tests.components.NotesSaveStatus
+import com.biometrix.operator.presentation.screens.sessions.components.NotesSaveStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.FlowPreview
@@ -44,10 +44,10 @@ import java.util.Locale
 import javax.inject.Inject
 
 @HiltViewModel
-class TestControlViewModel @Inject constructor(
+class SessionControlViewModel @Inject constructor(
     private val connectionRepository: ConnectionRepository,
     private val sensorRecordingRepository: SensorRecordingRepository,
-    private val testRepository: TestRepository,
+    private val sessionRepository: SessionRepository,
     private val recordingRepository: RecordingRepository,
     private val sudsRepository: SudsRepository,
     private val vrWebSocketClient: VRConnectionManager,
@@ -62,10 +62,10 @@ class TestControlViewModel @Inject constructor(
         private const val VR_EVENT_SUDS = "suds"
     }
 
-    val testId: Long = savedStateHandle.get<Long>("testId") ?: -1L
+    val sessionId: Long = savedStateHandle.get<Long>("testId") ?: -1L
 
-    private val _test = MutableStateFlow<TestEntity?>(null)
-    val test: StateFlow<TestEntity?> = _test.asStateFlow()
+    private val _test = MutableStateFlow<SessionEntity?>(null)
+    val test: StateFlow<SessionEntity?> = _test.asStateFlow()
 
     /** VR headset WebSocket connection state */
     val vrConnectionState: StateFlow<ConnectionState> = connectionRepository.vrConnectionState
@@ -186,8 +186,8 @@ class TestControlViewModel @Inject constructor(
     val vrIsReconnecting: StateFlow<Boolean> = connectionRepository.vrIsReconnecting
 
     /** Recordings for this test */
-    val recordings: StateFlow<List<RecordingEntity>> = if (testId > 0) {
-        recordingRepository.getRecordingsForTest(testId)
+    val recordings: StateFlow<List<RecordingEntity>> = if (sessionId > 0) {
+        recordingRepository.getRecordingsForTest(sessionId)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     } else {
         MutableStateFlow(emptyList())
@@ -228,9 +228,9 @@ class TestControlViewModel @Inject constructor(
 
     init {
         // Load test data
-        if (testId > 0) {
+        if (sessionId > 0) {
             viewModelScope.launch {
-                val test = testRepository.getTestById(testId)
+                val test = sessionRepository.getSessionById(sessionId)
                 _test.value = test
                 _notes.value = test?.notes ?: ""
             }
@@ -410,11 +410,11 @@ class TestControlViewModel @Inject constructor(
             val currentState = sensorRecordingRepository.recordingState.value
 
             if (currentState == DataRecordingState.IDLE &&
-                test.status == com.biometrix.operator.data.db.TestStatus.ACTIVE &&
+                test.status == com.biometrix.operator.data.db.SessionStatus.ACTIVE &&
                 anySensorConnected()
             ) {
                 _vrTriggeredRecording.value = true
-                sensorRecordingRepository.startRecording(test.id, test.testIdentifier)
+                sensorRecordingRepository.startRecording(test.id, test.sessionIdentifier)
             }
         }
     }
@@ -440,8 +440,8 @@ class TestControlViewModel @Inject constructor(
                 .debounce(500)
                 .distinctUntilChanged()
                 .collect { text ->
-                    if (testId > 0) {
-                        testRepository.updateNotes(testId, text)
+                    if (sessionId > 0) {
+                        sessionRepository.updateNotes(sessionId, text)
                         if (userHasEditedNotes) {
                             _notesSaveStatus.value = NotesSaveStatus.Saved
                             savedDismissJob?.cancel()
@@ -475,10 +475,10 @@ class TestControlViewModel @Inject constructor(
                     sensorRecordingRepository.stopRecording()
                 }
 
-                val recordingCount = testRepository.getCompletedRecordingCount(testId)
-                testRepository.endTest(testId, recordingCount)
+                val recordingCount = sessionRepository.getCompletedRecordingCount(sessionId)
+                sessionRepository.endSession(sessionId, recordingCount)
 
-                _endTestResult.value = EndTestResult.Success(testId)
+                _endTestResult.value = EndTestResult.Success(sessionId)
                 vrWebSocketClient.suppressAutoReconnect()
             } catch (e: CancellationException) {
                 throw e
@@ -495,7 +495,7 @@ class TestControlViewModel @Inject constructor(
             if (sensorRecordingRepository.recordingState.value == DataRecordingState.RECORDING) {
                 sensorRecordingRepository.stopRecording()
             }
-            testRepository.deleteTest(testId)
+            sessionRepository.deleteSession(sessionId)
         }
     }
 
@@ -656,7 +656,7 @@ class TestControlViewModel @Inject constructor(
 }
 
 sealed class EndTestResult {
-    data class Success(val testId: Long) : EndTestResult()
+    data class Success(val sessionId: Long) : EndTestResult()
     data class Error(val message: String) : EndTestResult()
 }
 

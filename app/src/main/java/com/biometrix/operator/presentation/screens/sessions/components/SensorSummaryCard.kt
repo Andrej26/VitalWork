@@ -1,4 +1,4 @@
-package com.biometrix.operator.presentation.screens.tests.components
+﻿package com.biometrix.operator.presentation.screens.sessions.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column

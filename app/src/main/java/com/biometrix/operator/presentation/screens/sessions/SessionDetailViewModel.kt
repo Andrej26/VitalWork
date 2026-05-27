@@ -1,14 +1,14 @@
-package com.biometrix.operator.presentation.screens.tests
+﻿package com.biometrix.operator.presentation.screens.sessions
 
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.biometrix.operator.data.db.RecordingEntity
-import com.biometrix.operator.data.db.TestEntity
-import com.biometrix.operator.data.db.TestStatus
-import com.biometrix.operator.data.export.TestExporter
+import com.biometrix.operator.data.db.SessionEntity
+import com.biometrix.operator.data.db.SessionStatus
+import com.biometrix.operator.data.export.SessionUploader
 import com.biometrix.operator.data.repository.RecordingRepository
-import com.biometrix.operator.data.repository.TestRepository
+import com.biometrix.operator.data.repository.SessionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class TestDetailUiState(
-    val test: TestEntity? = null,
+    val test: SessionEntity? = null,
     val recordings: List<RecordingEntity> = emptyList(),
     val isLoading: Boolean = true,
     val isDeleting: Boolean = false,
@@ -28,14 +28,14 @@ data class TestDetailUiState(
 )
 
 @HiltViewModel
-class TestDetailViewModel @Inject constructor(
-    private val testRepository: TestRepository,
+class SessionDetailViewModel @Inject constructor(
+    private val sessionRepository: SessionRepository,
     private val recordingRepository: RecordingRepository,
-    private val exportService: TestExporter,
+    private val exportService: SessionUploader,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
-    private val testId: Long = savedStateHandle.get<Long>("testId") ?: -1L
+    private val sessionId: Long = savedStateHandle.get<Long>("testId") ?: -1L
 
     private val _uiState = MutableStateFlow(TestDetailUiState())
     val uiState: StateFlow<TestDetailUiState> = _uiState.asStateFlow()
@@ -46,8 +46,8 @@ class TestDetailViewModel @Inject constructor(
 
     private fun loadTest() {
         viewModelScope.launch {
-            val testDeferred = async { testRepository.getTestById(testId) }
-            val recordingsDeferred = async { recordingRepository.getRecordingsForTestOnce(testId) }
+            val testDeferred = async { sessionRepository.getSessionById(sessionId) }
+            val recordingsDeferred = async { recordingRepository.getRecordingsForTestOnce(sessionId) }
             awaitAll(testDeferred, recordingsDeferred)
 
             _uiState.value = _uiState.value.copy(
@@ -58,10 +58,10 @@ class TestDetailViewModel @Inject constructor(
         }
     }
 
-    fun deleteTest(onDeleted: () -> Unit) {
+    fun deleteSession(onDeleted: () -> Unit) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isDeleting = true)
-            testRepository.deleteTest(testId)
+            sessionRepository.deleteSession(sessionId)
             onDeleted()
         }
     }
@@ -70,13 +70,13 @@ class TestDetailViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isExporting = true)
 
-            val result = exportService.exportTest(testId)
+            val result = exportService.upload(sessionId)
 
             result.fold(
                 onSuccess = { path ->
-                    testRepository.markExported(testId)
+                    sessionRepository.markExported(sessionId)
                     _uiState.value = _uiState.value.copy(
-                        test = _uiState.value.test?.copy(status = TestStatus.EXPORTED),
+                        test = _uiState.value.test?.copy(status = SessionStatus.EXPORTED),
                         isExporting = false,
                         exportResult = "Exported to: $path"
                     )

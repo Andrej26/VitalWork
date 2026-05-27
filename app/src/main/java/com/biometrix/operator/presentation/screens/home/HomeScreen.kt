@@ -1,20 +1,18 @@
-package com.biometrix.operator.presentation.screens.home
+﻿package com.biometrix.operator.presentation.screens.home
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.School
-import androidx.compose.material.icons.filled.Sensors
-import androidx.compose.material.icons.filled.Vrpano
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -24,11 +22,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.biometrix.operator.presentation.components.NavigationCard
+import com.biometrix.operator.presentation.components.ConnectionStatusBadge
+import com.biometrix.operator.presentation.screens.home.components.PrimaryActionButton
+import com.biometrix.operator.presentation.screens.home.components.SecondaryNavRow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,14 +37,16 @@ fun HomeScreen(
     onNavigateToTutorial: () -> Unit,
     onNavigateToSensors: () -> Unit,
     onNavigateToVrControl: () -> Unit,
-    onNavigateToTests: () -> Unit,
+    onNavigateToSessions: () -> Unit,
+    onNavigateToSessionActive: (Long) -> Unit,
+    onNavigateToSessionReview: (Long) -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val vrConnectionState by viewModel.vrConnectionState.collectAsState()
-    val hasActiveTest by viewModel.hasActiveTest.collectAsState()
+    val activeSession by viewModel.activeSession.collectAsState()
+    val isStarting by viewModel.isStarting.collectAsState()
     val shouldAutoShowTutorial by viewModel.shouldAutoShowTutorial.collectAsState()
 
-    // Auto-navigate to Tutorial on first launch
     LaunchedEffect(shouldAutoShowTutorial) {
         if (shouldAutoShowTutorial) {
             viewModel.onTutorialAutoShown()
@@ -60,116 +63,67 @@ fun HomeScreen(
                         fontWeight = FontWeight.SemiBold
                     )
                 },
+                actions = {
+                    ConnectionStatusBadge(
+                        state = vrConnectionState,
+                        label = "VR",
+                        modifier = Modifier.padding(end = 16.dp)
+                    )
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface
                 )
             )
         }
     ) { paddingValues ->
-        BoxWithConstraints(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                .verticalScroll(rememberScrollState()),
+            contentAlignment = Alignment.Center
         ) {
-            val isWide = maxWidth >= 600.dp
-            val hPad = if (isWide) 24.dp else 16.dp
+            val currentActive = activeSession
 
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = hPad, vertical = 16.dp),
+                    .widthIn(max = 560.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text(
-                    text = "Welcome",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Text(
-                    text = "Configure your sensors and VR connection, then start a therapy test.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                if (isWide) {
-                    // Tablet: 2-column grid
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            NavigationCard(
-                                title = "Tutorial",
-                                description = "Step-by-step guide to connect sensors, set up VR, and run your first session",
-                                icon = Icons.Default.School,
-                                onClick = onNavigateToTutorial
-                            )
-                            NavigationCard(
-                                title = "Sensors",
-                                description = "Configure BLE and audio jack sensors for physiological data collection",
-                                icon = Icons.Default.Sensors,
-                                onClick = onNavigateToSensors
-                            )
-                        }
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            NavigationCard(
-                                title = "VR Control",
-                                description = "Connect to Meta Quest headset and test VR commands",
-                                icon = Icons.Default.Vrpano,
-                                onClick = onNavigateToVrControl,
-                                connectionState = vrConnectionState
-                            )
-                            NavigationCard(
-                                title = "Tests",
-                                description = if (hasActiveTest) "Test in progress" else "Start therapy tests, monitor status, and view recording history",
-                                icon = Icons.Default.Folder,
-                                onClick = onNavigateToTests,
-                                connectionState = if (hasActiveTest) com.biometrix.operator.data.model.ConnectionState.CONNECTING else null,
-                                connectionLabel = if (hasActiveTest) "Running" else null
+                PrimaryActionButton(
+                    title = if (currentActive != null) "Resume Active Session" else "Start New Session",
+                    subtitle = currentActive?.sessionIdentifier,
+                    enabled = !isStarting,
+                    onClick = {
+                        if (currentActive != null) {
+                            onNavigateToSessionActive(currentActive.id)
+                        } else {
+                            viewModel.startNewSession(
+                                onCreated = onNavigateToSessionActive,
+                                onAlreadyActive = onNavigateToSessionActive
                             )
                         }
                     }
-                } else {
-                    // Phone: single column
-                    NavigationCard(
-                        title = "Tutorial",
-                        description = "Step-by-step guide to connect sensors, set up VR, and run your first session",
-                        icon = Icons.Default.School,
-                        onClick = onNavigateToTutorial
-                    )
+                )
 
-                    NavigationCard(
-                        title = "Sensors",
-                        description = "Configure BLE and audio jack sensors for physiological data collection",
-                        icon = Icons.Default.Sensors,
-                        onClick = onNavigateToSensors
-                    )
+                PrimaryActionButton(
+                    title = "Completed Sessions",
+                    subtitle = "Browse and export past sessions",
+                    onClick = onNavigateToSessions,
+                    icon = Icons.Default.Folder,
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                )
 
-                    NavigationCard(
-                        title = "VR Control",
-                        description = "Connect to Meta Quest headset and test VR commands",
-                        icon = Icons.Default.Vrpano,
-                        onClick = onNavigateToVrControl,
-                        connectionState = vrConnectionState
-                    )
+                HorizontalDivider()
 
-                    NavigationCard(
-                        title = "Tests",
-                        description = if (hasActiveTest) "Test in progress" else "Start therapy tests, monitor status, and view recording history",
-                        icon = Icons.Default.Folder,
-                        onClick = onNavigateToTests,
-                        connectionState = if (hasActiveTest) com.biometrix.operator.data.model.ConnectionState.CONNECTING else null,
-                        connectionLabel = if (hasActiveTest) "Running" else null
-                    )
-                }
+                SecondaryNavRow(
+                    onSensors = onNavigateToSensors,
+                    onVrControl = onNavigateToVrControl,
+                    onTutorial = onNavigateToTutorial
+                )
             }
         }
     }

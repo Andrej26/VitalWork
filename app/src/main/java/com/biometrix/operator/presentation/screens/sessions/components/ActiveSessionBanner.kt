@@ -1,4 +1,4 @@
-package com.biometrix.operator.presentation.screens.tests.components
+﻿package com.biometrix.operator.presentation.screens.sessions.components
 
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -31,8 +31,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun ActiveTestBanner(
-    testNumber: String,
+fun ActiveSessionBanner(
+    sessionNumber: String,
     duration: String,
     heartRate: Int?,
     isRecording: Boolean,
@@ -97,7 +97,7 @@ fun ActiveTestBanner(
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Test #$testNumber",
+                    text = "Test #$sessionNumber",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold
                 )
