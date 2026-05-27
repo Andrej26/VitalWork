@@ -1,4 +1,4 @@
-package com.biometrix.operator.data.db
+﻿package com.biometrix.operator.data.db
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
@@ -6,7 +6,7 @@ import androidx.room.TypeConverters
 
 @Database(
     entities = [
-        TestEntity::class,
+        SessionEntity::class,
         RecordingEntity::class,
         SensorSampleEntity::class,
         SudsEventEntity::class
@@ -16,7 +16,7 @@ import androidx.room.TypeConverters
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
-    abstract fun testDao(): TestDao
+    abstract fun sessionDao(): SessionDao
     abstract fun recordingDao(): RecordingDao
     abstract fun sensorSampleDao(): SensorSampleDao
     abstract fun sudsEventDao(): SudsEventDao

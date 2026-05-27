@@ -1,4 +1,4 @@
-package com.biometrix.operator.data.db
+﻿package com.biometrix.operator.data.db
 
 import androidx.room.Dao
 import androidx.room.Insert
@@ -9,9 +9,9 @@ interface SudsEventDao {
     @Insert
     suspend fun insert(event: SudsEventEntity)
 
-    @Query("SELECT * FROM suds_events WHERE testId = :testId ORDER BY timestampMs ASC")
-    suspend fun getByTestId(testId: Long): List<SudsEventEntity>
+    @Query("SELECT * FROM suds_events WHERE sessionId = :sessionId ORDER BY timestampMs ASC")
+    suspend fun getByTestId(sessionId: Long): List<SudsEventEntity>
 
-    @Query("DELETE FROM suds_events WHERE testId = :testId")
-    suspend fun deleteByTestId(testId: Long)
+    @Query("DELETE FROM suds_events WHERE sessionId = :sessionId")
+    suspend fun deleteByTestId(sessionId: Long)
 }

@@ -1,4 +1,4 @@
-package com.biometrix.operator.data.db
+﻿package com.biometrix.operator.data.db
 
 import androidx.room.Entity
 import androidx.room.ForeignKey
@@ -15,14 +15,14 @@ enum class RecordingStatus {
     tableName = "recordings",
     foreignKeys = [
         ForeignKey(
-            entity = TestEntity::class,
+            entity = SessionEntity::class,
             parentColumns = ["id"],
-            childColumns = ["testId"],
+            childColumns = ["sessionId"],
             onDelete = ForeignKey.CASCADE
         )
     ],
     indices = [
-        Index(value = ["testId"]),
+        Index(value = ["sessionId"]),
         Index(value = ["recordingIdentifier"], unique = true)
     ]
 )
@@ -30,7 +30,7 @@ data class RecordingEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
 
-    val testId: Long,
+    val sessionId: Long,
 
     /** Unique identifier for external matching. Format: BMX-YYYY-NNN-RNN */
     val recordingIdentifier: String,

@@ -1,14 +1,14 @@
-package com.biometrix.operator.data.db
+﻿package com.biometrix.operator.data.db
 
 import androidx.room.TypeConverter
 
 class Converters {
 
     @TypeConverter
-    fun fromTestStatus(status: TestStatus): String = status.name
+    fun fromSessionStatus(status: SessionStatus): String = status.name
 
     @TypeConverter
-    fun toTestStatus(value: String): TestStatus = TestStatus.valueOf(value)
+    fun toSessionStatus(value: String): SessionStatus = SessionStatus.valueOf(value)
 
     @TypeConverter
     fun fromRecordingStatus(status: RecordingStatus): String = status.name

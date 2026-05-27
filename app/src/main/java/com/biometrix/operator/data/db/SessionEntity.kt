@@ -1,35 +1,35 @@
-package com.biometrix.operator.data.db
+﻿package com.biometrix.operator.data.db
 
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-enum class TestStatus {
+enum class SessionStatus {
     ACTIVE,
     COMPLETED,
     EXPORTED
 }
 
 @Entity(
-    tableName = "tests",
+    tableName = "sessions",
     indices = [
-        Index(value = ["testIdentifier"], unique = true)
+        Index(value = ["sessionIdentifier"], unique = true)
     ]
 )
-data class TestEntity(
+data class SessionEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
 
     /** Test number format: yyMMdd-HHmmss */
-    val testNumber: String,
+    val sessionNumber: String,
 
     /** Unique identifier for external matching. Format: BMX-yyMMdd-HHmmss */
-    val testIdentifier: String,
+    val sessionIdentifier: String,
 
     val createdAt: Long,
     val endedAt: Long? = null,
     val durationMs: Long = 0,
-    val status: TestStatus = TestStatus.ACTIVE,
+    val status: SessionStatus = SessionStatus.ACTIVE,
     val notes: String = "",
 
     /** Number of recordings in this test */
