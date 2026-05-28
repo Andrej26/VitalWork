@@ -1,16 +1,16 @@
-﻿package com.biometrix.operator.presentation.screens.sessions
+package com.biometrix.operator.presentation.screens.sessions
 
 import androidx.lifecycle.SavedStateHandle
-import com.biometrix.operator.data.db.FakeRecordingDao
+import com.biometrix.operator.data.db.FakeScenarioDao
 import com.biometrix.operator.data.db.FakeSensorSampleDao
 import com.biometrix.operator.data.db.FakeSessionDao
 import com.biometrix.operator.data.db.SessionEntity
 import com.biometrix.operator.data.db.SessionStatus
 import com.biometrix.operator.data.model.ConnectionState
-import com.biometrix.operator.data.recording.FakeSensorRecordingRepository
+import com.biometrix.operator.data.recording.FakeScenarioRecordingRepository
 import com.biometrix.operator.data.recording.model.DataRecordingState
 import com.biometrix.operator.data.repository.ConnectionRepository
-import com.biometrix.operator.data.repository.RecordingRepository
+import com.biometrix.operator.data.repository.ScenarioRepository
 import com.biometrix.operator.data.repository.SessionRepository
 import com.biometrix.operator.data.sensor.FakeSensorDevice
 import com.biometrix.operator.data.sensor.ble.FakeBleManager
@@ -35,7 +35,6 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -49,13 +48,13 @@ class SessionControlViewModelTest {
     private lateinit var fakeBleManager: FakeBleManager
     private lateinit var fakeRespiration: FakeSensorDevice
     private lateinit var fakeSessionDao: FakeSessionDao
-    private lateinit var fakeRecordingDao: FakeRecordingDao
+    private lateinit var fakeScenarioDao: FakeScenarioDao
     private lateinit var fakeSensorSampleDao: FakeSensorSampleDao
-    private lateinit var fakeSensorRecordingRepo: FakeSensorRecordingRepository
+    private lateinit var fakeScenarioRecordingRepo: FakeScenarioRecordingRepository
     private lateinit var fakeLocationChecker: FakeLocationChecker
     private lateinit var connectionRepository: ConnectionRepository
     private lateinit var sessionRepository: SessionRepository
-    private lateinit var recordingRepository: RecordingRepository
+    private lateinit var scenarioRepository: ScenarioRepository
     private lateinit var lanAvailableFlow: MutableStateFlow<Boolean>
 
     private val sessionId = 1L
@@ -67,9 +66,9 @@ class SessionControlViewModelTest {
         fakeBleManager = FakeBleManager()
         fakeRespiration = FakeSensorDevice()
         fakeSessionDao = FakeSessionDao()
-        fakeRecordingDao = FakeRecordingDao()
+        fakeScenarioDao = FakeScenarioDao()
         fakeSensorSampleDao = FakeSensorSampleDao()
-        fakeSensorRecordingRepo = FakeSensorRecordingRepository()
+        fakeScenarioRecordingRepo = FakeScenarioRecordingRepository()
         fakeLocationChecker = FakeLocationChecker(locationEnabled = true)
         lanAvailableFlow = MutableStateFlow(true)
 
@@ -79,8 +78,8 @@ class SessionControlViewModelTest {
             respirationDevice = fakeRespiration,
             lanAvailableFlow = lanAvailableFlow
         )
-        recordingRepository = RecordingRepository(fakeRecordingDao, fakeSensorSampleDao)
-        sessionRepository = SessionRepository(fakeSessionDao, fakeRecordingDao)
+        scenarioRepository = ScenarioRepository(fakeScenarioDao, fakeSensorSampleDao)
+        sessionRepository = SessionRepository(fakeSessionDao, fakeScenarioDao, fakeSensorSampleDao)
     }
 
     @After
@@ -88,25 +87,25 @@ class SessionControlViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private suspend fun seedactiveSession(id: Long = sessionId): SessionEntity {
-        val test = SessionEntity(
+    private fun seedActiveSession(id: Long = sessionId): SessionEntity {
+        val session = SessionEntity(
             id = id,
-            sessionNumber = "260413-100000",
-            sessionIdentifier = "BMX-260413-100000",
-            createdAt = System.currentTimeMillis(),
+            participantId = 1L,
+            sessionCode = "BMX-260413-100000",
+            startedAt = System.currentTimeMillis(),
             status = SessionStatus.ACTIVE
         )
-        fakeSessionDao.tests.add(test)
-        return test
+        fakeSessionDao.sessions.add(session)
+        return session
     }
 
-    private fun createVm(savedsessionId: Long = sessionId): SessionControlViewModel {
-        val savedState = SavedStateHandle(mapOf("testId" to savedsessionId))
+    private fun createVm(savedSessionId: Long = sessionId): SessionControlViewModel {
+        val savedState = SavedStateHandle(mapOf("sessionId" to savedSessionId))
         return SessionControlViewModel(
             connectionRepository = connectionRepository,
-            sensorRecordingRepository = fakeSensorRecordingRepo,
+            sensorRecordingRepository = fakeScenarioRecordingRepo,
             sessionRepository = sessionRepository,
-            recordingRepository = recordingRepository,
+            scenarioRepository = scenarioRepository,
             vrWebSocketClient = fakeVrClient,
             mdnsDiscovery = fakeDiscovery,
             locationChecker = fakeLocationChecker,
@@ -117,36 +116,32 @@ class SessionControlViewModelTest {
     private fun vrEvent(name: String, value: Int? = null): WebSocketMessage.Event =
         WebSocketMessage.Event(ServerMessage(type = "event", success = true, msg = name, value = value))
 
-    // ---- Group A: Initialization ----
-
     @Test
-    fun init_loadsTestFromRepository() = runTest {
+    fun init_loadsSessionFromRepository() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
-        val seeded = seedactiveSession()
+        val seeded = seedActiveSession()
 
         val vm = createVm()
         advanceUntilIdle()
 
-        assertEquals(seeded.id, vm.test.value?.id)
-        assertEquals("BMX-260413-100000", vm.test.value?.sessionIdentifier)
+        assertEquals(seeded.id, vm.session.value?.id)
+        assertEquals("BMX-260413-100000", vm.session.value?.sessionCode)
     }
 
     @Test
-    fun init_unknownTestId_returnsNullStateGracefully() = runTest {
+    fun init_unknownSessionId_returnsNullStateGracefully() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
 
-        val vm = createVm(savedsessionId = 999L)
+        val vm = createVm(savedSessionId = 999L)
         advanceUntilIdle()
 
-        assertNull(vm.test.value)
+        assertNull(vm.session.value)
     }
 
-    // ---- Group B: VR biofeedback automation ----
-
     @Test
-    fun vrStartEvent_whenSensorConnected_startsRecording() = runTest {
+    fun vrStartEvent_legacyPath_whenSensorConnected_createsPlaceholderScenarioAndStarts() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
-        val seeded = seedactiveSession()
+        seedActiveSession()
         fakeBleManager.connectionState.value = ConnectionState.CONNECTED
 
         val vm = createVm()
@@ -155,17 +150,15 @@ class SessionControlViewModelTest {
         fakeVrClient.messages.emit(vrEvent("start_recording"))
         advanceUntilIdle()
 
-        assertEquals(1, fakeSensorRecordingRepo.startRecordingCallCount)
-        assertEquals(seeded.id, fakeSensorRecordingRepo.lastStartsessionId)
-        assertEquals(seeded.sessionIdentifier, fakeSensorRecordingRepo.lastStartsessionIdentifier)
+        assertEquals(1, fakeScenarioRecordingRepo.startRecordingCallCount)
+        assertEquals(1, fakeScenarioDao.scenarios.size)
         assertTrue(vm.vrTriggeredRecording.value)
     }
 
     @Test
     fun vrStartEvent_whenNoSensorConnected_doesNotStartRecording() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
-        seedactiveSession()
-        // All sensors remain disconnected (default fake state)
+        seedActiveSession()
 
         val vm = createVm()
         advanceUntilIdle()
@@ -173,53 +166,45 @@ class SessionControlViewModelTest {
         fakeVrClient.messages.emit(vrEvent("start_recording"))
         advanceUntilIdle()
 
-        assertEquals(0, fakeSensorRecordingRepo.startRecordingCallCount)
+        assertEquals(0, fakeScenarioRecordingRepo.startRecordingCallCount)
         assertFalse(vm.vrTriggeredRecording.value)
     }
 
     @Test
     fun vrStopEvent_whileRecording_stopsRecordingAndDeactivatesScene() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
-        seedactiveSession()
+        seedActiveSession()
         fakeBleManager.connectionState.value = ConnectionState.CONNECTED
 
         val vm = createVm()
         advanceUntilIdle()
 
-        // Begin recording via VR start
         fakeVrClient.messages.emit(vrEvent("start_recording"))
         advanceUntilIdle()
-        assertEquals(DataRecordingState.RECORDING, fakeSensorRecordingRepo.recordingState.value)
+        assertEquals(DataRecordingState.RECORDING, fakeScenarioRecordingRepo.recordingState.value)
 
-        // Activate stress chamber scene so we can verify it gets deactivated
         connectionRepository.setStressChamberSceneActive(true)
 
         fakeVrClient.messages.emit(vrEvent("stop_recording"))
         advanceUntilIdle()
 
-        assertEquals(1, fakeSensorRecordingRepo.stopRecordingCallCount)
+        assertEquals(1, fakeScenarioRecordingRepo.stopRecordingCallCount)
         assertFalse(vm.vrTriggeredRecording.value)
         assertFalse(connectionRepository.isStressChamberSceneActive.value)
     }
 
-    // ---- Group C: Scan timeout ----
-
     @Test
     fun bleScan_noDevicesAfter15s_flagsTimeout() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        seedactiveSession()
-        // bluetoothEnabled is true in FakeBleManager by default
-        // bleConnectionState starts DISCONNECTED → onHeartRateCardClick will scan
+        seedActiveSession()
 
         val vm = createVm()
         advanceUntilIdle()
 
         vm.onHeartRateCardClick()
-        // Simulate scanner actually starting (fake's startScan() is a no-op)
         (fakeBleManager.isScanning as MutableStateFlow<Boolean>).value = true
         runCurrent()
 
-        // scan not timed out yet
         assertFalse(vm.scanTimeoutReached.value)
 
         advanceTimeBy(15_001)
@@ -228,51 +213,46 @@ class SessionControlViewModelTest {
         assertTrue("Expected scan timeout after 15s", vm.scanTimeoutReached.value)
     }
 
-    // ---- Group E: End-test cleanup ----
-
     @Test
-    fun endTestAndSave_stopsRecording_thenCompletesTest() = runTest {
+    fun endSessionAndSave_stopsRecording_thenCompletesSession() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
-        seedactiveSession()
+        seedActiveSession()
 
         val vm = createVm()
         advanceUntilIdle()
 
-        // Put recording into RECORDING state so the stop call happens
-        fakeSensorRecordingRepo.recordingState.value = DataRecordingState.RECORDING
+        fakeScenarioRecordingRepo.recordingState.value = DataRecordingState.RECORDING
 
-        vm.endTestAndSave()
+        vm.endSessionAndSave()
         advanceUntilIdle()
 
-        assertEquals(1, fakeSensorRecordingRepo.stopRecordingCallCount)
-        assertEquals(SessionStatus.COMPLETED, fakeSessionDao.tests[0].status)
-        assertTrue(vm.endTestResult.value is EndTestResult.Success)
+        assertEquals(1, fakeScenarioRecordingRepo.stopRecordingCallCount)
+        assertEquals(SessionStatus.COMPLETED, fakeSessionDao.sessions[0].status)
+        assertTrue(vm.endSessionResult.value is EndSessionResult.Success)
         assertEquals(1, fakeVrClient.suppressAutoReconnectCallCount)
     }
 
     @Test
-    fun discardTest_stopsRecordingAndDeletesTest() = runTest {
+    fun discardSession_stopsRecordingAndDeletesSession() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
-        seedactiveSession()
+        seedActiveSession()
 
         val vm = createVm()
         advanceUntilIdle()
 
-        fakeSensorRecordingRepo.recordingState.value = DataRecordingState.RECORDING
+        fakeScenarioRecordingRepo.recordingState.value = DataRecordingState.RECORDING
 
-        vm.discardTest()
+        vm.discardSession()
         advanceUntilIdle()
 
-        assertEquals(1, fakeSensorRecordingRepo.stopRecordingCallCount)
-        assertTrue("Test should be deleted", fakeSessionDao.tests.isEmpty())
+        assertEquals(1, fakeScenarioRecordingRepo.stopRecordingCallCount)
+        assertTrue("Session should be deleted", fakeSessionDao.sessions.isEmpty())
     }
-
-    // ---- Group F: Notes debounce ----
 
     @Test
     fun updateNotes_debounces500ms_thenSavesToDb() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        seedactiveSession()
+        seedActiveSession()
 
         val vm = createVm()
         advanceUntilIdle()
@@ -281,24 +261,20 @@ class SessionControlViewModelTest {
         vm.updateNotes("hello")
         assertEquals(NotesSaveStatus.Saving, vm.notesSaveStatus.value)
 
-        // Before debounce fires, DB has no notes
         advanceTimeBy(400)
         runCurrent()
-        assertEquals("", fakeSessionDao.tests[0].notes)
+        assertEquals("", fakeSessionDao.sessions[0].notes)
 
-        // Just past 500ms debounce: DB written, status briefly Saved
         advanceTimeBy(200)
         runCurrent()
-        assertEquals("hello", fakeSessionDao.tests[0].notes)
+        assertEquals("hello", fakeSessionDao.sessions[0].notes)
         assertEquals(NotesSaveStatus.Saved, vm.notesSaveStatus.value)
     }
-
-    // ---- Group G: Location-gated scan ----
 
     @Test
     fun onHeartRateCardClick_locationDisabled_showsLocationDialog() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
-        seedactiveSession()
+        seedActiveSession()
         fakeLocationChecker.locationEnabled = false
 
         val vm = createVm()
@@ -307,7 +283,6 @@ class SessionControlViewModelTest {
         vm.onHeartRateCardClick()
 
         assertEquals(BleDialogState.LocationServicesRequired, vm.bleDialogState.value)
-        // scan dialog should NOT open
         assertFalse(vm.showBleScanDialog.value)
     }
 }

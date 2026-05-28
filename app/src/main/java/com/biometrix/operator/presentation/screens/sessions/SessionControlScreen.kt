@@ -120,12 +120,12 @@ fun SessionControlScreen(
     // Recording state
     val recordingUiState by viewModel.recordingUiState.collectAsState()
 
-    // Test state
-    val test by viewModel.test.collectAsState()
+    // Session state
+    val session by viewModel.session.collectAsState()
     val notes by viewModel.notes.collectAsState()
     val notesSaveStatus by viewModel.notesSaveStatus.collectAsState()
-    val isEndingTest by viewModel.isEndingTest.collectAsState()
-    val endTestResult by viewModel.endTestResult.collectAsState()
+    val isEndingSession by viewModel.isEndingSession.collectAsState()
+    val endSessionResult by viewModel.endSessionResult.collectAsState()
 
     // BLE scan state
     val showBleScanDialog by viewModel.showBleScanDialog.collectAsState()
@@ -205,7 +205,7 @@ fun SessionControlScreen(
     // Dialog states
     var showBackDialog by remember { mutableStateOf(false) }
     var showDiscardConfirmation by remember { mutableStateOf(false) }
-    var showEndTestConfirmation by remember { mutableStateOf(false) }
+    var showEndSessionConfirmation by remember { mutableStateOf(false) }
 
 
     // Setup auto-save for notes
@@ -222,18 +222,18 @@ fun SessionControlScreen(
     }
 
     // Handle test end result
-    LaunchedEffect(endTestResult) {
-        when (val result = endTestResult) {
-            is EndTestResult.Success -> {
-                viewModel.clearEndTestResult()
+    LaunchedEffect(endSessionResult) {
+        when (val result = endSessionResult) {
+            is EndSessionResult.Success -> {
+                viewModel.clearEndSessionResult()
                 onSessionEnded(result.sessionId)
             }
-            is EndTestResult.Error -> {
+            is EndSessionResult.Error -> {
                 snackbarHostState.showSnackbar(
                     message = result.message,
                     duration = SnackbarDuration.Long
                 )
-                viewModel.clearEndTestResult()
+                viewModel.clearEndSessionResult()
             }
             null -> {}
         }
@@ -248,12 +248,12 @@ fun SessionControlScreen(
     if (showBackDialog) {
         AlertDialog(
             onDismissRequest = { showBackDialog = false },
-            title = { Text("Test in progress") },
-            text = { Text("You have an active test. What would you like to do?") },
+            title = { Text("Session in progress") },
+            text = { Text("You have an active session. What would you like to do?") },
             confirmButton = {
                 TextButton(onClick = {
                     showBackDialog = false
-                    viewModel.endTestAndSave()
+                    viewModel.endSessionAndSave()
                 }) {
                     Text("Save & Exit")
                 }
@@ -278,12 +278,12 @@ fun SessionControlScreen(
     if (showDiscardConfirmation) {
         AlertDialog(
             onDismissRequest = { showDiscardConfirmation = false },
-            title = { Text("Discard test?") },
-            text = { Text("This will permanently delete all recorded data for this test. This cannot be undone.") },
+            title = { Text("Discard session?") },
+            text = { Text("This will permanently delete all recorded data for this session. This cannot be undone.") },
             confirmButton = {
                 TextButton(onClick = {
                     showDiscardConfirmation = false
-                    viewModel.discardTest()
+                    viewModel.discardSession()
                     onNavigateBack()
                 }) {
                     Text("Discard", color = MaterialTheme.colorScheme.error)
@@ -297,23 +297,22 @@ fun SessionControlScreen(
         )
     }
 
-    // End test confirmation
-    if (showEndTestConfirmation) {
+    // End session confirmation
+    if (showEndSessionConfirmation) {
         AlertDialog(
-            onDismissRequest = { showEndTestConfirmation = false },
-            title = { Text("End test?") },
-           // text = { Text("Are you sure you want to end this test and save the data?") },
-            text = { Text("Are you sure you want to end this test?") },
+            onDismissRequest = { showEndSessionConfirmation = false },
+            title = { Text("End session?") },
+            text = { Text("Are you sure you want to end this session?") },
             confirmButton = {
                 TextButton(onClick = {
-                    showEndTestConfirmation = false
-                    viewModel.endTestAndSave()
+                    showEndSessionConfirmation = false
+                    viewModel.endSessionAndSave()
                 }) {
-                    Text("End Test")
+                    Text("End Session")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showEndTestConfirmation = false }) {
+                TextButton(onClick = { showEndSessionConfirmation = false }) {
                     Text("Cancel")
                 }
             }
@@ -394,7 +393,7 @@ fun SessionControlScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = test?.let { "Test #${it.sessionNumber}" } ?: "New Test",
+                        text = session?.sessionCode ?: "New Session",
                         fontWeight = FontWeight.SemiBold,
                         color = if (isRecording) Color.White
                             else MaterialTheme.colorScheme.onSurface
@@ -777,13 +776,13 @@ fun SessionControlScreen(
                 saveStatus = notesSaveStatus
             )
 
-            // End Test button
+            // End Session button
             Button(
-                onClick = { showEndTestConfirmation = true },
+                onClick = { showEndSessionConfirmation = true },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !isEndingTest
+                enabled = !isEndingSession
             ) {
-                if (isEndingTest) {
+                if (isEndingSession) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(20.dp),
                         strokeWidth = 2.dp,
@@ -791,7 +790,7 @@ fun SessionControlScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                 }
-                Text("End Test & Save")
+                Text("End Session & Save")
             }
 
             Spacer(modifier = Modifier.height(16.dp))

@@ -1,4 +1,4 @@
-﻿package com.biometrix.operator.data.db
+package com.biometrix.operator.data.db
 
 import androidx.room.Dao
 import androidx.room.Delete
@@ -11,11 +11,14 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface SessionDao {
 
-    @Query("SELECT * FROM sessions ORDER BY createdAt DESC")
+    @Query("SELECT * FROM sessions ORDER BY startedAt DESC")
     fun getAllSessions(): Flow<List<SessionEntity>>
 
-    @Query("SELECT * FROM sessions WHERE status = :status ORDER BY createdAt DESC")
+    @Query("SELECT * FROM sessions WHERE status = :status ORDER BY startedAt DESC")
     fun getSessionsByStatus(status: SessionStatus): Flow<List<SessionEntity>>
+
+    @Query("SELECT * FROM sessions WHERE participantId = :participantId ORDER BY startedAt DESC")
+    fun getSessionsForParticipant(participantId: Long): Flow<List<SessionEntity>>
 
     @Query("SELECT * FROM sessions WHERE id = :id")
     suspend fun getSessionById(id: Long): SessionEntity?
@@ -27,17 +30,16 @@ interface SessionDao {
     suspend fun getActiveSessionOnce(): SessionEntity?
 
     @Insert
-    suspend fun insert(test: SessionEntity): Long
+    suspend fun insert(session: SessionEntity): Long
 
     @Transaction
-    suspend fun insertIfNoneActive(test: SessionEntity): Long? {
-        return if (getActiveSessionOnce() != null) null else insert(test)
+    suspend fun insertIfNoneActive(session: SessionEntity): Long? {
+        return if (getActiveSessionOnce() != null) null else insert(session)
     }
 
     @Update
-    suspend fun update(test: SessionEntity)
+    suspend fun update(session: SessionEntity)
 
     @Delete
-    suspend fun delete(test: SessionEntity)
-
+    suspend fun delete(session: SessionEntity)
 }

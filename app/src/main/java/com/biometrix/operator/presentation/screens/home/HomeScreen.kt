@@ -38,8 +38,9 @@ fun HomeScreen(
     onNavigateToSensors: () -> Unit,
     onNavigateToVrControl: () -> Unit,
     onNavigateToSessions: () -> Unit,
+    onNavigateToParticipantEntry: () -> Unit,
     onNavigateToSessionActive: (Long) -> Unit,
-    onNavigateToSessionReview: (Long) -> Unit,
+    @Suppress("UNUSED_PARAMETER") onNavigateToSessionReview: (Long) -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val vrConnectionState by viewModel.vrConnectionState.collectAsState()
@@ -94,15 +95,15 @@ fun HomeScreen(
             ) {
                 PrimaryActionButton(
                     title = if (currentActive != null) "Resume Active Session" else "Start New Session",
-                    subtitle = currentActive?.sessionIdentifier,
+                    subtitle = currentActive?.sessionCode,
                     enabled = !isStarting,
                     onClick = {
                         if (currentActive != null) {
                             onNavigateToSessionActive(currentActive.id)
                         } else {
-                            viewModel.startNewSession(
-                                onCreated = onNavigateToSessionActive,
-                                onAlreadyActive = onNavigateToSessionActive
+                            viewModel.beginSession(
+                                onResumeActive = onNavigateToSessionActive,
+                                onStartNewParticipantFlow = onNavigateToParticipantEntry
                             )
                         }
                     }

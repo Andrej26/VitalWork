@@ -1,18 +1,19 @@
-﻿package com.biometrix.operator.presentation.screens.sessions
+package com.biometrix.operator.presentation.screens.sessions
 
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.biometrix.operator.data.db.RecordingEntity
+import com.biometrix.operator.data.db.ScenarioCode
+import com.biometrix.operator.data.db.ScenarioEntity
 import com.biometrix.operator.data.db.SessionEntity
 import com.biometrix.operator.data.model.ConnectionState
-import com.biometrix.operator.data.recording.SensorRecordingRepository
+import com.biometrix.operator.data.recording.ScenarioRecordingRepository
 import com.biometrix.operator.data.system.LocationChecker
 import com.biometrix.operator.data.recording.model.DataRecordingState
 import com.biometrix.operator.data.repository.ConnectionRepository
 import com.biometrix.operator.data.sensor.audio.LowSignalWarning
-import com.biometrix.operator.data.repository.RecordingRepository
+import com.biometrix.operator.data.repository.ScenarioRepository
 import com.biometrix.operator.data.repository.SessionRepository
 import com.biometrix.operator.data.sensor.DeviceState
 import com.biometrix.operator.data.sensor.ble.BleEvent
@@ -45,9 +46,9 @@ import javax.inject.Inject
 @HiltViewModel
 class SessionControlViewModel @Inject constructor(
     private val connectionRepository: ConnectionRepository,
-    private val sensorRecordingRepository: SensorRecordingRepository,
+    private val sensorRecordingRepository: ScenarioRecordingRepository,
     private val sessionRepository: SessionRepository,
-    private val recordingRepository: RecordingRepository,
+    private val scenarioRepository: ScenarioRepository,
     private val vrWebSocketClient: VRConnectionManager,
     private val mdnsDiscovery: VrDeviceDiscovery,
     private val locationChecker: LocationChecker,
@@ -55,14 +56,23 @@ class SessionControlViewModel @Inject constructor(
 ) : ViewModel() {
 
     companion object {
+        // Legacy VR events from the previous NarrowingChamber/StressChamber project. The new
+        // logistics VR app will not emit these; the wiring is kept inert until the new
+        // protocol (scenario_start / event_triggered / reaction_recorded / scenario_end)
+        // replaces it. Tracked as a follow-up cleanup.
         private const val VR_EVENT_START_BIOFEEDBACK = "start_recording"
         private const val VR_EVENT_STOP_BIOFEEDBACK = "stop_recording"
+
+        // Placeholder scenario used when the legacy VR `start_recording` message arrives
+        // (which only happens if you point this app at an old-project VR build during
+        // development). Will be removed when the new VR protocol lands.
+        private val LEGACY_VR_PLACEHOLDER_SCENARIO = ScenarioCode.FALLING_PALLET
     }
 
-    val sessionId: Long = savedStateHandle.get<Long>("testId") ?: -1L
+    val sessionId: Long = savedStateHandle.get<Long>("sessionId") ?: -1L
 
-    private val _test = MutableStateFlow<SessionEntity?>(null)
-    val test: StateFlow<SessionEntity?> = _test.asStateFlow()
+    private val _session = MutableStateFlow<SessionEntity?>(null)
+    val session: StateFlow<SessionEntity?> = _session.asStateFlow()
 
     /** VR headset WebSocket connection state */
     val vrConnectionState: StateFlow<ConnectionState> = connectionRepository.vrConnectionState
@@ -103,12 +113,12 @@ class SessionControlViewModel @Inject constructor(
     private var userHasEditedNotes = false
     private var savedDismissJob: Job? = null
 
-    /** Test ending state */
-    private val _isEndingTest = MutableStateFlow(false)
-    val isEndingTest: StateFlow<Boolean> = _isEndingTest.asStateFlow()
+    /** Session ending state */
+    private val _isEndingSession = MutableStateFlow(false)
+    val isEndingSession: StateFlow<Boolean> = _isEndingSession.asStateFlow()
 
-    private val _endTestResult = MutableStateFlow<EndTestResult?>(null)
-    val endTestResult: StateFlow<EndTestResult?> = _endTestResult.asStateFlow()
+    private val _endSessionResult = MutableStateFlow<EndSessionResult?>(null)
+    val endSessionResult: StateFlow<EndSessionResult?> = _endSessionResult.asStateFlow()
 
     /** BLE discovered devices (for scan dialog) */
     val bleDiscoveredDevices: StateFlow<List<BleDevice>> = connectionRepository.bleDiscoveredDevices
@@ -145,15 +155,15 @@ class SessionControlViewModel @Inject constructor(
     private var lastConnectedDevice: BleDevice? = null
     private var bleFirstDataJob: Job? = null
 
-    /** Whether the current recording was triggered by VR biofeedback command */
+    /** Whether the current recording was triggered by a legacy VR biofeedback command */
     private val _vrTriggeredRecording = MutableStateFlow(false)
     val vrTriggeredRecording: StateFlow<Boolean> = _vrTriggeredRecording.asStateFlow()
 
-    /** Latest VR biofeedback event for UI feedback */
+    /** Latest legacy VR biofeedback event for UI feedback */
     private val _lastVrBiofeedbackEvent = MutableStateFlow<VrBiofeedbackEvent?>(null)
     val lastVrBiofeedbackEvent: StateFlow<VrBiofeedbackEvent?> = _lastVrBiofeedbackEvent.asStateFlow()
 
-    /** Whether the StressChamber scene is currently active (shared via ConnectionRepository) */
+    /** Whether the legacy StressChamber scene is currently active (shared via ConnectionRepository) */
     val isStressChamberSceneActive: StateFlow<Boolean> = connectionRepository.isStressChamberSceneActive
 
     /** VR devices discovered via mDNS */
@@ -172,9 +182,9 @@ class SessionControlViewModel @Inject constructor(
     /** Whether VR connection is auto-reconnecting */
     val vrIsReconnecting: StateFlow<Boolean> = connectionRepository.vrIsReconnecting
 
-    /** Recordings for this test */
-    val recordings: StateFlow<List<RecordingEntity>> = if (sessionId > 0) {
-        recordingRepository.getRecordingsForTest(sessionId)
+    /** Scenarios for this session */
+    val scenarios: StateFlow<List<ScenarioEntity>> = if (sessionId > 0) {
+        scenarioRepository.getScenariosForSession(sessionId)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     } else {
         MutableStateFlow(emptyList())
@@ -185,7 +195,7 @@ class SessionControlViewModel @Inject constructor(
     val pulseLatestRr: StateFlow<Int?> = _pulseLatestRr.asStateFlow()
 
     /** Recording UI state combining repository state with connection states */
-    val recordingUiState: StateFlow<RecordingUiState> = combine(
+    val recordingUiState: StateFlow<ScenarioRecordingUiState> = combine(
         sensorRecordingRepository.recordingState,
         sensorRecordingRepository.recordingDurationMs,
         sensorRecordingRepository.recordingMetadata,
@@ -196,7 +206,7 @@ class SessionControlViewModel @Inject constructor(
         val isRespirationConnected = respState == DeviceState.Streaming ||
                 respState == DeviceState.Connected
 
-        RecordingUiState(
+        ScenarioRecordingUiState(
             recordingState = state,
             durationFormatted = formatDuration(durationMs),
             isHeartRateConnected = isHeartRateConnected,
@@ -204,22 +214,23 @@ class SessionControlViewModel @Inject constructor(
             heartRateSampleCount = metadata?.heartRateSampleCount ?: 0,
             respirationSampleCount = metadata?.respirationSampleCount ?: 0,
             esenseRrIntervalSampleCount = metadata?.esenseRrIntervalSampleCount ?: 0,
-            recordingIdentifier = metadata?.recordingIdentifier,
+            gsrSampleCount = metadata?.gsrSampleCount ?: 0,
+            scenarioIdentifier = metadata?.scenarioIdentifier,
             isRecording = state == DataRecordingState.RECORDING,
             heartRateWasEnabled = metadata?.heartRateRecording ?: false,
             respirationWasEnabled = metadata?.respirationRecording ?: false
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), RecordingUiState())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ScenarioRecordingUiState())
 
     private var notesDebounceJob: Job? = null
 
     init {
-        // Load test data
+        // Load session data
         if (sessionId > 0) {
             viewModelScope.launch {
-                val test = sessionRepository.getSessionById(sessionId)
-                _test.value = test
-                _notes.value = test?.notes ?: ""
+                val session = sessionRepository.getSessionById(sessionId)
+                _session.value = session
+                _notes.value = session?.notes ?: ""
             }
         }
 
@@ -246,7 +257,9 @@ class SessionControlViewModel @Inject constructor(
             }
         }
 
-        // Listen for VR biofeedback commands to auto-start/stop recording
+        // Legacy VR biofeedback bridge. Inert against the new logistics VR app (which
+        // doesn't emit start_recording / stop_recording). Kept until the new scenario-
+        // based protocol replaces it.
         viewModelScope.launch {
             vrWebSocketClient.messages.collect { message ->
                 when (message) {
@@ -261,7 +274,7 @@ class SessionControlViewModel @Inject constructor(
             }
         }
 
-        // Clear StressChamber scene lock when VR disconnects (safety valve)
+        // Clear legacy StressChamber scene lock when VR disconnects (safety valve)
         viewModelScope.launch {
             connectionRepository.vrConnectionState.collect { state ->
                 if (state == ConnectionState.DISCONNECTED || state == ConnectionState.ERROR) {
@@ -347,6 +360,7 @@ class SessionControlViewModel @Inject constructor(
     }
 
     private fun handleVrBiofeedbackEvent(eventName: String, value: Int?) {
+        @Suppress("UNUSED_PARAMETER") value
         when (eventName) {
             VR_EVENT_START_BIOFEEDBACK -> {
                 _lastVrBiofeedbackEvent.value = VrBiofeedbackEvent(
@@ -372,17 +386,28 @@ class SessionControlViewModel @Inject constructor(
         return bleConnected || respConnected
     }
 
+    /**
+     * Legacy code path: when an old-project VR build sends `start_recording`, create a
+     * placeholder scenario and begin sensor capture. The new logistics VR app will
+     * provide its own scenario_start / event / reaction / end protocol; this path is
+     * inert against that app.
+     */
     private fun startRecordingFromVr() {
         viewModelScope.launch {
-            val test = _test.value ?: return@launch
+            val session = _session.value ?: return@launch
             val currentState = sensorRecordingRepository.recordingState.value
 
             if (currentState == DataRecordingState.IDLE &&
-                test.status == com.biometrix.operator.data.db.SessionStatus.ACTIVE &&
+                session.status == com.biometrix.operator.data.db.SessionStatus.ACTIVE &&
                 anySensorConnected()
             ) {
+                val scenario = scenarioRepository.createScenario(
+                    sessionId = session.id,
+                    scenarioCode = LEGACY_VR_PLACEHOLDER_SCENARIO
+                )
+                val scenarioIdentifier = "${session.sessionCode}-${LEGACY_VR_PLACEHOLDER_SCENARIO.officialCode}"
                 _vrTriggeredRecording.value = true
-                sensorRecordingRepository.startRecording(test.id, test.sessionIdentifier)
+                sensorRecordingRepository.startRecording(scenario.id, scenarioIdentifier)
             }
         }
     }
@@ -433,31 +458,30 @@ class SessionControlViewModel @Inject constructor(
         _lastVrBiofeedbackEvent.value = null
     }
 
-    fun endTestAndSave() {
+    fun endSessionAndSave() {
         viewModelScope.launch {
-            _isEndingTest.value = true
+            _isEndingSession.value = true
             try {
                 // Stop recording if active
                 if (sensorRecordingRepository.recordingState.value == DataRecordingState.RECORDING) {
                     sensorRecordingRepository.stopRecording()
                 }
 
-                val recordingCount = sessionRepository.getCompletedRecordingCount(sessionId)
-                sessionRepository.endSession(sessionId, recordingCount)
+                sessionRepository.endSession(sessionId)
 
-                _endTestResult.value = EndTestResult.Success(sessionId)
+                _endSessionResult.value = EndSessionResult.Success(sessionId)
                 vrWebSocketClient.suppressAutoReconnect()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _endTestResult.value = EndTestResult.Error(e.message ?: "Failed to save test")
+                _endSessionResult.value = EndSessionResult.Error(e.message ?: "Failed to save session")
             } finally {
-                _isEndingTest.value = false
+                _isEndingSession.value = false
             }
         }
     }
 
-    fun discardTest() {
+    fun discardSession() {
         viewModelScope.launch {
             if (sensorRecordingRepository.recordingState.value == DataRecordingState.RECORDING) {
                 sensorRecordingRepository.stopRecording()
@@ -601,9 +625,12 @@ class SessionControlViewModel @Inject constructor(
         connectionRepository.clearRespirationDisconnectReason()
     }
 
-    fun clearEndTestResult() {
-        _endTestResult.value = null
+    fun clearEndSessionResult() {
+        _endSessionResult.value = null
     }
+
+    @Suppress("unused")
+    private fun formatDurationStatic(ms: Long): String = formatDuration(ms)
 
     private fun formatDuration(ms: Long): String {
         val totalSeconds = ms / 1000
@@ -619,9 +646,9 @@ class SessionControlViewModel @Inject constructor(
     }
 }
 
-sealed class EndTestResult {
-    data class Success(val sessionId: Long) : EndTestResult()
-    data class Error(val message: String) : EndTestResult()
+sealed class EndSessionResult {
+    data class Success(val sessionId: Long) : EndSessionResult()
+    data class Error(val message: String) : EndSessionResult()
 }
 
 enum class VrBiofeedbackEventType {

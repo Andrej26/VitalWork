@@ -1,13 +1,13 @@
-﻿package com.biometrix.operator.presentation.screens.sessions
+package com.biometrix.operator.presentation.screens.sessions
 
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.biometrix.operator.data.db.RecordingEntity
+import com.biometrix.operator.data.db.ScenarioEntity
 import com.biometrix.operator.data.db.SessionEntity
 import com.biometrix.operator.data.db.SessionStatus
 import com.biometrix.operator.data.export.SessionUploader
-import com.biometrix.operator.data.repository.RecordingRepository
+import com.biometrix.operator.data.repository.ScenarioRepository
 import com.biometrix.operator.data.repository.SessionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
@@ -18,9 +18,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-data class TestDetailUiState(
-    val test: SessionEntity? = null,
-    val recordings: List<RecordingEntity> = emptyList(),
+data class SessionDetailUiState(
+    val session: SessionEntity? = null,
+    val scenarios: List<ScenarioEntity> = emptyList(),
     val isLoading: Boolean = true,
     val isDeleting: Boolean = false,
     val isExporting: Boolean = false,
@@ -30,29 +30,31 @@ data class TestDetailUiState(
 @HiltViewModel
 class SessionDetailViewModel @Inject constructor(
     private val sessionRepository: SessionRepository,
-    private val recordingRepository: RecordingRepository,
+    private val scenarioRepository: ScenarioRepository,
     private val exportService: SessionUploader,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
-    private val sessionId: Long = savedStateHandle.get<Long>("testId") ?: -1L
+    private val sessionId: Long = savedStateHandle.get<Long>("sessionId") ?: -1L
 
-    private val _uiState = MutableStateFlow(TestDetailUiState())
-    val uiState: StateFlow<TestDetailUiState> = _uiState.asStateFlow()
+    private val _uiState = MutableStateFlow(SessionDetailUiState())
+    val uiState: StateFlow<SessionDetailUiState> = _uiState.asStateFlow()
 
     init {
-        loadTest()
+        loadSession()
     }
 
-    private fun loadTest() {
+    private fun loadSession() {
         viewModelScope.launch {
-            val testDeferred = async { sessionRepository.getSessionById(sessionId) }
-            val recordingsDeferred = async { recordingRepository.getRecordingsForTestOnce(sessionId) }
-            awaitAll(testDeferred, recordingsDeferred)
+            val sessionDeferred = async { sessionRepository.getSessionById(sessionId) }
+            val scenariosDeferred = async {
+                scenarioRepository.getScenariosForSessionOnce(sessionId)
+            }
+            awaitAll(sessionDeferred, scenariosDeferred)
 
             _uiState.value = _uiState.value.copy(
-                test = testDeferred.await(),
-                recordings = recordingsDeferred.await(),
+                session = sessionDeferred.await(),
+                scenarios = scenariosDeferred.await(),
                 isLoading = false
             )
         }
@@ -66,7 +68,7 @@ class SessionDetailViewModel @Inject constructor(
         }
     }
 
-    fun exportTest() {
+    fun exportSession() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isExporting = true)
 
@@ -74,9 +76,9 @@ class SessionDetailViewModel @Inject constructor(
 
             result.fold(
                 onSuccess = { path ->
-                    sessionRepository.markExported(sessionId)
+                    sessionRepository.markUploaded(sessionId)
                     _uiState.value = _uiState.value.copy(
-                        test = _uiState.value.test?.copy(status = SessionStatus.EXPORTED),
+                        session = _uiState.value.session?.copy(status = SessionStatus.UPLOADED),
                         isExporting = false,
                         exportResult = "Exported to: $path"
                     )

@@ -30,7 +30,7 @@ import java.util.Locale
 
 @Composable
 internal fun SessionCard(
-    test: SessionEntity,
+    session: SessionEntity,
     onClick: () -> Unit
 ) {
     val dateFormat = SimpleDateFormat("MMM dd, yyyy hh:mm a", Locale.getDefault())
@@ -54,17 +54,17 @@ internal fun SessionCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "Test #${test.sessionNumber}",
+                        text = session.sessionCode,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
-                    SessionStatusBadge(status = test.status)
+                    SessionStatusBadge(status = session.status)
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
-                    text = dateFormat.format(Date(test.createdAt)),
+                    text = dateFormat.format(Date(session.startedAt)),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -72,25 +72,26 @@ internal fun SessionCard(
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    if (test.durationMs > 0) {
+                    val durationMs = session.endedAt?.let { it - session.startedAt } ?: 0L
+                    if (durationMs > 0) {
                         Text(
-                            text = formatDuration(test.durationMs),
+                            text = formatDuration(durationMs),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
 
-                    if (test.totalHeartRateSampleCount > 0) {
+                    if (session.hrSampleCount > 0) {
                         Text(
-                            text = "HR: ${test.totalHeartRateSampleCount}",
+                            text = "HR: ${session.hrSampleCount}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
 
-                    if (test.totalRespirationSampleCount > 0) {
+                    if (session.respirationSampleCount > 0) {
                         Text(
-                            text = "Resp: ${test.totalRespirationSampleCount}",
+                            text = "Resp: ${session.respirationSampleCount}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -123,10 +124,10 @@ internal fun SessionStatusBadge(status: SessionStatus) {
             MaterialTheme.colorScheme.onSecondaryContainer,
             "Completed"
         )
-        SessionStatus.EXPORTED -> Triple(
+        SessionStatus.UPLOADED -> Triple(
             MaterialTheme.colorScheme.tertiaryContainer,
             MaterialTheme.colorScheme.onTertiaryContainer,
-            "Exported"
+            "Uploaded"
         )
     }
 

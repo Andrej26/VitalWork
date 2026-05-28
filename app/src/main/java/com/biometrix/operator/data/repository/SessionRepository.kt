@@ -1,7 +1,8 @@
 package com.biometrix.operator.data.repository
 
-import com.biometrix.operator.data.db.RecordingDao
-import com.biometrix.operator.data.db.RecordingStatus
+import com.biometrix.operator.data.db.ScenarioDao
+import com.biometrix.operator.data.db.SensorSampleDao
+import com.biometrix.operator.data.db.SensorType
 import com.biometrix.operator.data.db.SessionDao
 import com.biometrix.operator.data.db.SessionEntity
 import com.biometrix.operator.data.db.SessionStatus
@@ -15,7 +16,8 @@ import javax.inject.Singleton
 @Singleton
 class SessionRepository @Inject constructor(
     private val sessionDao: SessionDao,
-    private val recordingDao: RecordingDao
+    private val scenarioDao: ScenarioDao,
+    private val sensorSampleDao: SensorSampleDao
 ) {
     val allSessions: Flow<List<SessionEntity>> = sessionDao.getAllSessions()
     val activeSession: Flow<SessionEntity?> = sessionDao.getActiveSession()
@@ -23,55 +25,64 @@ class SessionRepository @Inject constructor(
     fun getSessionsByStatus(status: SessionStatus): Flow<List<SessionEntity>> =
         sessionDao.getSessionsByStatus(status)
 
+    fun getSessionsForParticipant(participantId: Long): Flow<List<SessionEntity>> =
+        sessionDao.getSessionsForParticipant(participantId)
+
     suspend fun getSessionById(id: Long): SessionEntity? =
         sessionDao.getSessionById(id)
 
-    suspend fun createSession(): SessionEntity {
-        val now = LocalDateTime.now()
-        val sessionNumber = now.format(DateTimeFormatter.ofPattern("yyMMdd-HHmmss", Locale.US))
-        val sessionIdentifier = "BMX-$sessionNumber"
+    suspend fun getActiveSessionOnce(): SessionEntity? =
+        sessionDao.getActiveSessionOnce()
 
-        val session = SessionEntity(
-            sessionNumber = sessionNumber,
-            sessionIdentifier = sessionIdentifier,
-            createdAt = System.currentTimeMillis(),
-            status = SessionStatus.ACTIVE
-        )
+    suspend fun createSession(participantId: Long): SessionEntity {
+        val session = buildNewSession(participantId)
         val id = sessionDao.insert(session)
         return session.copy(id = id)
     }
 
-    suspend fun createSessionIfNoneActive(): SessionEntity? {
-        val now = LocalDateTime.now()
-        val sessionNumber = now.format(DateTimeFormatter.ofPattern("yyMMdd-HHmmss", Locale.US))
-        val sessionIdentifier = "BMX-$sessionNumber"
-
-        val session = SessionEntity(
-            sessionNumber = sessionNumber,
-            sessionIdentifier = sessionIdentifier,
-            createdAt = System.currentTimeMillis(),
-            status = SessionStatus.ACTIVE
-        )
+    suspend fun createSessionIfNoneActive(participantId: Long): SessionEntity? {
+        val session = buildNewSession(participantId)
         val id = sessionDao.insertIfNoneActive(session) ?: return null
         return session.copy(id = id)
     }
 
-    suspend fun endSession(id: Long, recordingCount: Int) {
-        val session = sessionDao.getSessionById(id) ?: return
-        val durationMs = System.currentTimeMillis() - session.createdAt
+    private fun buildNewSession(participantId: Long): SessionEntity {
+        val now = LocalDateTime.now()
+        val timestampToken = now.format(DateTimeFormatter.ofPattern("yyMMdd-HHmmss", Locale.US))
+        val sessionCode = "BMX-$timestampToken"
+        return SessionEntity(
+            participantId = participantId,
+            sessionCode = sessionCode,
+            startedAt = System.currentTimeMillis(),
+            status = SessionStatus.ACTIVE
+        )
+    }
 
-        val completedRecordings = recordingDao.getRecordingsForTestOnce(id)
-            .filter { it.status == RecordingStatus.COMPLETED }
+    suspend fun endSession(id: Long) {
+        val session = sessionDao.getSessionById(id) ?: return
+        val scenarios = scenarioDao.getScenariosForSessionOnce(id)
+        val completedScenarios = scenarios.filter { it.endedAt != null }
+
+        var hrCount = 0
+        var respCount = 0
+        var rrCount = 0
+        var gsrCount = 0
+        for (scenario in completedScenarios) {
+            hrCount += sensorSampleDao.getSampleCountBySensorType(scenario.id, SensorType.HEART_RATE)
+            respCount += sensorSampleDao.getSampleCountBySensorType(scenario.id, SensorType.RESPIRATION)
+            rrCount += sensorSampleDao.getSampleCountBySensorType(scenario.id, SensorType.ESENSE_RR_INTERVAL)
+            gsrCount += sensorSampleDao.getSampleCountBySensorType(scenario.id, SensorType.GSR)
+        }
 
         sessionDao.update(
             session.copy(
                 endedAt = System.currentTimeMillis(),
-                durationMs = durationMs,
                 status = SessionStatus.COMPLETED,
-                recordingCount = recordingCount,
-                totalHeartRateSampleCount = completedRecordings.sumOf { it.heartRateSampleCount },
-                totalRespirationSampleCount = completedRecordings.sumOf { it.respirationSampleCount },
-                totalEsenseRrIntervalSampleCount = completedRecordings.sumOf { it.esenseRrIntervalSampleCount }
+                scenarioCount = completedScenarios.size,
+                hrSampleCount = hrCount,
+                respirationSampleCount = respCount,
+                rrIntervalSampleCount = rrCount,
+                gsrSampleCount = gsrCount
             )
         )
     }
@@ -81,16 +92,13 @@ class SessionRepository @Inject constructor(
         sessionDao.update(session.copy(notes = notes))
     }
 
-    suspend fun markExported(id: Long) {
+    suspend fun markUploaded(id: Long) {
         val session = sessionDao.getSessionById(id) ?: return
-        sessionDao.update(session.copy(status = SessionStatus.EXPORTED))
+        sessionDao.update(session.copy(status = SessionStatus.UPLOADED))
     }
 
     suspend fun deleteSession(id: Long) {
         val session = sessionDao.getSessionById(id) ?: return
         sessionDao.delete(session)
     }
-
-    suspend fun getCompletedRecordingCount(sessionId: Long): Int =
-        recordingDao.getCompletedRecordingCount(sessionId)
 }

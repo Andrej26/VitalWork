@@ -1,59 +1,60 @@
-﻿package com.biometrix.operator.data.export.model
+package com.biometrix.operator.data.export.model
 
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class TestExport(
-    val version: String = "1.0.0",
+data class SessionExport(
+    val version: String = "2.0.0",
     val exportedAt: String,
-    val test: TestData
+    val participant: ParticipantExport,
+    val session: SessionInfo,
+    val scenarios: List<ScenarioExport>
 )
 
 @Serializable
-data class TestData(
-    val id: String,
-    val sessionNumber: String,
-    val createdAt: String,
-    val endedAt: String?,
-    val durationMs: Long,
+data class ParticipantExport(
+    val participantCode: String,
+    val age: Int? = null,
+    val gender: String? = null
+)
+
+@Serializable
+data class SessionInfo(
+    val sessionCode: String,
+    val startedAt: String,
+    val endedAt: String? = null,
     val status: String,
     val notes: String,
-    val statistics: TestStatistics,
-    val recordings: List<RecordingData>
+    val statistics: SessionStatistics
 )
 
 @Serializable
-data class TestStatistics(
-    val recordingCount: Int,
-    @SerialName("esensePulse_totalSamples") val totalHeartRateSamples: Int,
-    @SerialName("esenseResp_totalSamples") val totalRespirationSamples: Int,
-    @SerialName("esensePulse_totalRrIntervalSamples") val totalEsenseRrIntervalSamples: Int = 0
+data class SessionStatistics(
+    val scenarioCount: Int,
+    val hrSampleCount: Int,
+    val respirationSampleCount: Int,
+    val rrIntervalSampleCount: Int,
+    val gsrSampleCount: Int
 )
 
 @Serializable
-data class RecordingData(
-    val id: String,
-    val sequence: Int,
+data class ScenarioExport(
+    val scenarioCode: String,
+    val scenarioCategory: String,
     val startedAt: String,
-    val endedAt: String?,
-    val durationMs: Long,
-    val sensors: SensorData,
-    val recordingGaps: RecordingGaps? = null,
-    val data: List<SensorSample>
+    val endedAt: String? = null,
+    val eventTimestampMs: Long? = null,
+    val reactionTimestampMs: Long? = null,
+    val reactionTimeMs: Long? = null,
+    val gaps: ScenarioGaps? = null,
+    val samples: List<SensorSampleExport>
 )
 
 @Serializable
-data class SensorData(
-    @SerialName("esensePulse_heartRate") val heartRate: SensorInfo?,
-    @SerialName("esensePulse_rrInterval") val esenseRrInterval: SensorInfo? = null,
-    @SerialName("esenseResp_respiration") val respiration: SensorInfo?
-)
-
-@Serializable
-data class SensorInfo(
-    val enabled: Boolean,
-    val sampleCount: Int
+data class ScenarioGaps(
+    val heartRate: SensorGapInfo? = null,
+    val rrInterval: SensorGapInfo? = null,
+    val respiration: SensorGapInfo? = null
 )
 
 @Serializable
@@ -64,13 +65,6 @@ data class SensorGapInfo(
 )
 
 @Serializable
-data class RecordingGaps(
-    @SerialName("esensePulse_heartRate") val esensePulseHeartRate: SensorGapInfo? = null,
-    @SerialName("esensePulse_rrInterval") val esensePulseRrInterval: SensorGapInfo? = null,
-    @SerialName("esenseResp_respiration") val esenseRespRespiration: SensorGapInfo? = null
-)
-
-@Serializable
 data class GapExport(
     val startElapsedMs: Long,
     val endElapsedMs: Long,
@@ -78,13 +72,9 @@ data class GapExport(
 )
 
 @Serializable
-data class SensorSample(
-    @SerialName("t")
+data class SensorSampleExport(
     val timestampMs: Long,
-    @SerialName("e")
     val elapsedMs: Long,
-    @SerialName("v")
-    val value: Float,
-    @SerialName("s")
-    val sensorType: String
+    val sensorType: String,
+    val value: Float
 )

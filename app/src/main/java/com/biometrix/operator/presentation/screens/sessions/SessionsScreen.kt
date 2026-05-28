@@ -70,7 +70,7 @@ fun SessionsScreen(
         ) {
             uiState.activeSession?.let { activeSession ->
                 ActiveSessionBanner(
-                    sessionNumber = activeSession.sessionNumber,
+                    sessionCode = activeSession.sessionCode,
                     duration = uiState.activeSessionDuration,
                     heartRate = uiState.activeSessionHeartRate,
                     isRecording = uiState.isRecording,
@@ -117,10 +117,10 @@ fun SessionsScreen(
                         )
                     }
 
-                    items(uiState.sessions, key = { it.id }) { test ->
+                    items(uiState.sessions, key = { it.id }) { session ->
                         SessionCard(
-                            test = test,
-                            onClick = { onOpenSession(test.id) }
+                            session = session,
+                            onClick = { onOpenSession(session.id) }
                         )
                     }
 

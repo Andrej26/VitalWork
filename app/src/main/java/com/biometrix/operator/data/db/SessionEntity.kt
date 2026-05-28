@@ -1,46 +1,54 @@
-﻿package com.biometrix.operator.data.db
+package com.biometrix.operator.data.db
 
 import androidx.room.Entity
+import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
 enum class SessionStatus {
     ACTIVE,
     COMPLETED,
-    EXPORTED
+    UPLOADED
 }
 
 @Entity(
     tableName = "sessions",
+    foreignKeys = [
+        ForeignKey(
+            entity = ParticipantEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["participantId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
     indices = [
-        Index(value = ["sessionIdentifier"], unique = true)
+        Index(value = ["sessionCode"], unique = true),
+        Index(value = ["participantId"])
     ]
 )
 data class SessionEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
 
-    /** Test number format: yyMMdd-HHmmss */
-    val sessionNumber: String,
+    val participantId: Long,
 
-    /** Unique identifier for external matching. Format: BMX-yyMMdd-HHmmss */
-    val sessionIdentifier: String,
+    val sessionCode: String,
 
-    val createdAt: Long,
+    val startedAt: Long,
+
     val endedAt: Long? = null,
-    val durationMs: Long = 0,
+
     val status: SessionStatus = SessionStatus.ACTIVE,
+
     val notes: String = "",
 
-    /** Number of recordings in this test */
-    val recordingCount: Int = 0,
+    val hrSampleCount: Int = 0,
 
-    /** Total heart rate samples across all recordings */
-    val totalHeartRateSampleCount: Int = 0,
+    val respirationSampleCount: Int = 0,
 
-    /** Total respiration samples across all recordings */
-    val totalRespirationSampleCount: Int = 0,
+    val rrIntervalSampleCount: Int = 0,
 
-    /** Total eSense Pulse R-R interval samples across all recordings */
-    val totalEsenseRrIntervalSampleCount: Int = 0
+    val gsrSampleCount: Int = 0,
+
+    val scenarioCount: Int = 0
 )

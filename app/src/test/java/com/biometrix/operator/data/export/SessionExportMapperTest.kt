@@ -1,14 +1,16 @@
-﻿package com.biometrix.operator.data.export
+package com.biometrix.operator.data.export
 
-import com.biometrix.operator.data.db.FakeRecordingDao
+import com.biometrix.operator.data.db.FakeScenarioDao
 import com.biometrix.operator.data.db.FakeSensorSampleDao
-import com.biometrix.operator.data.db.RecordingEntity
-import com.biometrix.operator.data.db.RecordingStatus
+import com.biometrix.operator.data.db.ParticipantEntity
+import com.biometrix.operator.data.db.ScenarioCategory
+import com.biometrix.operator.data.db.ScenarioCode
+import com.biometrix.operator.data.db.ScenarioEntity
 import com.biometrix.operator.data.db.SensorSampleEntity
 import com.biometrix.operator.data.db.SensorType
 import com.biometrix.operator.data.db.SessionEntity
 import com.biometrix.operator.data.db.SessionStatus
-import com.biometrix.operator.data.repository.RecordingRepository
+import com.biometrix.operator.data.repository.ScenarioRepository
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -19,237 +21,231 @@ import org.junit.Test
 
 class SessionExportMapperTest {
 
-    private lateinit var fakeRecordingDao: FakeRecordingDao
+    private lateinit var fakeScenarioDao: FakeScenarioDao
     private lateinit var fakeSensorSampleDao: FakeSensorSampleDao
-
-    private lateinit var recordingRepository: RecordingRepository
-
+    private lateinit var scenarioRepository: ScenarioRepository
     private lateinit var mapper: SessionExportMapper
 
     @Before
     fun setUp() {
-        fakeRecordingDao = FakeRecordingDao()
+        fakeScenarioDao = FakeScenarioDao()
         fakeSensorSampleDao = FakeSensorSampleDao()
-
-        recordingRepository = RecordingRepository(fakeRecordingDao, fakeSensorSampleDao)
-
-        mapper = SessionExportMapper(recordingRepository)
+        scenarioRepository = ScenarioRepository(fakeScenarioDao, fakeSensorSampleDao)
+        mapper = SessionExportMapper(scenarioRepository)
     }
 
-    // -- Sensor type mapping --
-
     @Test
-    fun buildRecordingData_sensorTypeMappedCorrectly() = runTest {
-        val recording = recording(heartRateEnabled = true, respirationEnabled = true)
+    fun buildScenarioExport_sensorTypesMappedToLowercase() {
+        val scenario = scenario()
         val samples = listOf(
-            sample(recording.id, SensorType.HEART_RATE),
-            sample(recording.id, SensorType.ESENSE_RR_INTERVAL),
-            sample(recording.id, SensorType.RESPIRATION)
+            sample(scenario.id, SensorType.HEART_RATE),
+            sample(scenario.id, SensorType.ESENSE_RR_INTERVAL),
+            sample(scenario.id, SensorType.RESPIRATION),
+            sample(scenario.id, SensorType.GSR)
         )
 
-        val result = mapper.buildRecordingData(recording, samples)
+        val result = mapper.buildScenarioExport(scenario, samples)
 
-        val types = result.data.map { it.sensorType }
         assertEquals(
-            listOf("esensePulse_hr", "esensePulse_rr", "esenseResp_resp"),
-            types
+            listOf("heart_rate", "rr_interval", "respiration", "gsr"),
+            result.samples.map { it.sensorType }
         )
     }
 
-    // -- Sensor enable/disable flags --
-
     @Test
-    fun buildRecordingData_heartRateDisabled_sensorInfoNull() = runTest {
-        val recording = recording(heartRateEnabled = false, respirationEnabled = true)
+    fun buildScenarioExport_categoryEmittedAsString() {
+        val scenario = scenario(code = ScenarioCode.MACHINE_JAM)
 
-        val result = mapper.buildRecordingData(recording, emptyList())
+        val result = mapper.buildScenarioExport(scenario, emptyList())
 
-        assertNull(result.sensors.heartRate)
-        assertNull(result.sensors.esenseRrInterval)
-        assertNotNull(result.sensors.respiration)
+        assertEquals("MACHINE_JAM", result.scenarioCode)
+        assertEquals("B", result.scenarioCategory)
     }
 
     @Test
-    fun buildRecordingData_respirationDisabled_sensorInfoNull() = runTest {
-        val recording = recording(heartRateEnabled = true, respirationEnabled = false)
+    fun buildScenarioExport_reactionTimeDerived() {
+        val scenario = scenario(
+            eventTimestampMs = 10_000L,
+            reactionTimestampMs = 10_612L
+        )
 
-        val result = mapper.buildRecordingData(recording, emptyList())
+        val result = mapper.buildScenarioExport(scenario, emptyList())
 
-        assertNotNull(result.sensors.heartRate)
-        assertNull(result.sensors.respiration)
+        assertEquals(10_000L, result.eventTimestampMs)
+        assertEquals(10_612L, result.reactionTimestampMs)
+        assertEquals(612L, result.reactionTimeMs)
     }
 
     @Test
-    fun buildRecordingData_esenseRrIntervalPopulated_whenEnabledWithSamples() = runTest {
-        val recording = recording(heartRateEnabled = true, esenseRrIntervalSampleCount = 10)
+    fun buildScenarioExport_reactionTimeNullWhenEventMissing() {
+        val scenario = scenario(eventTimestampMs = null, reactionTimestampMs = null)
 
-        val result = mapper.buildRecordingData(recording, emptyList())
+        val result = mapper.buildScenarioExport(scenario, emptyList())
 
-        assertNotNull(result.sensors.esenseRrInterval)
-        assertEquals(10, result.sensors.esenseRrInterval!!.sampleCount)
+        assertNull(result.reactionTimeMs)
     }
 
-    // -- Gap detection conditional logic --
-
     @Test
-    fun buildRecordingData_heartRateDisabled_noGapsDetected() = runTest {
-        val recording = recording(heartRateEnabled = false)
+    fun buildScenarioExport_gapsNullWhenNoSignificantGaps() {
+        val scenario = scenario()
         val samples = listOf(
-            sample(recording.id, SensorType.HEART_RATE, elapsedMs = 0),
-            sample(recording.id, SensorType.HEART_RATE, elapsedMs = 60_000)
+            sample(scenario.id, SensorType.HEART_RATE, elapsedMs = 0L),
+            sample(scenario.id, SensorType.HEART_RATE, elapsedMs = 1_000L)
         )
 
-        val result = mapper.buildRecordingData(recording, samples)
+        val result = mapper.buildScenarioExport(scenario, samples)
 
-        assertNull(result.recordingGaps)
+        assertNull(result.gaps)
     }
 
     @Test
-    fun buildRecordingData_heartRateEnabled_gapsDetected() = runTest {
-        val recording = recording(heartRateEnabled = true, heartRateSampleCount = 3)
+    fun buildScenarioExport_heartRateGapsDetected() {
+        val scenario = scenario()
         val samples = listOf(
-            sample(recording.id, SensorType.HEART_RATE, elapsedMs = 11_000),
-            sample(recording.id, SensorType.HEART_RATE, elapsedMs = 12_000),
-            sample(recording.id, SensorType.HEART_RATE, elapsedMs = 25_000)
+            sample(scenario.id, SensorType.HEART_RATE, elapsedMs = 11_000L),
+            sample(scenario.id, SensorType.HEART_RATE, elapsedMs = 12_000L),
+            sample(scenario.id, SensorType.HEART_RATE, elapsedMs = 25_000L)
         )
 
-        val result = mapper.buildRecordingData(recording, samples)
+        val result = mapper.buildScenarioExport(scenario, samples)
 
-        assertNotNull(result.recordingGaps)
-        val hrGaps = result.recordingGaps!!.esensePulseHeartRate
-        assertNotNull(hrGaps)
-        assertTrue(hrGaps!!.gapCount > 0)
+        assertNotNull(result.gaps)
+        assertNotNull(result.gaps!!.heartRate)
+        assertTrue(result.gaps!!.heartRate!!.gapCount > 0)
     }
 
-    // -- buildExportData: statistics and event mapping --
-
     @Test
-    fun buildExportData_statisticsReflectSessionEntity() = runTest {
-        val test = SessionEntity(
-            recordingCount = 2,
-            totalHeartRateSampleCount = 100,
-            totalRespirationSampleCount = 50,
-            totalEsenseRrIntervalSampleCount = 80
+    fun buildExportData_statisticsReflectSession() = runTest {
+        val participant = participant()
+        val session = session(
+            scenarioCount = 3,
+            hrSampleCount = 100,
+            respirationSampleCount = 50,
+            rrIntervalSampleCount = 80,
+            gsrSampleCount = 12
         )
 
-        val result = mapper.buildExportData(test, emptyList())
+        val result = mapper.buildExportData(participant, session, emptyList())
 
-        val stats = result.test.statistics
-        assertEquals(2, stats.recordingCount)
-        assertEquals(100, stats.totalHeartRateSamples)
-        assertEquals(50, stats.totalRespirationSamples)
-        assertEquals(80, stats.totalEsenseRrIntervalSamples)
+        assertEquals(3, result.session.statistics.scenarioCount)
+        assertEquals(100, result.session.statistics.hrSampleCount)
+        assertEquals(50, result.session.statistics.respirationSampleCount)
+        assertEquals(80, result.session.statistics.rrIntervalSampleCount)
+        assertEquals(12, result.session.statistics.gsrSampleCount)
     }
 
-    // -- Recording data in export --
-
     @Test
-    fun buildExportData_recordingSamplesIncluded() = runTest {
-        val test = SessionEntity()
-        val recording = recording(heartRateEnabled = true, heartRateSampleCount = 2)
+    fun buildExportData_scenariosIncludedWithSamples() = runTest {
+        val participant = participant()
+        val session = session()
+        val scenario = scenario(id = 42L)
         fakeSensorSampleDao.samples.addAll(listOf(
-            sample(recording.id, SensorType.HEART_RATE, value = 72f),
-            sample(recording.id, SensorType.HEART_RATE, value = 75f)
+            sample(scenario.id, SensorType.HEART_RATE, value = 72f),
+            sample(scenario.id, SensorType.HEART_RATE, value = 75f)
         ))
 
-        val result = mapper.buildExportData(test, listOf(recording))
+        val result = mapper.buildExportData(participant, session, listOf(scenario))
 
-        assertEquals(1, result.test.recordings.size)
-        assertEquals(2, result.test.recordings[0].data.size)
-        assertEquals(72f, result.test.recordings[0].data[0].value, 0f)
+        assertEquals(1, result.scenarios.size)
+        assertEquals(2, result.scenarios[0].samples.size)
+        assertEquals(72f, result.scenarios[0].samples[0].value, 0f)
     }
 
     @Test
-    fun buildExportData_emptyRecordings_emptyList() = runTest {
-        val test = SessionEntity()
+    fun buildExportData_participantFieldsMapped() = runTest {
+        val participant = participant(code = "P-042", age = 31, gender = "F")
+        val session = session()
 
-        val result = mapper.buildExportData(test, emptyList())
+        val result = mapper.buildExportData(participant, session, emptyList())
 
-        assertTrue(result.test.recordings.isEmpty())
+        assertEquals("P-042", result.participant.participantCode)
+        assertEquals(31, result.participant.age)
+        assertEquals("F", result.participant.gender)
     }
 
     @Test
-    fun buildExportData_testFieldsMapped() = runTest {
-        val test = SessionEntity(
-            sessionIdentifier = "BMX-260413-141530",
-            sessionNumber = "260413-141530",
-            status = SessionStatus.COMPLETED,
-            notes = "Patient improved"
+    fun buildExportData_sessionFieldsMapped() = runTest {
+        val participant = participant()
+        val session = session(
+            sessionCode = "BMX-260528-143012",
+            status = SessionStatus.UPLOADED,
+            notes = "WiFi dropped at min 7"
         )
 
-        val result = mapper.buildExportData(test, emptyList())
+        val result = mapper.buildExportData(participant, session, emptyList())
 
-        assertEquals("BMX-260413-141530", result.test.id)
-        assertEquals("260413-141530", result.test.sessionNumber)
-        assertEquals("COMPLETED", result.test.status)
-        assertEquals("Patient improved", result.test.notes)
-        assertEquals("1.0.0", result.version)
+        assertEquals("BMX-260528-143012", result.session.sessionCode)
+        assertEquals("UPLOADED", result.session.status)
+        assertEquals("WiFi dropped at min 7", result.session.notes)
+        assertEquals("2.0.0", result.version)
     }
 
     // -- Helpers --
 
-    private var nextRecordingId = 1L
+    private fun participant(
+        code: String = "P-001",
+        age: Int? = 30,
+        gender: String? = "M"
+    ) = ParticipantEntity(id = 1L, participantCode = code, age = age, gender = gender)
 
-    private fun recording(
-        sessionId: Long = 1L,
-        heartRateEnabled: Boolean = false,
-        respirationEnabled: Boolean = false,
-        heartRateSampleCount: Int = 0,
+    private fun session(
+        sessionCode: String = "BMX-260528-143012",
+        status: SessionStatus = SessionStatus.COMPLETED,
+        notes: String = "",
+        scenarioCount: Int = 0,
+        hrSampleCount: Int = 0,
         respirationSampleCount: Int = 0,
-        esenseRrIntervalSampleCount: Int = 0
-    ): RecordingEntity {
-        val id = nextRecordingId++
-        return RecordingEntity(
-            id = id,
+        rrIntervalSampleCount: Int = 0,
+        gsrSampleCount: Int = 0
+    ) = SessionEntity(
+        id = 1L,
+        participantId = 1L,
+        sessionCode = sessionCode,
+        startedAt = 1_000_000L,
+        endedAt = 1_060_000L,
+        status = status,
+        notes = notes,
+        hrSampleCount = hrSampleCount,
+        respirationSampleCount = respirationSampleCount,
+        rrIntervalSampleCount = rrIntervalSampleCount,
+        gsrSampleCount = gsrSampleCount,
+        scenarioCount = scenarioCount
+    )
+
+    private var nextScenarioId = 1L
+    private fun scenario(
+        id: Long? = null,
+        sessionId: Long = 1L,
+        code: ScenarioCode = ScenarioCode.FALLING_PALLET,
+        eventTimestampMs: Long? = null,
+        reactionTimestampMs: Long? = null
+    ): ScenarioEntity {
+        val actualId = id ?: nextScenarioId++
+        return ScenarioEntity(
+            id = actualId,
             sessionId = sessionId,
-            recordingIdentifier = "BMX-260413-141530-R${String.format("%02d", id)}",
-            sequenceNumber = id.toInt(),
-            startedAt = 1000000L,
-            endedAt = 1060000L,
-            durationMs = 60000L,
-            status = RecordingStatus.COMPLETED,
-            heartRateEnabled = heartRateEnabled,
-            respirationEnabled = respirationEnabled,
-            heartRateSampleCount = heartRateSampleCount,
-            respirationSampleCount = respirationSampleCount,
-            esenseRrIntervalSampleCount = esenseRrIntervalSampleCount
+            scenarioCode = code,
+            scenarioCategory = code.category,
+            startedAt = 1_000_000L,
+            endedAt = 1_060_000L,
+            eventTimestampMs = eventTimestampMs,
+            reactionTimestampMs = reactionTimestampMs
         )
     }
 
+    @Suppress("UNUSED_PARAMETER")
+    private fun ScenarioCategory.unused() = Unit
+
     private fun sample(
-        recordingId: Long,
+        scenarioId: Long,
         sensorType: SensorType,
         elapsedMs: Long = 0L,
         value: Float = 72f
     ) = SensorSampleEntity(
-        recordingId = recordingId,
-        timestampMs = 1000000L + elapsedMs,
+        scenarioId = scenarioId,
+        timestampMs = 1_000_000L + elapsedMs,
         elapsedMs = elapsedMs,
         sensorType = sensorType,
         value = value
-    )
-
-    private fun SessionEntity(
-        sessionIdentifier: String = "BMX-260413-141530",
-        sessionNumber: String = "260413-141530",
-        status: SessionStatus = SessionStatus.COMPLETED,
-        notes: String = "",
-        recordingCount: Int = 0,
-        totalHeartRateSampleCount: Int = 0,
-        totalRespirationSampleCount: Int = 0,
-        totalEsenseRrIntervalSampleCount: Int = 0
-    ) = SessionEntity(
-        id = 1L,
-        sessionNumber = sessionNumber,
-        sessionIdentifier = sessionIdentifier,
-        createdAt = 1000000L,
-        endedAt = 1060000L,
-        durationMs = 60000L,
-        status = status,
-        notes = notes,
-        recordingCount = recordingCount,
-        totalHeartRateSampleCount = totalHeartRateSampleCount,
-        totalRespirationSampleCount = totalRespirationSampleCount,
-        totalEsenseRrIntervalSampleCount = totalEsenseRrIntervalSampleCount
     )
 }

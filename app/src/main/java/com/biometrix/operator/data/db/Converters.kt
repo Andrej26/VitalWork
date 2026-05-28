@@ -1,4 +1,4 @@
-﻿package com.biometrix.operator.data.db
+package com.biometrix.operator.data.db
 
 import androidx.room.TypeConverter
 
@@ -11,10 +11,16 @@ class Converters {
     fun toSessionStatus(value: String): SessionStatus = SessionStatus.valueOf(value)
 
     @TypeConverter
-    fun fromRecordingStatus(status: RecordingStatus): String = status.name
+    fun fromScenarioCategory(category: ScenarioCategory): String = category.name
 
     @TypeConverter
-    fun toRecordingStatus(value: String): RecordingStatus = RecordingStatus.valueOf(value)
+    fun toScenarioCategory(value: String): ScenarioCategory = ScenarioCategory.valueOf(value)
+
+    @TypeConverter
+    fun fromScenarioCode(code: ScenarioCode): String = code.name
+
+    @TypeConverter
+    fun toScenarioCode(value: String): ScenarioCode = ScenarioCode.valueOf(value)
 
     @TypeConverter
     fun fromSensorType(sensorType: SensorType): String = sensorType.name

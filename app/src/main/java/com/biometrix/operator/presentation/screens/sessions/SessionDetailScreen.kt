@@ -1,4 +1,4 @@
-﻿package com.biometrix.operator.presentation.screens.sessions
+package com.biometrix.operator.presentation.screens.sessions
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -68,7 +68,6 @@ fun SessionDetailScreen(
     var showReExportConfirmation by remember { mutableStateOf(false) }
     var showCsvDialog by remember { mutableStateOf(showCsvSaved) }
 
-    // Handle export result
     LaunchedEffect(uiState.exportResult) {
         uiState.exportResult?.let { message ->
             snackbarHostState.showSnackbar(message)
@@ -76,16 +75,15 @@ fun SessionDetailScreen(
         }
     }
 
-    // Test completed dialog
     if (showCsvDialog && !uiState.isLoading) {
-        val recordingCount = uiState.recordings.size
+        val scenarioCount = uiState.scenarios.size
         AlertDialog(
             onDismissRequest = { showCsvDialog = false },
-            title = { Text("Test saved") },
+            title = { Text("Session saved") },
             text = {
                 Column {
-                    if (recordingCount > 0) {
-                        Text("Test completed with $recordingCount recording(s).")
+                    if (scenarioCount > 0) {
+                        Text("Session completed with $scenarioCount scenario(s).")
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = "Use Export to save data to Documents folder.",
@@ -93,7 +91,7 @@ fun SessionDetailScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     } else {
-                        Text("Test completed. No sensor data was recorded.")
+                        Text("Session completed. No scenarios were recorded.")
                     }
                 }
             },
@@ -105,14 +103,11 @@ fun SessionDetailScreen(
         )
     }
 
-    // Delete confirmation
     if (showDeleteConfirmation) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirmation = false },
-            title = { Text("Delete test?") },
-     //       text = { Text("This will permanently delete all data for this test including the CSV file. This cannot be undone.") },
-     //       text = { Text("This will permanently delete the record from both the database and the application, only the exported files will remain in Documents. If you have not exported the files for this test, do so or you will lose all data with this test.") },
-            text = { Text("This test will be permanently deleted. Make sure you've exported it to Documents first, or you'll lose all data.") },
+            title = { Text("Delete session?") },
+            text = { Text("This session will be permanently deleted. Make sure you've exported it to Documents first, or you'll lose all data.") },
             confirmButton = {
                 TextButton(onClick = {
                     showDeleteConfirmation = false
@@ -129,16 +124,15 @@ fun SessionDetailScreen(
         )
     }
 
-    // Re-export confirmation
     if (showReExportConfirmation) {
         AlertDialog(
             onDismissRequest = { showReExportConfirmation = false },
-            title = { Text("Re-export test?") },
+            title = { Text("Re-export session?") },
             text = { Text("This will overwrite previously exported files in Documents/BioMetrix/.") },
             confirmButton = {
                 TextButton(onClick = {
                     showReExportConfirmation = false
-                    viewModel.exportTest()
+                    viewModel.exportSession()
                 }) {
                     Text("Re-export")
                 }
@@ -160,10 +154,10 @@ fun SessionDetailScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = uiState.test?.let { "Test #${it.sessionNumber}" } ?: "Test",
+                            text = uiState.session?.sessionCode ?: "Session",
                             fontWeight = FontWeight.SemiBold
                         )
-                        uiState.test?.status?.let { status ->
+                        uiState.session?.status?.let { status ->
                             StatusBadge(status = status)
                         }
                     }
@@ -195,8 +189,8 @@ fun SessionDetailScreen(
             return@Scaffold
         }
 
-        val test = uiState.test
-        if (test == null) {
+        val session = uiState.session
+        if (session == null) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -204,7 +198,7 @@ fun SessionDetailScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "Test not found",
+                    text = "Session not found",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -223,7 +217,6 @@ fun SessionDetailScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Summary Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
@@ -240,18 +233,19 @@ fun SessionDetailScreen(
                         fontWeight = FontWeight.Medium
                     )
 
-                    SummaryRow("Date", dateFormat.format(Date(test.createdAt)))
+                    SummaryRow("Date", dateFormat.format(Date(session.startedAt)))
 
-                    val startTime = timeFormat.format(Date(test.createdAt))
-                    val endTime = test.endedAt?.let { timeFormat.format(Date(it)) } ?: "N/A"
+                    val startTime = timeFormat.format(Date(session.startedAt))
+                    val endTime = session.endedAt?.let { timeFormat.format(Date(it)) } ?: "N/A"
                     SummaryRow("Time", "$startTime - $endTime")
 
-                    SummaryRow("Duration", formatDuration(test.durationMs))
+                    val durationMs = session.endedAt?.let { it - session.startedAt } ?: 0L
+                    SummaryRow("Duration", formatDuration(durationMs))
 
+                    SummaryRow("Scenarios", session.scenarioCount.toString())
                 }
             }
 
-            // Actions Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
@@ -268,17 +262,16 @@ fun SessionDetailScreen(
                         fontWeight = FontWeight.Medium
                     )
 
-                    // Export button
                     Button(
                         onClick = {
-                            if (test.status == SessionStatus.EXPORTED) {
+                            if (session.status == SessionStatus.UPLOADED) {
                                 showReExportConfirmation = true
                             } else {
-                                viewModel.exportTest()
+                                viewModel.exportSession()
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = !uiState.isExporting && uiState.recordings.isNotEmpty()
+                        enabled = !uiState.isExporting && uiState.scenarios.isNotEmpty()
                     ) {
                         if (uiState.isExporting) {
                             CircularProgressIndicator(
@@ -293,10 +286,12 @@ fun SessionDetailScreen(
                             )
                         }
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text(if (test.status == SessionStatus.EXPORTED) "Re-export" else "Export to Documents")
+                        Text(
+                            if (session.status == SessionStatus.UPLOADED) "Re-export"
+                            else "Export to Documents"
+                        )
                     }
 
-                    // Delete button
                     OutlinedButton(
                         onClick = { showDeleteConfirmation = true },
                         modifier = Modifier.fillMaxWidth(),
@@ -311,7 +306,7 @@ fun SessionDetailScreen(
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Delete Test")
+                        Text("Delete Session")
                     }
                 }
             }
@@ -334,10 +329,10 @@ private fun StatusBadge(status: SessionStatus) {
             MaterialTheme.colorScheme.onSecondaryContainer,
             "Completed"
         )
-        SessionStatus.EXPORTED -> Triple(
+        SessionStatus.UPLOADED -> Triple(
             MaterialTheme.colorScheme.tertiaryContainer,
             MaterialTheme.colorScheme.onTertiaryContainer,
-            "Exported"
+            "Uploaded"
         )
     }
 
@@ -380,5 +375,3 @@ private fun formatDuration(ms: Long): String {
     val seconds = totalSeconds % 60
     return String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds)
 }
-
-

@@ -1,4 +1,4 @@
-﻿package com.biometrix.operator.presentation.navigation
+package com.biometrix.operator.presentation.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
@@ -9,6 +9,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.biometrix.operator.presentation.screens.vr.VRConnectionScreen
 import com.biometrix.operator.presentation.screens.home.HomeScreen
+import com.biometrix.operator.presentation.screens.participants.ParticipantEntryScreen
 import com.biometrix.operator.presentation.screens.sensors.SensorDetailScreen
 import com.biometrix.operator.presentation.screens.sensors.SensorsScreen
 import com.biometrix.operator.presentation.screens.sessions.SessionControlScreen
@@ -24,12 +25,13 @@ sealed class Route(val route: String) {
     }
     data object VrControl : Route("vr_control")
     data object Sessions : Route("sessions")
-    data object SessionActive : Route("tests/active/{testId}") {
-        fun createRoute(sessionId: Long) = "tests/active/$sessionId"
+    data object ParticipantEntry : Route("participants/new")
+    data object SessionActive : Route("sessions/active/{sessionId}") {
+        fun createRoute(sessionId: Long) = "sessions/active/$sessionId"
     }
-    data object SessionReview : Route("tests/review/{testId}?showCsvSaved={showCsvSaved}") {
+    data object SessionReview : Route("sessions/review/{sessionId}?showCsvSaved={showCsvSaved}") {
         fun createRoute(sessionId: Long, showCsvSaved: Boolean = false) =
-            "tests/review/$sessionId?showCsvSaved=$showCsvSaved"
+            "sessions/review/$sessionId?showCsvSaved=$showCsvSaved"
     }
     data object Tutorial : Route("tutorial")
 }
@@ -48,6 +50,9 @@ fun AppNavigation(
                 onNavigateToSensors = { navController.navigate(Route.Sensors.route) },
                 onNavigateToVrControl = { navController.navigate(Route.VrControl.route) },
                 onNavigateToSessions = { navController.navigate(Route.Sessions.route) },
+                onNavigateToParticipantEntry = {
+                    navController.navigate(Route.ParticipantEntry.route)
+                },
                 onNavigateToSessionActive = { sessionId ->
                     navController.navigate(Route.SessionActive.createRoute(sessionId))
                 },
@@ -106,13 +111,24 @@ fun AppNavigation(
             )
         }
 
+        composable(Route.ParticipantEntry.route) {
+            ParticipantEntryScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onSessionStarted = { sessionId ->
+                    navController.navigate(Route.SessionActive.createRoute(sessionId)) {
+                        popUpTo(Route.Home.route)
+                    }
+                }
+            )
+        }
+
         composable(
             route = Route.SessionActive.route,
             arguments = listOf(
-                navArgument("testId") { type = NavType.LongType }
+                navArgument("sessionId") { type = NavType.LongType }
             )
         ) { backStackEntry ->
-            val sessionId = backStackEntry.arguments?.getLong("testId") ?: -1L
+            val sessionId = backStackEntry.arguments?.getLong("sessionId") ?: -1L
             SessionControlScreen(
                 sessionId = sessionId,
                 onNavigateBack = { navController.popBackStack() },
@@ -127,14 +143,14 @@ fun AppNavigation(
         composable(
             route = Route.SessionReview.route,
             arguments = listOf(
-                navArgument("testId") { type = NavType.LongType },
+                navArgument("sessionId") { type = NavType.LongType },
                 navArgument("showCsvSaved") {
                     type = NavType.BoolType
                     defaultValue = false
                 }
             )
         ) { backStackEntry ->
-            val sessionId = backStackEntry.arguments?.getLong("testId") ?: -1L
+            val sessionId = backStackEntry.arguments?.getLong("sessionId") ?: -1L
             val showCsvSaved = backStackEntry.arguments?.getBoolean("showCsvSaved") ?: false
             SessionDetailScreen(
                 sessionId = sessionId,

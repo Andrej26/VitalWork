@@ -52,7 +52,7 @@ fun RecordingPanel(
     isRespirationConnected: Boolean,
     heartRateSampleCount: Int,
     respirationSampleCount: Int,
-    recordingIdentifier: String?,
+    scenarioIdentifier: String?,
     canStart: Boolean,
     onStart: () -> Unit,
     onStop: () -> Unit,
@@ -118,7 +118,7 @@ fun RecordingPanel(
                 }
 
                 // Show recording identifier if available
-                recordingIdentifier?.let { id ->
+                scenarioIdentifier?.let { id ->
                     if (recordingState == DataRecordingState.IDLE) {
                         Text(
                             text = id,

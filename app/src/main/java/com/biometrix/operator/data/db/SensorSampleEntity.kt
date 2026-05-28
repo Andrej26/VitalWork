@@ -8,40 +8,41 @@ import androidx.room.PrimaryKey
 enum class SensorType {
     HEART_RATE,
     RESPIRATION,
-    ESENSE_RR_INTERVAL
+    ESENSE_RR_INTERVAL,
+    GSR
 }
 
 @Entity(
     tableName = "sensor_samples",
     foreignKeys = [
         ForeignKey(
-            entity = RecordingEntity::class,
+            entity = ScenarioEntity::class,
             parentColumns = ["id"],
-            childColumns = ["recordingId"],
+            childColumns = ["scenarioId"],
             onDelete = ForeignKey.CASCADE
         )
     ],
     indices = [
-        Index(value = ["recordingId"]),
-        Index(value = ["recordingId", "timestampMs"])
+        Index(value = ["scenarioId", "timestampMs"])
     ]
 )
 data class SensorSampleEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
 
-    /** Foreign key to the recording this sample belongs to */
-    val recordingId: Long,
+    /** Foreign key to the scenario this sample belongs to */
+    val scenarioId: Long,
 
-    /** Absolute Unix timestamp in milliseconds */
+    /** Absolute Unix timestamp in milliseconds (Android clock) */
     val timestampMs: Long,
 
-    /** Elapsed time since recording start in milliseconds */
+    /** Elapsed time since scenario start in milliseconds */
     val elapsedMs: Long,
 
     /** Type of sensor that produced this sample */
     val sensorType: SensorType,
 
-    /** Sensor reading value (BPM for heart rate, breathing amplitude for respiration) */
+    /** Sensor reading value. Units depend on sensorType:
+     *  BPM (heart rate), ms (RR interval), breaths/min (respiration), μS (GSR). */
     val value: Float
 )

@@ -4,7 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.biometrix.operator.data.db.SessionEntity
 import com.biometrix.operator.data.db.SessionStatus
-import com.biometrix.operator.data.recording.SensorRecordingRepository
+import com.biometrix.operator.data.recording.ScenarioRecordingRepository
 import com.biometrix.operator.data.recording.model.DataRecordingState
 import com.biometrix.operator.data.repository.ConnectionRepository
 import com.biometrix.operator.data.repository.SessionRepository
@@ -30,7 +30,7 @@ data class SessionsUiState(
 class SessionsViewModel @Inject constructor(
     private val sessionRepository: SessionRepository,
     private val connectionRepository: ConnectionRepository,
-    private val sensorRecordingRepository: SensorRecordingRepository,
+    private val sensorRecordingRepository: ScenarioRecordingRepository,
 ) : ViewModel() {
 
     private val tickerFlow = flow {
@@ -48,7 +48,7 @@ class SessionsViewModel @Inject constructor(
         tickerFlow
     ) { allSessions, activeSession, heartRate, recordingState, currentTimeMs ->
         val completedSessions = allSessions.filter { it.status != SessionStatus.ACTIVE }
-        val activeSessionDurationMs = activeSession?.let { currentTimeMs - it.createdAt } ?: 0L
+        val activeSessionDurationMs = activeSession?.let { currentTimeMs - it.startedAt } ?: 0L
 
         SessionsUiState(
             sessions = completedSessions,

@@ -1,32 +1,32 @@
-﻿package com.biometrix.operator.data.recording
+package com.biometrix.operator.data.recording
 
 import com.biometrix.operator.data.recording.model.DataRecordingState
-import com.biometrix.operator.data.recording.model.RecordingMetadata
+import com.biometrix.operator.data.recording.model.ScenarioMetadata
 import kotlinx.coroutines.flow.MutableStateFlow
 
-class FakeSensorRecordingRepository : SensorRecordingRepository {
+class FakeScenarioRecordingRepository : ScenarioRecordingRepository {
 
     override val recordingState = MutableStateFlow(DataRecordingState.IDLE)
     override val recordingDurationMs = MutableStateFlow(0L)
-    override val recordingMetadata = MutableStateFlow<RecordingMetadata?>(null)
+    override val recordingMetadata = MutableStateFlow<ScenarioMetadata?>(null)
 
     var startRecordingCallCount = 0
         private set
     var stopRecordingCallCount = 0
         private set
-    var lastStartsessionId: Long? = null
+    var lastStartScenarioId: Long? = null
         private set
-    var lastStartsessionIdentifier: String? = null
+    var lastStartScenarioIdentifier: String? = null
         private set
 
-    override suspend fun startRecording(sessionId: Long, sessionIdentifier: String) {
+    override suspend fun startRecording(scenarioId: Long, scenarioIdentifier: String) {
         startRecordingCallCount++
-        lastStartsessionId = sessionId
-        lastStartsessionIdentifier = sessionIdentifier
+        lastStartScenarioId = scenarioId
+        lastStartScenarioIdentifier = scenarioIdentifier
         recordingState.value = DataRecordingState.RECORDING
-        recordingMetadata.value = RecordingMetadata(
-            recordingId = 1L,
-            recordingIdentifier = "$sessionIdentifier-R01",
+        recordingMetadata.value = ScenarioMetadata(
+            scenarioId = scenarioId,
+            scenarioIdentifier = scenarioIdentifier,
             startTimestampMs = System.currentTimeMillis()
         )
     }

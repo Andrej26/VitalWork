@@ -1,11 +1,11 @@
-﻿package com.biometrix.operator.data.recording
+package com.biometrix.operator.data.recording
 
 import com.biometrix.operator.data.db.SensorSampleEntity
 import com.biometrix.operator.data.db.SensorType
 import com.biometrix.operator.data.model.ConnectionState
 import com.biometrix.operator.data.recording.model.DataRecordingState
-import com.biometrix.operator.data.recording.model.RecordingMetadata
-import com.biometrix.operator.data.repository.RecordingRepository
+import com.biometrix.operator.data.recording.model.ScenarioMetadata
+import com.biometrix.operator.data.repository.ScenarioRepository
 import com.biometrix.operator.data.sensor.DeviceState
 import com.biometrix.operator.data.sensor.SensorDevice
 import com.biometrix.operator.data.sensor.ble.BleManager
@@ -22,12 +22,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-class SensorRecordingRepositoryImpl(
+class ScenarioRecordingRepositoryImpl(
     private val bleManager: BleManager,
     private val respirationDevice: SensorDevice,
-    private val recordingRepository: RecordingRepository,
+    private val scenarioRepository: ScenarioRepository,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-) : SensorRecordingRepository {
+) : ScenarioRecordingRepository {
 
     private val _recordingState = MutableStateFlow(DataRecordingState.IDLE)
     override val recordingState: StateFlow<DataRecordingState> = _recordingState.asStateFlow()
@@ -35,8 +35,8 @@ class SensorRecordingRepositoryImpl(
     private val _recordingDurationMs = MutableStateFlow(0L)
     override val recordingDurationMs: StateFlow<Long> = _recordingDurationMs.asStateFlow()
 
-    private val _recordingMetadata = MutableStateFlow<RecordingMetadata?>(null)
-    override val recordingMetadata: StateFlow<RecordingMetadata?> = _recordingMetadata.asStateFlow()
+    private val _recordingMetadata = MutableStateFlow<ScenarioMetadata?>(null)
+    override val recordingMetadata: StateFlow<ScenarioMetadata?> = _recordingMetadata.asStateFlow()
 
     private var writeChannel = Channel<SensorSampleEntity>(Channel.BUFFERED)
 
@@ -45,13 +45,13 @@ class SensorRecordingRepositoryImpl(
     private val collectorJobs = mutableListOf<Job>()
 
     private var startTimeMs: Long = 0L
-    private var currentRecordingId: Long = 0L
+    private var currentScenarioId: Long = 0L
 
-
-    override suspend fun startRecording(sessionId: Long, sessionIdentifier: String) {
+    override suspend fun startRecording(scenarioId: Long, scenarioIdentifier: String) {
         if (_recordingState.value == DataRecordingState.RECORDING) return
 
         startTimeMs = System.currentTimeMillis()
+        currentScenarioId = scenarioId
 
         val isHeartRateConnected = bleManager.connectionState.value == ConnectionState.CONNECTED
         val respirationState = respirationDevice.state.value
@@ -66,21 +66,13 @@ class SensorRecordingRepositoryImpl(
             respirationDevice.startStreaming()
         }
 
-        // Create recording entity in database
-        val recording = recordingRepository.createRecording(
-            sessionId = sessionId,
-            sessionIdentifier = sessionIdentifier,
-            heartRateEnabled = shouldRecordHr,
-            respirationEnabled = shouldRecordResp
-        )
-        currentRecordingId = recording.id
-
-        _recordingMetadata.value = RecordingMetadata(
-            recordingId = recording.id,
-            recordingIdentifier = recording.recordingIdentifier,
+        _recordingMetadata.value = ScenarioMetadata(
+            scenarioId = scenarioId,
+            scenarioIdentifier = scenarioIdentifier,
             startTimestampMs = startTimeMs,
             heartRateRecording = shouldRecordHr,
-            respirationRecording = shouldRecordResp
+            respirationRecording = shouldRecordResp,
+            gsrRecording = false
         )
 
         // Ensure heart rate notifications are enabled before recording
@@ -100,7 +92,7 @@ class SensorRecordingRepositoryImpl(
                 // Flush batch when it reaches size limit or after 1 second
                 val now = System.currentTimeMillis()
                 if (batch.size >= batchSize || now - lastFlushTime > 1000) {
-                    recordingRepository.addSamples(batch.toList())
+                    scenarioRepository.addSamples(batch.toList())
                     batch.clear()
                     lastFlushTime = now
                 }
@@ -108,7 +100,7 @@ class SensorRecordingRepositoryImpl(
 
             // Flush remaining samples when channel closes
             if (batch.isNotEmpty()) {
-                recordingRepository.addSamples(batch.toList())
+                scenarioRepository.addSamples(batch.toList())
             }
         }
 
@@ -156,8 +148,8 @@ class SensorRecordingRepositoryImpl(
         dbWriterJob?.join()
         dbWriterJob = null
 
-        // Finalize recording (updates status, duration, sample counts)
-        recordingRepository.completeRecording(currentRecordingId)
+        // Mark the scenario as ended
+        scenarioRepository.endScenario(currentScenarioId)
 
         // Reset state
         resetState()
@@ -166,13 +158,13 @@ class SensorRecordingRepositoryImpl(
     private fun collectSensor(
         flow: SharedFlow<Float>,
         sensorType: SensorType,
-        updateMetadata: (RecordingMetadata) -> RecordingMetadata
+        updateMetadata: (ScenarioMetadata) -> ScenarioMetadata
     ): Job = scope.launch {
         flow.collect { value ->
             val now = System.currentTimeMillis()
             writeChannel.send(
                 SensorSampleEntity(
-                    recordingId = currentRecordingId,
+                    scenarioId = currentScenarioId,
                     timestampMs = now,
                     elapsedMs = now - startTimeMs,
                     sensorType = sensorType,
@@ -187,7 +179,7 @@ class SensorRecordingRepositoryImpl(
         _recordingState.value = DataRecordingState.IDLE
         _recordingDurationMs.value = 0L
         _recordingMetadata.value = null
-        currentRecordingId = 0L
+        currentScenarioId = 0L
 
         // Re-create the channel for the next recording
         writeChannel = Channel(Channel.BUFFERED)

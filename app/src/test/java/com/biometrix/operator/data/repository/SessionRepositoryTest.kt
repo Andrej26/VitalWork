@@ -1,12 +1,17 @@
-﻿package com.biometrix.operator.data.repository
+package com.biometrix.operator.data.repository
 
-import com.biometrix.operator.data.db.FakeRecordingDao
+import com.biometrix.operator.data.db.FakeScenarioDao
+import com.biometrix.operator.data.db.FakeSensorSampleDao
 import com.biometrix.operator.data.db.FakeSessionDao
-import com.biometrix.operator.data.db.RecordingEntity
-import com.biometrix.operator.data.db.RecordingStatus
+import com.biometrix.operator.data.db.ScenarioCategory
+import com.biometrix.operator.data.db.ScenarioCode
+import com.biometrix.operator.data.db.ScenarioEntity
+import com.biometrix.operator.data.db.SensorSampleEntity
+import com.biometrix.operator.data.db.SensorType
 import com.biometrix.operator.data.db.SessionStatus
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -15,107 +20,124 @@ import org.junit.Test
 class SessionRepositoryTest {
 
     private lateinit var fakeSessionDao: FakeSessionDao
-    private lateinit var fakeRecordingDao: FakeRecordingDao
+    private lateinit var fakeScenarioDao: FakeScenarioDao
+    private lateinit var fakeSensorSampleDao: FakeSensorSampleDao
     private lateinit var repository: SessionRepository
 
     @Before
     fun setUp() {
         fakeSessionDao = FakeSessionDao()
-        fakeRecordingDao = FakeRecordingDao()
-        repository = SessionRepository(fakeSessionDao, fakeRecordingDao)
+        fakeScenarioDao = FakeScenarioDao()
+        fakeSensorSampleDao = FakeSensorSampleDao()
+        repository = SessionRepository(fakeSessionDao, fakeScenarioDao, fakeSensorSampleDao)
     }
 
     @Test
-    fun createTest_formatsCorrectly() = runTest {
-        val test = repository.createSession()
+    fun createSession_formatsCodeCorrectly() = runTest {
+        val session = repository.createSession(participantId = 1L)
 
-        assertTrue(test.sessionIdentifier.startsWith("BMX-"))
-        assertTrue(test.sessionNumber.matches(Regex("\\d{6}-\\d{6}")))
-        assertEquals(SessionStatus.ACTIVE, test.status)
+        assertTrue(session.sessionCode.startsWith("BMX-"))
+        assertTrue(session.sessionCode.substring(4).matches(Regex("\\d{6}-\\d{6}")))
+        assertEquals(SessionStatus.ACTIVE, session.status)
+        assertEquals(1L, session.participantId)
     }
 
     @Test
-    fun endTest_aggregatesOnlyCompletedRecordings() = runTest {
-        val test = repository.createSession()
-        fakeRecordingDao.recordings.addAll(listOf(
-            recording(test.id, status = RecordingStatus.COMPLETED, heartRate = 10),
-            recording(test.id, status = RecordingStatus.COMPLETED, heartRate = 20),
-            recording(test.id, status = RecordingStatus.DISCARDED, heartRate = 99)
-        ))
+    fun createSessionIfNoneActive_returnsNullWhenActiveExists() = runTest {
+        repository.createSession(participantId = 1L)
 
-        repository.endSession(test.id, 2)
+        val second = repository.createSessionIfNoneActive(participantId = 1L)
 
-        val updated = fakeSessionDao.getSessionById(test.id)!!
+        assertNull(second)
+    }
+
+    @Test
+    fun endSession_aggregatesSampleCountsFromCompletedScenarios() = runTest {
+        val session = repository.createSession(participantId = 1L)
+        val s1 = insertScenario(session.id, endedAt = System.currentTimeMillis())
+        val s2 = insertScenario(session.id, endedAt = System.currentTimeMillis())
+        val unfinished = insertScenario(session.id, endedAt = null)
+
+        fakeSensorSampleDao.samples.addAll(samples(s1.id, SensorType.HEART_RATE, count = 10))
+        fakeSensorSampleDao.samples.addAll(samples(s2.id, SensorType.HEART_RATE, count = 5))
+        fakeSensorSampleDao.samples.addAll(samples(s1.id, SensorType.RESPIRATION, count = 3))
+        fakeSensorSampleDao.samples.addAll(samples(s2.id, SensorType.GSR, count = 7))
+        // Samples on the unfinished scenario should not be counted.
+        fakeSensorSampleDao.samples.addAll(samples(unfinished.id, SensorType.HEART_RATE, count = 999))
+
+        repository.endSession(session.id)
+
+        val updated = fakeSessionDao.getSessionById(session.id)!!
         assertEquals(SessionStatus.COMPLETED, updated.status)
-        assertEquals(30, updated.totalHeartRateSampleCount)
+        assertEquals(2, updated.scenarioCount)
+        assertEquals(15, updated.hrSampleCount)
+        assertEquals(3, updated.respirationSampleCount)
+        assertEquals(7, updated.gsrSampleCount)
+        assertNotNull(updated.endedAt)
     }
 
     @Test
-    fun endTest_sumsAllSampleCountFields() = runTest {
-        val test = repository.createSession()
-        fakeRecordingDao.recordings.addAll(listOf(
-            recording(test.id, status = RecordingStatus.COMPLETED,
-                heartRate = 5, respiration = 10, esenseRr = 30),
-            recording(test.id, status = RecordingStatus.COMPLETED,
-                heartRate = 1, respiration = 2, esenseRr = 6)
-        ))
+    fun endSession_nonExistentId_doesNothing() = runTest {
+        repository.endSession(999L)
 
-        repository.endSession(test.id, 2)
-
-        val updated = fakeSessionDao.getSessionById(test.id)!!
-        assertEquals(6, updated.totalHeartRateSampleCount)
-        assertEquals(12, updated.totalRespirationSampleCount)
-        assertEquals(36, updated.totalEsenseRrIntervalSampleCount)
-    }
-
-    @Test
-    fun endTest_nonExistentId_doesNothing() = runTest {
-        repository.endSession(999, 0)
-
-        assertTrue(fakeSessionDao.tests.isEmpty())
+        assertTrue(fakeSessionDao.sessions.isEmpty())
     }
 
     @Test
     fun updateNotes_persistsText() = runTest {
-        val test = repository.createSession()
+        val session = repository.createSession(participantId = 1L)
 
-        repository.updateNotes(test.id, "Patient showed improvement")
+        repository.updateNotes(session.id, "WiFi dropped at minute 7")
 
-        assertEquals("Patient showed improvement", fakeSessionDao.getSessionById(test.id)!!.notes)
+        assertEquals(
+            "WiFi dropped at minute 7",
+            fakeSessionDao.getSessionById(session.id)!!.notes
+        )
     }
 
     @Test
-    fun markExported_changesStatus() = runTest {
-        val test = repository.createSession()
+    fun markUploaded_changesStatus() = runTest {
+        val session = repository.createSession(participantId = 1L)
 
-        repository.markExported(test.id)
+        repository.markUploaded(session.id)
 
-        assertEquals(SessionStatus.EXPORTED, fakeSessionDao.getSessionById(test.id)!!.status)
+        assertEquals(SessionStatus.UPLOADED, fakeSessionDao.getSessionById(session.id)!!.status)
     }
 
     @Test
-    fun deleteTest_removesFromStorage() = runTest {
-        val test = repository.createSession()
+    fun deleteSession_removesFromStorage() = runTest {
+        val session = repository.createSession(participantId = 1L)
 
-        repository.deleteSession(test.id)
+        repository.deleteSession(session.id)
 
-        assertNull(fakeSessionDao.getSessionById(test.id))
+        assertNull(fakeSessionDao.getSessionById(session.id))
     }
 
-    private fun recording(
+    private fun insertScenario(
         sessionId: Long,
-        status: RecordingStatus = RecordingStatus.COMPLETED,
-        heartRate: Int = 0,
-        respiration: Int = 0,
-        esenseRr: Int = 0
-    ) = RecordingEntity(
-        sessionId = sessionId,
-        recordingIdentifier = "REC-${sessionId}-${System.nanoTime()}",
-        sequenceNumber = 1,
-        startedAt = System.currentTimeMillis(),
-        status = status,
-        heartRateSampleCount = heartRate,
-        respirationSampleCount = respiration,
-        esenseRrIntervalSampleCount = esenseRr
-    )
+        endedAt: Long?
+    ): ScenarioEntity {
+        val nextId = (fakeScenarioDao.scenarios.maxOfOrNull { it.id } ?: 0L) + 1
+        val scenario = ScenarioEntity(
+            id = nextId,
+            sessionId = sessionId,
+            scenarioCode = ScenarioCode.FALLING_PALLET,
+            scenarioCategory = ScenarioCategory.A,
+            startedAt = System.currentTimeMillis(),
+            endedAt = endedAt
+        )
+        fakeScenarioDao.scenarios.add(scenario)
+        return scenario
+    }
+
+    private fun samples(scenarioId: Long, sensorType: SensorType, count: Int): List<SensorSampleEntity> =
+        (1..count).map { i ->
+            SensorSampleEntity(
+                scenarioId = scenarioId,
+                timestampMs = System.currentTimeMillis() + i,
+                elapsedMs = i * 1000L,
+                sensorType = sensorType,
+                value = i.toFloat()
+            )
+        }
 }

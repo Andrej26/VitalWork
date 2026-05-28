@@ -1,24 +1,24 @@
-﻿package com.biometrix.operator.data.export
+package com.biometrix.operator.data.export
 
-import com.biometrix.operator.data.db.RecordingEntity
+import com.biometrix.operator.data.db.ParticipantEntity
+import com.biometrix.operator.data.db.ScenarioEntity
 import com.biometrix.operator.data.db.SensorSampleEntity
 import com.biometrix.operator.data.db.SensorType
 import com.biometrix.operator.data.db.SessionEntity
 import com.biometrix.operator.data.export.model.GapExport
-import com.biometrix.operator.data.export.model.RecordingData
-import com.biometrix.operator.data.export.model.RecordingGaps
-import com.biometrix.operator.data.export.model.SensorData
+import com.biometrix.operator.data.export.model.ParticipantExport
+import com.biometrix.operator.data.export.model.ScenarioExport
+import com.biometrix.operator.data.export.model.ScenarioGaps
 import com.biometrix.operator.data.export.model.SensorGapInfo
-import com.biometrix.operator.data.export.model.SensorInfo
-import com.biometrix.operator.data.export.model.SensorSample
-import com.biometrix.operator.data.export.model.TestData
-import com.biometrix.operator.data.export.model.TestExport
-import com.biometrix.operator.data.export.model.TestStatistics
+import com.biometrix.operator.data.export.model.SensorSampleExport
+import com.biometrix.operator.data.export.model.SessionExport
+import com.biometrix.operator.data.export.model.SessionInfo
+import com.biometrix.operator.data.export.model.SessionStatistics
 import com.biometrix.operator.data.recording.GapEvent
 import com.biometrix.operator.data.recording.detectEsenseRrIntervalGaps
 import com.biometrix.operator.data.recording.detectHeartRateGaps
 import com.biometrix.operator.data.recording.detectRespirationGaps
-import com.biometrix.operator.data.repository.RecordingRepository
+import com.biometrix.operator.data.repository.ScenarioRepository
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -27,94 +27,103 @@ import javax.inject.Singleton
 
 @Singleton
 class SessionExportMapper @Inject constructor(
-    private val recordingRepository: RecordingRepository
+    private val scenarioRepository: ScenarioRepository
 ) {
     private val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
 
     suspend fun buildExportData(
-        test: SessionEntity,
-        recordings: List<RecordingEntity>
-    ): TestExport {
-        val recordingDataList = mutableListOf<RecordingData>()
-
-        for (recording in recordings) {
-            val samples = recordingRepository.getSamplesForRecording(recording.id)
-            recordingDataList.add(buildRecordingData(recording, samples))
+        participant: ParticipantEntity,
+        session: SessionEntity,
+        scenarios: List<ScenarioEntity>
+    ): SessionExport {
+        val scenarioExports = scenarios.map { scenario ->
+            val samples = scenarioRepository.getSamplesForScenario(scenario.id)
+            buildScenarioExport(scenario, samples)
         }
 
-        return TestExport(
+        return SessionExport(
             exportedAt = isoFormat.format(Date()),
-            test = TestData(
-                id = test.sessionIdentifier,
-                sessionNumber = test.sessionNumber,
-                createdAt = isoFormat.format(Date(test.createdAt)),
-                endedAt = test.endedAt?.let { isoFormat.format(Date(it)) },
-                durationMs = test.durationMs,
-                status = test.status.name,
-                notes = test.notes,
-                statistics = TestStatistics(
-                    recordingCount = test.recordingCount,
-                    totalHeartRateSamples = test.totalHeartRateSampleCount,
-                    totalRespirationSamples = test.totalRespirationSampleCount,
-                    totalEsenseRrIntervalSamples = test.totalEsenseRrIntervalSampleCount
-                ),
-                recordings = recordingDataList
-            )
+            participant = ParticipantExport(
+                participantCode = participant.participantCode,
+                age = participant.age,
+                gender = participant.gender
+            ),
+            session = SessionInfo(
+                sessionCode = session.sessionCode,
+                startedAt = isoFormat.format(Date(session.startedAt)),
+                endedAt = session.endedAt?.let { isoFormat.format(Date(it)) },
+                status = session.status.name,
+                notes = session.notes,
+                statistics = SessionStatistics(
+                    scenarioCount = session.scenarioCount,
+                    hrSampleCount = session.hrSampleCount,
+                    respirationSampleCount = session.respirationSampleCount,
+                    rrIntervalSampleCount = session.rrIntervalSampleCount,
+                    gsrSampleCount = session.gsrSampleCount
+                )
+            ),
+            scenarios = scenarioExports
         )
     }
 
-    fun buildRecordingData(
-        recording: RecordingEntity,
+    fun buildScenarioExport(
+        scenario: ScenarioEntity,
         samples: List<SensorSampleEntity>
-    ): RecordingData {
-        val sensorSamples = samples.map { sample ->
-            SensorSample(
+    ): ScenarioExport {
+        val sampleExports = samples.map { sample ->
+            SensorSampleExport(
                 timestampMs = sample.timestampMs,
                 elapsedMs = sample.elapsedMs,
-                value = sample.value,
                 sensorType = when (sample.sensorType) {
-                    SensorType.HEART_RATE -> "esensePulse_hr"
-                    SensorType.ESENSE_RR_INTERVAL -> "esensePulse_rr"
-                    SensorType.RESPIRATION -> "esenseResp_resp"
-                }
+                    SensorType.HEART_RATE -> "heart_rate"
+                    SensorType.ESENSE_RR_INTERVAL -> "rr_interval"
+                    SensorType.RESPIRATION -> "respiration"
+                    SensorType.GSR -> "gsr"
+                },
+                value = sample.value
             )
         }
 
-        fun gapInfoOrNull(gaps: List<GapEvent>): SensorGapInfo? =
-            if (gaps.isEmpty()) null
-            else SensorGapInfo(gaps.size, gaps.sumOf { it.gapMs }, gaps.map { GapExport(it.startElapsedMs, it.endElapsedMs, it.gapMs) })
+        val hrGaps = detectHeartRateGaps(samples)
+        val rrGaps = detectEsenseRrIntervalGaps(samples)
+        val respGaps = detectRespirationGaps(samples)
 
-        val hrGaps       = if (recording.heartRateEnabled) detectHeartRateGaps(samples) else emptyList()
-        val esenseRrGaps = if (recording.heartRateEnabled && recording.esenseRrIntervalSampleCount > 0) detectEsenseRrIntervalGaps(samples) else emptyList()
-        val respGaps     = if (recording.respirationEnabled) detectRespirationGaps(samples) else emptyList()
+        val gaps = if (hrGaps.isEmpty() && rrGaps.isEmpty() && respGaps.isEmpty()) {
+            null
+        } else {
+            ScenarioGaps(
+                heartRate = gapInfoOrNull(hrGaps),
+                rrInterval = gapInfoOrNull(rrGaps),
+                respiration = gapInfoOrNull(respGaps)
+            )
+        }
 
-        val allGaps = listOf(hrGaps, esenseRrGaps, respGaps)
-        val recordingGaps = if (allGaps.all { it.isEmpty() }) null
-        else RecordingGaps(
-            esensePulseHeartRate = gapInfoOrNull(hrGaps),
-            esensePulseRrInterval = gapInfoOrNull(esenseRrGaps),
-            esenseRespRespiration = gapInfoOrNull(respGaps)
-        )
+        val reactionTimeMs = if (
+            scenario.eventTimestampMs != null && scenario.reactionTimestampMs != null
+        ) {
+            scenario.reactionTimestampMs - scenario.eventTimestampMs
+        } else {
+            null
+        }
 
-        return RecordingData(
-            id = recording.recordingIdentifier,
-            sequence = recording.sequenceNumber,
-            startedAt = isoFormat.format(Date(recording.startedAt)),
-            endedAt = recording.endedAt?.let { isoFormat.format(Date(it)) },
-            durationMs = recording.durationMs,
-            sensors = SensorData(
-                heartRate = if (recording.heartRateEnabled) {
-                    SensorInfo(enabled = true, sampleCount = recording.heartRateSampleCount)
-                } else null,
-                esenseRrInterval = if (recording.heartRateEnabled && recording.esenseRrIntervalSampleCount > 0) {
-                    SensorInfo(enabled = true, sampleCount = recording.esenseRrIntervalSampleCount)
-                } else null,
-                respiration = if (recording.respirationEnabled) {
-                    SensorInfo(enabled = true, sampleCount = recording.respirationSampleCount)
-                } else null
-            ),
-            recordingGaps = recordingGaps,
-            data = sensorSamples
+        return ScenarioExport(
+            scenarioCode = scenario.scenarioCode.name,
+            scenarioCategory = scenario.scenarioCategory.name,
+            startedAt = isoFormat.format(Date(scenario.startedAt)),
+            endedAt = scenario.endedAt?.let { isoFormat.format(Date(it)) },
+            eventTimestampMs = scenario.eventTimestampMs,
+            reactionTimestampMs = scenario.reactionTimestampMs,
+            reactionTimeMs = reactionTimeMs,
+            gaps = gaps,
+            samples = sampleExports
         )
     }
+
+    private fun gapInfoOrNull(gaps: List<GapEvent>): SensorGapInfo? =
+        if (gaps.isEmpty()) null
+        else SensorGapInfo(
+            gapCount = gaps.size,
+            gapTotalMs = gaps.sumOf { it.gapMs },
+            gaps = gaps.map { GapExport(it.startElapsedMs, it.endElapsedMs, it.gapMs) }
+        )
 }

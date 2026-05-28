@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun ActiveSessionBanner(
-    sessionNumber: String,
+    sessionCode: String,
     duration: String,
     heartRate: Int?,
     isRecording: Boolean,
@@ -97,7 +97,7 @@ fun ActiveSessionBanner(
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Test #$sessionNumber",
+                    text = sessionCode,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold
                 )

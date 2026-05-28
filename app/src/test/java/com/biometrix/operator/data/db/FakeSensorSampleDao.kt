@@ -8,13 +8,13 @@ class FakeSensorSampleDao : SensorSampleDao {
         this.samples.addAll(samples)
     }
 
-    override suspend fun getSamplesForRecording(recordingId: Long): List<SensorSampleEntity> =
-        samples.filter { it.recordingId == recordingId }.sortedBy { it.timestampMs }
+    override suspend fun getSamplesForScenario(scenarioId: Long): List<SensorSampleEntity> =
+        samples.filter { it.scenarioId == scenarioId }.sortedBy { it.timestampMs }
 
-    override suspend fun getSampleCountBySensorType(recordingId: Long, sensorType: SensorType): Int =
-        samples.count { it.recordingId == recordingId && it.sensorType == sensorType }
+    override suspend fun getSampleCountBySensorType(scenarioId: Long, sensorType: SensorType): Int =
+        samples.count { it.scenarioId == scenarioId && it.sensorType == sensorType }
 
-    override suspend fun deleteAllForRecording(recordingId: Long) {
-        samples.removeAll { it.recordingId == recordingId }
+    override suspend fun deleteAllForScenario(scenarioId: Long) {
+        samples.removeAll { it.scenarioId == scenarioId }
     }
 }

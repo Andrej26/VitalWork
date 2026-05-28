@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-BioMetrixOperator is an Android mobile application written in Kotlin using Jetpack Compose. It is a **clinical VR therapy control application** for claustrophobia exposure therapy (BioMetrix).
+BioMetrixOperator is an Android mobile application written in Kotlin using Jetpack Compose. It is the **operator-side control app** for a research study measuring **operator reaction time in VR-simulated logistics and industrial scenarios** (Project 3 with PBN partner — see `test/Assignment for PBN Partner_Project 3.docx`). The tablet pairs with a Meta Quest VR headset over local Wi-Fi, captures physiological data from BLE / audio-jack sensors during each scenario, and exports the bundled dataset (participant + session + scenarios + samples) to a central server at session end.
 
 **Package:** `com.biometrix.operator`
 
@@ -108,21 +108,23 @@ com.biometrix.operator/
 ├── di/
 │   └── AppModule.kt                        # Hilt dependency injection module
 ├── data/
-│   ├── db/                                 # Room database (v1, 4 entities, 4 DAOs)
+│   ├── db/                                 # Room database (v2, 4 entities, 4 DAOs)
 │   │   ├── AppDatabase.kt
 │   │   ├── Converters.kt                   # Enum type converters
-│   │   ├── TestEntity.kt                   # Test + TestStatus enum
-│   │   ├── TestDao.kt
-│   │   ├── RecordingEntity.kt              # Recording + RecordingStatus enum
-│   │   ├── RecordingDao.kt
-│   │   ├── SensorSampleEntity.kt           # Sensor samples + SensorType enum
-│   │   ├── SensorSampleDao.kt
-│   │   ├── SudsEventEntity.kt              # SUDS score events
-│   │   └── SudsEventDao.kt
-│   ├── export/                             # Test data export (JSON + CSV)
-│   │   ├── TestExportService.kt
+│   │   ├── ParticipantEntity.kt            # Anonymized test subject
+│   │   ├── ParticipantDao.kt
+│   │   ├── SessionEntity.kt                # Session + SessionStatus enum
+│   │   ├── SessionDao.kt
+│   │   ├── ScenarioEntity.kt               # VR scenario run + ScenarioCode + ScenarioCategory enums
+│   │   ├── ScenarioDao.kt
+│   │   ├── SensorSampleEntity.kt           # Sensor samples + SensorType enum (HR/Resp/RR/GSR)
+│   │   └── SensorSampleDao.kt
+│   ├── export/                             # Session export (Section 7 shape; JSON + CSV)
+│   │   ├── SessionExportService.kt
+│   │   ├── SessionExportMapper.kt
+│   │   ├── SessionUploader.kt
 │   │   └── model/
-│   │       └── TestExportModel.kt
+│   │       └── SessionExportModel.kt
 │   ├── model/
 │   │   └── ConnectionState.kt
 │   ├── network/
@@ -131,15 +133,15 @@ com.biometrix.operator/
 │   │   └── TutorialPreferencesRepository.kt
 │   ├── recording/
 │   │   ├── GapDetector.kt                  # Sensor data gap detection
-│   │   ├── SensorRecordingRepository.kt
-│   │   ├── SensorRecordingRepositoryImpl.kt
+│   │   ├── ScenarioRecordingRepository.kt
+│   │   ├── ScenarioRecordingRepositoryImpl.kt
 │   │   └── model/
-│   │       └── RecordingSession.kt
+│   │       └── ScenarioRecordingSession.kt
 │   ├── repository/
 │   │   ├── ConnectionRepository.kt
-│   │   ├── RecordingRepository.kt
-│   │   ├── SudsRepository.kt
-│   │   └── TestRepository.kt
+│   │   ├── ParticipantRepository.kt
+│   │   ├── ScenarioRepository.kt
+│   │   └── SessionRepository.kt
 │   ├── sensor/
 │   │   ├── SensorDevice.kt                 # Sensor interface
 │   │   ├── audio/
@@ -192,20 +194,24 @@ com.biometrix.operator/
 │       │       └── respiration/
 │       │           ├── EsenseRespirationScreen.kt
 │       │           └── EsenseRespirationViewModel.kt
-│       ├── tests/
-│       │   ├── RecordingUiState.kt
-│       │   ├── TestControlScreen.kt
-│       │   ├── TestControlViewModel.kt
-│       │   ├── TestDetailScreen.kt
-│       │   ├── TestDetailViewModel.kt
-│       │   ├── TestsScreen.kt
-│       │   ├── TestsViewModel.kt
+│       ├── participants/
+│       │   ├── ParticipantEntryScreen.kt
+│       │   └── ParticipantEntryViewModel.kt
+│       ├── sessions/
+│       │   ├── ScenarioRecordingUiState.kt
+│       │   ├── SessionControlScreen.kt
+│       │   ├── SessionControlViewModel.kt
+│       │   ├── SessionDetailScreen.kt
+│       │   ├── SessionDetailViewModel.kt
+│       │   ├── SessionsScreen.kt
+│       │   ├── SessionsViewModel.kt
 │       │   └── components/
-│       │       ├── ActiveTestBanner.kt
+│       │       ├── ActiveSessionBanner.kt
 │       │       ├── DeviceSensorGroup.kt
 │       │       ├── LiveSensorCard.kt
 │       │       ├── SensorSummaryCard.kt
-│       │       └── TestNotesField.kt
+│       │       ├── SessionCard.kt
+│       │       └── SessionNotesField.kt
 │       ├── tutorial/
 │       │   ├── TutorialScreen.kt
 │       │   └── TutorialViewModel.kt
@@ -227,22 +233,34 @@ com.biometrix.operator/
 | `vr_control` | VRConnectionScreen | VR headset connection (manual IP or mDNS discovery) |
 | `sensors` | SensorsScreen | List of available sensors |
 | `sensors/{sensorId}` | SensorDetailScreen | Router to vendor-specific sensor screen |
-| `tests` | TestsScreen | List of therapy tests |
-| `tests/active/{testId}` | TestControlScreen | Active test control panel |
-| `tests/review/{testId}` | TestDetailScreen | Test review with timeline chart and CSV export |
+| `participants/new` | ParticipantEntryScreen | Anonymized participant entry (creates participant + session) |
+| `sessions` | SessionsScreen | List of completed sessions |
+| `sessions/active/{sessionId}` | SessionControlScreen | Active session control panel |
+| `sessions/review/{sessionId}` | SessionDetailScreen | Session review with export to Documents |
 
 ## Database Schema
 
-Room database (version 1) with 4 entities:
+Room database (version 2) with 4 entities. Cascade-delete on all foreign keys.
 
 | Entity | Table | Purpose |
 |--------|-------|---------|
-| TestEntity | `tests` | Therapy test sessions (status: ACTIVE, COMPLETED, EXPORTED) |
-| RecordingEntity | `recordings` | Individual recordings within a test (FK → tests) |
-| SensorSampleEntity | `sensor_samples` | Time-series sensor data points (FK → recordings) |
-| SudsEventEntity | `suds_events` | Subjective Units of Distress scores (FK → tests) |
+| ParticipantEntity | `participants` | Anonymized test subjects (unique `participantCode`) |
+| SessionEntity | `sessions` | Per-participant session run (FK → participants; status: ACTIVE, COMPLETED, UPLOADED) |
+| ScenarioEntity | `scenarios` | One VR scenario run within a session (FK → sessions; scenarioCode + scenarioCategory + event/reaction timestamps) |
+| SensorSampleEntity | `sensor_samples` | Time-series sensor data (FK → scenarios; carries `timestampMs` + `elapsedMs`) |
 
-**SensorType enum:** HEART_RATE, RESPIRATION, ESENSE_RR_INTERVAL
+**Enums**
+
+| Enum | Stored values |
+|------|---------------|
+| `SessionStatus` | `ACTIVE`, `COMPLETED`, `UPLOADED` |
+| `ScenarioCategory` | `A`, `B`, `C` |
+| `ScenarioCode` | `FALLING_PALLET`, `BLIND_CORNER`, `EQUIPMENT_COLLISION`, `FLOOR_OBSTACLE`, `MACHINE_JAM`, `CONVEYOR_ACCELERATION`, `MEDIUM_LEAKAGE`, `ELECTRICAL_SHORT`, `SLING_FAILURE` |
+| `SensorType` | `HEART_RATE`, `RESPIRATION`, `ESENSE_RR_INTERVAL`, `GSR` |
+
+`ScenarioCode` carries the official short code (e.g. `A1`) and display label as enum properties — they're stored descriptively in the DB so renumbering doesn't break old rows.
+
+Reaction time is **derived** at export from `reactionTimestampMs − eventTimestampMs`; not stored. Session duration is derived from `endedAt − startedAt`. All timestamps come from Android's `System.currentTimeMillis()` so cross-stream alignment needs no clock-sync.
 
 ## Data Flow
 
@@ -254,7 +272,7 @@ Meta Quest VR ◄──WebSocket──► VRWebSocketClient ──► VRConnecti
 eSense Pulse  ◄────BLE──────► BleManager ──────────► EsensePulseViewModel ──► UI
 eSense Resp.  ◄────Audio────► MindfieldRespiration ► EsenseRespirationViewModel ► UI
 
-All sensors ──► SensorRecordingRepository ──► Room DB ──► TestExportService ──► JSON/CSV
+All sensors ──► ScenarioRecordingRepository ──► Room DB ──► SessionExportService ──► JSON/CSV
 ```
 
 ## Required Permissions
@@ -297,14 +315,19 @@ Unit tests live under `app/src/test/` and run on the host JVM (no device/emulato
 
 **Current test files:**
 
-| File | Target | Tests | What it covers |
-|------|--------|-------|----------------|
-| `data/recording/GapDetectorTest.kt` | `GapDetector.kt` | 18 | Gap detection edge cases: empty input, startup threshold, boundary conditions, mixed sensor types, unsorted input, per-sensor-type routing |
-| `data/vr/model/WebSocketMessageTest.kt` | `WebSocketMessage.kt` | 8 | `ServerMessage` JSON serialization: minimal/full/failure decoding, round-trip, malformed JSON, missing fields, unknown fields |
-| `data/repository/TestRepositoryTest.kt` | `TestRepository.kt` | 7 | Test lifecycle: creation format (BMX-yyMMdd-HHmmss), sample count aggregation from completed recordings, status transitions, notes persistence, deletion |
-| `data/repository/RecordingRepositoryTest.kt` | `RecordingRepository.kt` | 8 | Recording lifecycle: identifier format (BMX-...-R01), sequence auto-increment, sensor flags, sample count aggregation per sensor type, duration/status on complete, batch sample insert |
-| `data/export/TestExportMapperTest.kt` | `TestExportMapper.kt` | 11 | Export data transformation: sensor type mapping (3 types), sensor enable/disable flags, gap detection conditional logic, statistics aggregation, SUDS event mapping, recording sample inclusion, test field mapping |
-| `data/sensor/audio/MindfieldRespirationTest.kt` | `MindfieldRespiration.kt` | 12 | Zero-crossing breathing rate algorithm (edge cases, accuracy at normal/rapid rates, buffer windowing), signal verification logic (insufficient samples, out-of-range, no movement, valid signal transition) |
-| `presentation/screens/vr/VRConnectionViewModelTest.kt` | `VRConnectionViewModel.kt` | 23 | VR connection state machine, command sending with validation, discovery lifecycle, error flow, log management |
+| File | Target | What it covers |
+|------|--------|----------------|
+| `data/recording/GapDetectorTest.kt` | `GapDetector.kt` | Gap detection edge cases: empty input, startup threshold, boundary conditions, mixed sensor types, unsorted input, per-sensor-type routing |
+| `data/vr/model/WebSocketMessageTest.kt` | `WebSocketMessage.kt` | `ServerMessage` JSON serialization: minimal/full/failure decoding, round-trip, malformed JSON, missing fields, unknown fields |
+| `data/repository/ParticipantRepositoryTest.kt` | `ParticipantRepository.kt` | Code generation (`P-001`…), uniqueness validation, fetch by ID/code |
+| `data/repository/SessionRepositoryTest.kt` | `SessionRepository.kt` | Session lifecycle: `sessionCode` format (BMX-yyMMdd-HHmmss), participant FK, sample-count aggregation from scenarios at end, status transitions, notes persistence, deletion |
+| `data/repository/ScenarioRepositoryTest.kt` | `ScenarioRepository.kt` | Scenario lifecycle: create with derived `scenarioCategory`, event/reaction timestamp updates, end (sets `endedAt`), batch sample insert |
+| `data/export/SessionExportMapperTest.kt` | `SessionExportMapper.kt` | Export data transformation (Section 7 shape): participant + session + scenarios + samples; sensor type mapping, gap detection per scenario, derived reaction time |
+| `data/recording/ScenarioRecordingRepositoryImplTest.kt` | `ScenarioRecordingRepositoryImpl.kt` | Start/stop state machine, sensor detection, sample buffering + flushing, scenario-end finalization |
+| `data/sensor/audio/MindfieldRespirationTest.kt` | `MindfieldRespiration.kt` | Zero-crossing breathing rate algorithm and signal verification logic |
+| `presentation/screens/participants/ParticipantEntryViewModelTest.kt` | `ParticipantEntryViewModel.kt` | Form validation, duplicate-code rejection, success emission, active-session redirect |
+| `presentation/screens/sessions/SessionControlViewModelTest.kt` | `SessionControlViewModel.kt` | Session loading, scenario-driven recording, end-session flow |
+| `presentation/screens/sessions/SessionDetailViewModelTest.kt` | `SessionDetailViewModel.kt` | Session/scenario loading, export workflow with `markUploaded` transition |
+| `presentation/screens/vr/VRConnectionViewModelTest.kt` | `VRConnectionViewModel.kt` | VR connection state machine, command sending, discovery lifecycle |
 
 Tests mirror the production package structure (e.g., `GapDetectorTest.kt` is in the same package as `GapDetector.kt`). This enables Android Studio's **Ctrl+Shift+T** navigation between production code and its test.

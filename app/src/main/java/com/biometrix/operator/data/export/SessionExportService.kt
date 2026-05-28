@@ -1,4 +1,4 @@
-﻿package com.biometrix.operator.data.export
+package com.biometrix.operator.data.export
 
 import android.content.ContentUris
 import android.content.ContentValues
@@ -8,12 +8,13 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import androidx.annotation.RequiresApi
-import com.biometrix.operator.data.db.RecordingEntity
+import com.biometrix.operator.data.db.ScenarioEntity
 import com.biometrix.operator.data.db.SensorType
 import com.biometrix.operator.data.recording.detectEsenseRrIntervalGaps
 import com.biometrix.operator.data.recording.detectHeartRateGaps
 import com.biometrix.operator.data.recording.detectRespirationGaps
-import com.biometrix.operator.data.repository.RecordingRepository
+import com.biometrix.operator.data.repository.ParticipantRepository
+import com.biometrix.operator.data.repository.ScenarioRepository
 import com.biometrix.operator.data.repository.SessionRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -28,18 +29,19 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 interface SessionExporter {
-    suspend fun exportTest(sessionId: Long): Result<String>
+    suspend fun exportSession(sessionId: Long): Result<String>
 }
 
 @Singleton
 class SessionExportService @Inject constructor(
     @ApplicationContext private val context: Context,
     private val sessionRepository: SessionRepository,
-    private val recordingRepository: RecordingRepository,
+    private val participantRepository: ParticipantRepository,
+    private val scenarioRepository: ScenarioRepository,
     private val mapper: SessionExportMapper
 ) : SessionExporter, SessionUploader {
 
-    override suspend fun upload(sessionId: Long): Result<String> = exportTest(sessionId)
+    override suspend fun upload(sessionId: Long): Result<String> = exportSession(sessionId)
 
     private val json = Json {
         prettyPrint = true
@@ -48,87 +50,104 @@ class SessionExportService @Inject constructor(
 
     private val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
 
-    override suspend fun exportTest(sessionId: Long): Result<String> = withContext(Dispatchers.IO) {
-        try {
-            val test = sessionRepository.getSessionById(sessionId)
-                ?: return@withContext Result.failure(IllegalArgumentException("Test not found"))
+    override suspend fun exportSession(sessionId: Long): Result<String> =
+        withContext(Dispatchers.IO) {
+            try {
+                val session = sessionRepository.getSessionById(sessionId)
+                    ?: return@withContext Result.failure(
+                        IllegalArgumentException("Session not found")
+                    )
 
-            val recordings = recordingRepository.getRecordingsForTestOnce(sessionId)
+                val participant = participantRepository.getParticipantById(session.participantId)
+                    ?: return@withContext Result.failure(
+                        IllegalArgumentException("Participant not found for session")
+                    )
 
-            val exportData = mapper.buildExportData(test, recordings)
-            val jsonContent = json.encodeToString(exportData)
+                val scenarios = scenarioRepository.getScenariosForSessionOnce(sessionId)
 
-            // Write to Documents folder
-            val fileName = "${test.sessionIdentifier}_export.json"
-            val folderName = test.sessionIdentifier
+                val exportData = mapper.buildExportData(participant, session, scenarios)
+                val jsonContent = json.encodeToString(exportData)
 
-            val outputPath = writeToDocuments(folderName, fileName, jsonContent.toByteArray())
+                val folderName = session.sessionCode
+                val jsonFileName = "${session.sessionCode}_export.json"
 
-            // Also export individual CSV files for each recording
-            for (recording in recordings) {
-                exportRecordingCsv(recording, folderName)
+                val outputPath = writeToDocuments(folderName, jsonFileName, jsonContent.toByteArray())
+
+                for (scenario in scenarios) {
+                    exportScenarioCsv(session.sessionCode, scenario, folderName)
+                }
+
+                Result.success(outputPath)
+            } catch (e: Exception) {
+                Result.failure(e)
             }
-
-            Result.success(outputPath)
-        } catch (e: Exception) {
-            Result.failure(e)
         }
-    }
 
-    private suspend fun exportRecordingCsv(
-        recording: RecordingEntity,
+    private suspend fun exportScenarioCsv(
+        sessionCode: String,
+        scenario: ScenarioEntity,
         folderName: String
     ) {
-        val samples = recordingRepository.getSamplesForRecording(recording.id)
+        val samples = scenarioRepository.getSamplesForScenario(scenario.id)
         if (samples.isEmpty()) return
 
-        val hrGaps       = if (recording.heartRateEnabled) detectHeartRateGaps(samples) else emptyList()
-        val esenseRrGaps = if (recording.heartRateEnabled && recording.esenseRrIntervalSampleCount > 0) detectEsenseRrIntervalGaps(samples) else emptyList()
-        val respGaps     = if (recording.respirationEnabled) detectRespirationGaps(samples) else emptyList()
+        val hrGaps = detectHeartRateGaps(samples)
+        val rrGaps = detectEsenseRrIntervalGaps(samples)
+        val respGaps = detectRespirationGaps(samples)
+
+        val hrCount = samples.count { it.sensorType == SensorType.HEART_RATE }
+        val rrCount = samples.count { it.sensorType == SensorType.ESENSE_RR_INTERVAL }
+        val respCount = samples.count { it.sensorType == SensorType.RESPIRATION }
+        val gsrCount = samples.count { it.sensorType == SensorType.GSR }
 
         val csvContent = buildString {
-            // Metadata header
-            appendLine("# recording_id,${recording.recordingIdentifier}")
-            appendLine("# test_id,$folderName")
-            appendLine("# sequence,${recording.sequenceNumber}")
-            appendLine("# start_time,${isoFormat.format(Date(recording.startedAt))}")
-            recording.endedAt?.let {
+            appendLine("# session_code,$sessionCode")
+            appendLine("# scenario_code,${scenario.scenarioCode.name}")
+            appendLine("# scenario_category,${scenario.scenarioCategory.name}")
+            appendLine("# start_time,${isoFormat.format(Date(scenario.startedAt))}")
+            scenario.endedAt?.let {
                 appendLine("# end_time,${isoFormat.format(Date(it))}")
             }
-            appendLine("# duration_ms,${recording.durationMs}")
-            appendLine("# esense_pulse_hr_samples,${recording.heartRateSampleCount}")
-            if (recording.esenseRrIntervalSampleCount > 0) {
-                appendLine("# esense_pulse_rr_samples,${recording.esenseRrIntervalSampleCount}")
+            scenario.eventTimestampMs?.let {
+                appendLine("# event_timestamp_ms,$it")
             }
-            appendLine("# esense_resp_samples,${recording.respirationSampleCount}")
+            scenario.reactionTimestampMs?.let {
+                appendLine("# reaction_timestamp_ms,$it")
+            }
+            if (scenario.eventTimestampMs != null && scenario.reactionTimestampMs != null) {
+                appendLine("# reaction_time_ms,${scenario.reactionTimestampMs - scenario.eventTimestampMs}")
+            }
+            appendLine("# hr_samples,$hrCount")
+            if (rrCount > 0) appendLine("# rr_interval_samples,$rrCount")
+            appendLine("# respiration_samples,$respCount")
+            if (gsrCount > 0) appendLine("# gsr_samples,$gsrCount")
             if (hrGaps.isNotEmpty()) {
-                appendLine("# esense_pulse_hr_gaps,${hrGaps.size}")
-                appendLine("# esense_pulse_hr_gap_total_ms,${hrGaps.sumOf { it.gapMs }}")
+                appendLine("# hr_gaps,${hrGaps.size}")
+                appendLine("# hr_gap_total_ms,${hrGaps.sumOf { it.gapMs }}")
             }
-            if (esenseRrGaps.isNotEmpty()) {
-                appendLine("# esense_pulse_rr_gaps,${esenseRrGaps.size}")
-                appendLine("# esense_pulse_rr_gap_total_ms,${esenseRrGaps.sumOf { it.gapMs }}")
+            if (rrGaps.isNotEmpty()) {
+                appendLine("# rr_interval_gaps,${rrGaps.size}")
+                appendLine("# rr_interval_gap_total_ms,${rrGaps.sumOf { it.gapMs }}")
             }
             if (respGaps.isNotEmpty()) {
-                appendLine("# esense_resp_gaps,${respGaps.size}")
-                appendLine("# esense_resp_gap_total_ms,${respGaps.sumOf { it.gapMs }}")
+                appendLine("# respiration_gaps,${respGaps.size}")
+                appendLine("# respiration_gap_total_ms,${respGaps.sumOf { it.gapMs }}")
             }
 
-            // Header row
-            appendLine("timestamp_ms,elapsed_ms,value,sensor_type")
+            appendLine("timestamp_ms,elapsed_ms,sensor_type,value")
 
-            // Data rows
             samples.forEach { sample ->
                 val sensorType = when (sample.sensorType) {
-                    SensorType.HEART_RATE -> "esense_pulse_hr"
-                    SensorType.ESENSE_RR_INTERVAL -> "esense_pulse_rr_interval"
-                    SensorType.RESPIRATION -> "esense_resp"
+                    SensorType.HEART_RATE -> "heart_rate"
+                    SensorType.ESENSE_RR_INTERVAL -> "rr_interval"
+                    SensorType.RESPIRATION -> "respiration"
+                    SensorType.GSR -> "gsr"
                 }
-                appendLine("${sample.timestampMs},${sample.elapsedMs},${sample.value},$sensorType")
+                appendLine("${sample.timestampMs},${sample.elapsedMs},$sensorType,${sample.value}")
             }
         }
 
-        val fileName = "${recording.recordingIdentifier}.csv"
+        val fileName = "${sessionCode}_${scenario.scenarioCode.name}.csv"
         writeToDocuments(folderName, fileName, csvContent.toByteArray())
     }
 
@@ -149,7 +168,6 @@ class SessionExportService @Inject constructor(
         val mimeType = if (fileName.endsWith(".json")) "application/json" else "text/csv"
         val relativePath = "Documents/BioMetrix/$folderName"
 
-        // Check if a file with the same name already exists to avoid creating duplicates
         val existingUri = findExistingMediaStoreFile(fileName, relativePath)
 
         val uri = if (existingUri != null) {

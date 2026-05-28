@@ -1,17 +1,18 @@
-﻿package com.biometrix.operator.di
+package com.biometrix.operator.di
 
 import android.content.Context
 import androidx.room.Room
 import com.biometrix.operator.data.db.AppDatabase
-import com.biometrix.operator.data.db.RecordingDao
+import com.biometrix.operator.data.db.ParticipantDao
+import com.biometrix.operator.data.db.ScenarioDao
 import com.biometrix.operator.data.db.SensorSampleDao
 import com.biometrix.operator.data.db.SessionDao
 import com.biometrix.operator.data.export.SessionExportService
 import com.biometrix.operator.data.export.SessionExporter
 import com.biometrix.operator.data.export.SessionUploader
-import com.biometrix.operator.data.recording.SensorRecordingRepository
-import com.biometrix.operator.data.recording.SensorRecordingRepositoryImpl
-import com.biometrix.operator.data.repository.RecordingRepository
+import com.biometrix.operator.data.recording.ScenarioRecordingRepository
+import com.biometrix.operator.data.recording.ScenarioRecordingRepositoryImpl
+import com.biometrix.operator.data.repository.ScenarioRepository
 import com.biometrix.operator.data.sensor.SensorDevice
 import com.biometrix.operator.data.sensor.audio.MindfieldRespiration
 import com.biometrix.operator.data.sensor.ble.BleManager
@@ -75,21 +76,21 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideSessionDao(database: AppDatabase): SessionDao {
-        return database.sessionDao()
-    }
+    fun provideParticipantDao(database: AppDatabase): ParticipantDao =
+        database.participantDao()
 
     @Provides
     @Singleton
-    fun provideRecordingDao(database: AppDatabase): RecordingDao {
-        return database.recordingDao()
-    }
+    fun provideSessionDao(database: AppDatabase): SessionDao = database.sessionDao()
 
     @Provides
     @Singleton
-    fun provideSensorSampleDao(database: AppDatabase): SensorSampleDao {
-        return database.sensorSampleDao()
-    }
+    fun provideScenarioDao(database: AppDatabase): ScenarioDao = database.scenarioDao()
+
+    @Provides
+    @Singleton
+    fun provideSensorSampleDao(database: AppDatabase): SensorSampleDao =
+        database.sensorSampleDao()
 
     @Provides
     @Singleton
@@ -120,11 +121,11 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideSensorRecordingRepository(
+    fun provideScenarioRecordingRepository(
         bleManager: BleManager,
         @Named("respiration") respirationDevice: SensorDevice,
-        recordingRepository: RecordingRepository
-    ): SensorRecordingRepository {
-        return SensorRecordingRepositoryImpl(bleManager, respirationDevice, recordingRepository)
+        scenarioRepository: ScenarioRepository
+    ): ScenarioRecordingRepository {
+        return ScenarioRecordingRepositoryImpl(bleManager, respirationDevice, scenarioRepository)
     }
 }

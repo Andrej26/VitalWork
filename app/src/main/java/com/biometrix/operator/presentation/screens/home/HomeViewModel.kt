@@ -1,4 +1,4 @@
-﻿package com.biometrix.operator.presentation.screens.home
+package com.biometrix.operator.presentation.screens.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -41,19 +40,26 @@ class HomeViewModel @Inject constructor(
         _shouldAutoShowTutorial.update { false }
     }
 
-    fun startNewSession(
-        onCreated: (Long) -> Unit,
-        onAlreadyActive: (Long) -> Unit
+    /**
+     * Decides how to begin a session.
+     * - If an active session already exists, navigates straight to it (no participant prompt;
+     *   the in-flight session already has one).
+     * - Otherwise navigates to the participant entry flow, which creates the participant +
+     *   session and signals navigation to SessionActive.
+     */
+    fun beginSession(
+        onResumeActive: (Long) -> Unit,
+        onStartNewParticipantFlow: () -> Unit
     ) {
         if (_isStarting.value) return
         viewModelScope.launch {
             _isStarting.value = true
             try {
-                val created = sessionRepository.createSessionIfNoneActive()
-                if (created != null) {
-                    onCreated(created.id)
+                val active = sessionRepository.getActiveSessionOnce()
+                if (active != null) {
+                    onResumeActive(active.id)
                 } else {
-                    sessionRepository.activeSession.firstOrNull()?.let { onAlreadyActive(it.id) }
+                    onStartNewParticipantFlow()
                 }
             } finally {
                 _isStarting.value = false

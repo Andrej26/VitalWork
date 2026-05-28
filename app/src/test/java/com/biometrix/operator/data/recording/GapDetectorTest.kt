@@ -13,7 +13,7 @@ class GapDetectorTest {
         type: SensorType = SensorType.HEART_RATE,
         value: Float = 70f
     ) = SensorSampleEntity(
-        recordingId = 1L,
+        scenarioId = 1L,
         timestampMs = elapsedMs,
         elapsedMs = elapsedMs,
         sensorType = type,
