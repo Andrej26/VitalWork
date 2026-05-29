@@ -11,7 +11,7 @@ import androidx.room.TypeConverters
         ScenarioEntity::class,
         SensorSampleEntity::class
     ],
-    version = 2,
+    version = 1,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
