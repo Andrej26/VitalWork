@@ -78,9 +78,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.biometrix.operator.data.db.SessionStatus
 import com.biometrix.operator.data.model.ConnectionState
 import com.biometrix.operator.data.recording.model.DataRecordingState
 import com.biometrix.operator.data.sensor.ble.model.BleDevice
+import com.biometrix.operator.data.system.SessionPrerequisite
+import com.biometrix.operator.presentation.components.ReadinessWarningCard
+import com.biometrix.operator.presentation.components.onPermissionDenied
+import com.biometrix.operator.service.BatteryOptimizationHelper
+import com.biometrix.operator.service.SessionRecordingService
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import com.biometrix.operator.data.sensor.audio.LowSignalWarning
 import android.Manifest
 import android.content.Intent
@@ -213,12 +221,55 @@ fun SessionControlScreen(
         viewModel.setupNotesAutoSave()
     }
 
+    // Keep the process alive (and mic/BLE/network legal) while the session is ACTIVE, so the
+    // operator can lock the screen mid-session. Started from this foreground screen; the service
+    // self-stops once the session is ended or discarded. Keyed on status because `session` loads
+    // asynchronously and re-entry into a pre-existing active session must also start it.
+    LaunchedEffect(session?.status) {
+        if (session?.status == SessionStatus.ACTIVE) {
+            SessionRecordingService.start(context)
+        }
+    }
+
     // Check BLE permissions on entry
     LaunchedEffect(Unit) {
         val allGranted = requiredBlePermissions.all {
             ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
         }
         viewModel.setBlePermissionsGranted(allGranted)
+    }
+
+    // Readiness backup banner: collect missing prerequisites and re-derive on resume (catches a
+    // silently revoked permission / battery setting while the operator is mid-session).
+    val missingPrerequisites by viewModel.missingPrerequisites.collectAsState()
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        viewModel.refreshReadiness()
+    }
+
+    val notificationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (!granted) onPermissionDenied(context, Manifest.permission.POST_NOTIFICATIONS)
+        viewModel.refreshReadiness()
+    }
+    val micPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (!granted) onPermissionDenied(context, Manifest.permission.RECORD_AUDIO)
+        viewModel.refreshReadiness()
+    }
+
+    val onReadinessFix: (SessionPrerequisite) -> Unit = { prerequisite ->
+        when (prerequisite) {
+            SessionPrerequisite.NOTIFICATIONS ->
+                notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            SessionPrerequisite.MICROPHONE ->
+                micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            SessionPrerequisite.BLUETOOTH ->
+                blePermissionLauncher.launch(requiredBlePermissions)
+            SessionPrerequisite.BATTERY_OPTIMIZATION ->
+                BatteryOptimizationHelper.openExemptionSettings(context)
+        }
     }
 
     // Handle test end result
@@ -442,6 +493,12 @@ fun SessionControlScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Readiness backup banner (only shows when a prerequisite is missing)
+            ReadinessWarningCard(
+                missing = missingPrerequisites,
+                onFix = onReadinessFix
+            )
+
             // Low signal warning banner
             if (respirationLowSignalWarning != LowSignalWarning.NONE) {
                 LowSignalWarningBanner(warningLevel = respirationLowSignalWarning)

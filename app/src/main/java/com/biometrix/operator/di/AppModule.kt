@@ -20,6 +20,8 @@ import com.biometrix.operator.data.sensor.ble.BleManagerImpl
 import com.biometrix.operator.data.network.NetworkChecker
 import com.biometrix.operator.data.system.LocationChecker
 import com.biometrix.operator.data.system.LocationCheckerImpl
+import com.biometrix.operator.data.system.SystemReadinessChecker
+import com.biometrix.operator.data.system.SystemReadinessCheckerImpl
 import com.biometrix.operator.data.vr.MdnsDiscoveryService
 import com.biometrix.operator.data.vr.VRConnectionManager
 import com.biometrix.operator.data.vr.VRWebSocketClient
@@ -40,6 +42,10 @@ abstract class AppBindsModule {
     @Binds
     @Singleton
     abstract fun bindLocationChecker(impl: LocationCheckerImpl): LocationChecker
+
+    @Binds
+    @Singleton
+    abstract fun bindSystemReadinessChecker(impl: SystemReadinessCheckerImpl): SystemReadinessChecker
 
     @Binds
     @Singleton

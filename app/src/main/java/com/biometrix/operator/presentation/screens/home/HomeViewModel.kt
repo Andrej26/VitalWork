@@ -7,7 +7,11 @@ import com.biometrix.operator.data.model.ConnectionState
 import com.biometrix.operator.data.prefs.TutorialPreferencesRepository
 import com.biometrix.operator.data.repository.ConnectionRepository
 import com.biometrix.operator.data.repository.SessionRepository
+import com.biometrix.operator.data.system.SessionPrerequisite
+import com.biometrix.operator.data.system.SystemReadinessChecker
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -21,10 +25,39 @@ import javax.inject.Inject
 class HomeViewModel @Inject constructor(
     connectionRepository: ConnectionRepository,
     private val sessionRepository: SessionRepository,
-    private val tutorialPreferences: TutorialPreferencesRepository
+    private val tutorialPreferences: TutorialPreferencesRepository,
+    private val readinessChecker: SystemReadinessChecker
 ) : ViewModel() {
 
     val vrConnectionState: StateFlow<ConnectionState> = connectionRepository.vrConnectionState
+
+    /**
+     * Session prerequisites currently missing. Re-derived from live OS state via [refresh] on
+     * every screen resume, so a silently-revoked permission/setting reappears here immediately.
+     */
+    private val _missingPrerequisites =
+        MutableStateFlow<Set<SessionPrerequisite>>(emptySet())
+    val missingPrerequisites: StateFlow<Set<SessionPrerequisite>> =
+        _missingPrerequisites.asStateFlow()
+
+    private var refreshJob: Job? = null
+
+    /**
+     * Re-derive readiness from live OS state. Checks immediately, then re-checks a couple of times
+     * over the next second: some systems (notably MIUI's battery-optimization flow) report the new
+     * value with a short lag after the user confirms and returns, which previously left the card
+     * stale until the next manual tap.
+     */
+    fun refresh() {
+        _missingPrerequisites.value = readinessChecker.missingPrerequisites()
+        refreshJob?.cancel()
+        refreshJob = viewModelScope.launch {
+            for (delayMs in longArrayOf(350L, 800L)) {
+                delay(delayMs)
+                _missingPrerequisites.value = readinessChecker.missingPrerequisites()
+            }
+        }
+    }
 
     val activeSession: StateFlow<SessionEntity?> = sessionRepository.activeSession
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)

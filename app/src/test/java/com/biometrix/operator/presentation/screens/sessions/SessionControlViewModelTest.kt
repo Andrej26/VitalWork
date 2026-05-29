@@ -15,6 +15,7 @@ import com.biometrix.operator.data.repository.SessionRepository
 import com.biometrix.operator.data.sensor.FakeSensorDevice
 import com.biometrix.operator.data.sensor.ble.FakeBleManager
 import com.biometrix.operator.data.system.FakeLocationChecker
+import com.biometrix.operator.data.system.FakeSystemReadinessChecker
 import com.biometrix.operator.data.vr.FakeVRConnectionManager
 import com.biometrix.operator.data.vr.FakeVrDeviceDiscovery
 import com.biometrix.operator.data.vr.model.ServerMessage
@@ -109,6 +110,7 @@ class SessionControlViewModelTest {
             vrWebSocketClient = fakeVrClient,
             mdnsDiscovery = fakeDiscovery,
             locationChecker = fakeLocationChecker,
+            readinessChecker = FakeSystemReadinessChecker(),
             savedStateHandle = savedState
         )
     }

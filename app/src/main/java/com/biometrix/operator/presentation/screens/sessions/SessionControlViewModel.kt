@@ -52,8 +52,45 @@ class SessionControlViewModel @Inject constructor(
     private val vrWebSocketClient: VRConnectionManager,
     private val mdnsDiscovery: VrDeviceDiscovery,
     private val locationChecker: LocationChecker,
+    private val readinessChecker: com.biometrix.operator.data.system.SystemReadinessChecker,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
+
+    /**
+     * Session prerequisites currently missing, for the backup readiness banner. The BLE entry is
+     * driven by [blePermissionsGranted] (the screen's existing source of truth) so the two never
+     * disagree; the other three are re-derived from live OS state via [refreshReadiness] on resume.
+     */
+    private val _missingPrerequisites =
+        MutableStateFlow<Set<com.biometrix.operator.data.system.SessionPrerequisite>>(emptySet())
+    val missingPrerequisites: StateFlow<Set<com.biometrix.operator.data.system.SessionPrerequisite>> =
+        _missingPrerequisites.asStateFlow()
+
+    private var readinessRefreshJob: Job? = null
+
+    private fun computeMissingPrerequisites(): Set<com.biometrix.operator.data.system.SessionPrerequisite> {
+        val live = readinessChecker.missingPrerequisites().toMutableSet()
+        // Override the BLE entry with the screen's own grant state for consistency.
+        val ble = com.biometrix.operator.data.system.SessionPrerequisite.BLUETOOTH
+        if (_blePermissionsGranted.value) live.remove(ble) else live.add(ble)
+        return live
+    }
+
+    /**
+     * Re-derive readiness now, then re-check a couple of times over the next second. Some systems
+     * (notably MIUI's battery-optimization flow) report the new value with a short lag after the
+     * user confirms and returns, which previously left the banner stale until another tap.
+     */
+    fun refreshReadiness() {
+        _missingPrerequisites.value = computeMissingPrerequisites()
+        readinessRefreshJob?.cancel()
+        readinessRefreshJob = viewModelScope.launch {
+            for (delayMs in longArrayOf(350L, 800L)) {
+                delay(delayMs)
+                _missingPrerequisites.value = computeMissingPrerequisites()
+            }
+        }
+    }
 
     companion object {
         // Legacy VR events from the previous NarrowingChamber/StressChamber project. The new
@@ -135,6 +172,7 @@ class SessionControlViewModel @Inject constructor(
 
     fun setBlePermissionsGranted(granted: Boolean) {
         _blePermissionsGranted.value = granted
+        refreshReadiness()
     }
 
     /** Whether the BLE scan dialog is showing */

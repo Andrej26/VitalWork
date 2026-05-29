@@ -18,16 +18,27 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import android.Manifest
+import com.biometrix.operator.data.system.SessionPrerequisite
+import com.biometrix.operator.data.system.SystemReadinessChecker
 import com.biometrix.operator.presentation.components.ConnectionStatusBadge
+import com.biometrix.operator.presentation.components.ReadinessWarningCard
+import com.biometrix.operator.presentation.components.onPermissionDenied
+import com.biometrix.operator.service.BatteryOptimizationHelper
 import com.biometrix.operator.presentation.screens.home.components.PrimaryActionButton
 import com.biometrix.operator.presentation.screens.home.components.SecondaryNavRow
 
@@ -47,6 +58,50 @@ fun HomeScreen(
     val activeSession by viewModel.activeSession.collectAsState()
     val isStarting by viewModel.isStarting.collectAsState()
     val shouldAutoShowTutorial by viewModel.shouldAutoShowTutorial.collectAsState()
+    val missingPrerequisites by viewModel.missingPrerequisites.collectAsState()
+
+    val context = LocalContext.current
+
+    // Re-derive readiness whenever the screen resumes — catches a silently revoked permission or a
+    // battery-optimization setting that an update/OEM flipped, and clears the card after a Fix.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        viewModel.refresh()
+    }
+
+    val notificationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (!granted) onPermissionDenied(context, Manifest.permission.POST_NOTIFICATIONS)
+        viewModel.refresh()
+    }
+    val microphoneLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (!granted) onPermissionDenied(context, Manifest.permission.RECORD_AUDIO)
+        viewModel.refresh()
+    }
+    val bluetoothLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        if (results.values.any { !it }) {
+            // Surface settings if any BLE permission is permanently denied (use the first as probe).
+            onPermissionDenied(context, SystemReadinessChecker.requiredBluetoothPermissions().first())
+        }
+        viewModel.refresh()
+    }
+
+    val onFix: (SessionPrerequisite) -> Unit = { prerequisite ->
+        when (prerequisite) {
+            SessionPrerequisite.NOTIFICATIONS ->
+                notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            SessionPrerequisite.MICROPHONE ->
+                microphoneLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            SessionPrerequisite.BLUETOOTH ->
+                bluetoothLauncher.launch(SystemReadinessChecker.requiredBluetoothPermissions())
+            SessionPrerequisite.BATTERY_OPTIMIZATION ->
+                BatteryOptimizationHelper.openExemptionSettings(context)
+        }
+    }
 
     LaunchedEffect(shouldAutoShowTutorial) {
         if (shouldAutoShowTutorial) {
@@ -93,6 +148,11 @@ fun HomeScreen(
                     .padding(horizontal = 16.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                ReadinessWarningCard(
+                    missing = missingPrerequisites,
+                    onFix = onFix
+                )
+
                 PrimaryActionButton(
                     title = if (currentActive != null) "Resume Active Session" else "Start New Session",
                     subtitle = currentActive?.sessionCode,
