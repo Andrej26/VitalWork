@@ -18,6 +18,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
+    <!-- Required to hold the Wi-Fi lock that keeps the VR WebSocket alive under Doze -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
     <!-- Notification for the recording foreground service (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 

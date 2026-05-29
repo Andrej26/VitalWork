@@ -174,9 +174,15 @@ class SessionRecordingService : Service() {
         } else {
             WifiManager.WIFI_MODE_FULL_HIGH_PERF
         }
-        wifiLock = wifiManager.createWifiLock(mode, WIFI_LOCK_TAG).apply {
-            setReferenceCounted(false)
-            acquire()
+        // The Wi-Fi lock is an optimization to keep the VR WebSocket alive under Doze — it must
+        // never crash the service. Degrade gracefully if it can't be acquired.
+        try {
+            wifiLock = wifiManager.createWifiLock(mode, WIFI_LOCK_TAG).apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+        } catch (e: Exception) {
+            wifiLock = null
         }
     }
 
