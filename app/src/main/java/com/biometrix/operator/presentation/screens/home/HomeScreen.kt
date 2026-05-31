@@ -24,11 +24,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -141,6 +146,18 @@ fun HomeScreen(
         ) {
             val currentActive = activeSession
 
+            // While a session is active, tick once a second so the button shows live elapsed time.
+            var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+            LaunchedEffect(currentActive?.id) {
+                if (currentActive != null) {
+                    while (true) {
+                        nowMs = System.currentTimeMillis()
+                        delay(1000L)
+                    }
+                }
+            }
+            val elapsedLabel = currentActive?.let { formatElapsed(nowMs - it.startedAt) }
+
             Column(
                 modifier = Modifier
                     .widthIn(max = 560.dp)
@@ -155,8 +172,12 @@ fun HomeScreen(
 
                 PrimaryActionButton(
                     title = if (currentActive != null) "Resume Active Session" else "Start New Session",
-                    subtitle = currentActive?.sessionCode,
+                    subtitle = elapsedLabel,
                     enabled = !isStarting,
+                    containerColor = if (currentActive != null) ActiveSessionOrange
+                        else MaterialTheme.colorScheme.primary,
+                    contentColor = if (currentActive != null) Color.White
+                        else MaterialTheme.colorScheme.onPrimary,
                     onClick = {
                         if (currentActive != null) {
                             onNavigateToSessionActive(currentActive.id)
@@ -187,5 +208,22 @@ fun HomeScreen(
                 )
             }
         }
+    }
+}
+
+/** Amber/orange used to make an in-progress session stand out — matches the ACTIVE accent
+ *  already used in [com.biometrix.operator.presentation.screens.sessions.components.ActiveSessionBanner]. */
+private val ActiveSessionOrange = Color(0xFFCC8A52)
+
+/** Formats an elapsed duration as H:MM:SS (or M:SS under an hour). */
+private fun formatElapsed(elapsedMs: Long): String {
+    val totalSeconds = (elapsedMs.coerceAtLeast(0L)) / 1000L
+    val hours = totalSeconds / 3600
+    val minutes = (totalSeconds % 3600) / 60
+    val seconds = totalSeconds % 60
+    return if (hours > 0) {
+        "%d:%02d:%02d".format(hours, minutes, seconds)
+    } else {
+        "%d:%02d".format(minutes, seconds)
     }
 }
