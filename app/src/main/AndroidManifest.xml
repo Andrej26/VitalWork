@@ -45,6 +45,9 @@
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
 
+    <!-- Body sensors (Samsung Health Sensor API: HR / PPG / ECG from Galaxy Watch) -->
+    <uses-permission android:name="android.permission.BODY_SENSORS" />
+
     <!-- Location (required for BLE scanning) -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />

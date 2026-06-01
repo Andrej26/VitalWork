@@ -19,7 +19,7 @@ android {
 
     defaultConfig {
         applicationId = "com.biometrix.operator"
-        minSdk = 24
+        minSdk = 26
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -83,6 +83,7 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)
     implementation(files("libs/eSense_sdk_2_lib.jar"))
+    implementation(":samsung-health-sensor-api-1.4.1@aar")
 
     // Hilt Dependency Injection
     implementation(libs.hilt.android)
