@@ -3,27 +3,35 @@ package com.biometrix.operator.presentation.screens.participants
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -31,16 +39,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.hilt.navigation.compose.hiltViewModel
+
+private const val MIN_AGE = 18
+private const val MAX_AGE = 80
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -97,109 +105,194 @@ fun ParticipantEntryScreen(
                     .padding(horizontal = 16.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text(
-                    text = "Enter the anonymized participant code and basic demographics. " +
-                            "The session will start as soon as you tap Start session.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-
-                OutlinedTextField(
-                    value = uiState.participantCode,
-                    onValueChange = viewModel::onCodeChange,
-                    label = { Text("Participant code") },
-                    singleLine = true,
-                    isError = uiState.codeError != null,
-                    supportingText = uiState.codeError?.let { { Text(it) } },
-                    enabled = !uiState.isSubmitting,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                OutlinedTextField(
-                    value = uiState.ageInput,
-                    onValueChange = viewModel::onAgeChange,
-                    label = { Text("Age (optional)") },
-                    singleLine = true,
-                    isError = uiState.ageError != null,
-                    supportingText = uiState.ageError?.let { { Text(it) } },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    enabled = !uiState.isSubmitting,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                GenderDropdown(
-                    selected = uiState.gender,
-                    enabled = !uiState.isSubmitting,
-                    onSelected = viewModel::onGenderChange
-                )
-
-                uiState.submitError?.let {
-                    Text(
-                        text = it,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-
-                Button(
-                    onClick = viewModel::submit,
-                    enabled = uiState.isInitialized && !uiState.isSubmitting,
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    if (uiState.isSubmitting) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.padding(end = 8.dp),
-                            color = MaterialTheme.colorScheme.onPrimary
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(20.dp)
+                    ) {
+                        // Header
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = null,
+                                modifier = Modifier.size(36.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Column(modifier = Modifier.padding(start = 12.dp)) {
+                                Text(
+                                    text = "New Participant",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "Enter the anonymized code and basic demographics, " +
+                                            "then start the session.",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+
+                        // Participant code
+                        OutlinedTextField(
+                            value = uiState.participantCode,
+                            onValueChange = viewModel::onCodeChange,
+                            label = { Text("Participant code") },
+                            singleLine = true,
+                            isError = uiState.codeError != null,
+                            supportingText = uiState.codeError?.let { { Text(it) } },
+                            enabled = !uiState.isSubmitting,
+                            modifier = Modifier.fillMaxWidth()
                         )
+
+                        // Age stepper
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = "Age (optional)",
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                            AgeStepper(
+                                value = uiState.ageInput,
+                                enabled = !uiState.isSubmitting,
+                                isError = uiState.ageError != null,
+                                onValueChange = viewModel::onAgeChange
+                            )
+                            uiState.ageError?.let {
+                                Text(
+                                    text = it,
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+
+                        // Gender segmented buttons
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = "Gender",
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                            GenderSegmentedRow(
+                                selected = uiState.gender,
+                                enabled = !uiState.isSubmitting,
+                                onSelected = viewModel::onGenderChange
+                            )
+                        }
+
+                        uiState.submitError?.let {
+                            Text(
+                                text = it,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+
+                        Button(
+                            onClick = viewModel::submit,
+                            enabled = uiState.isInitialized && !uiState.isSubmitting,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            if (uiState.isSubmitting) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier
+                                        .padding(end = 8.dp)
+                                        .size(20.dp),
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                            }
+                            Text(text = "Start session")
+                        }
                     }
-                    Text(text = "Start session")
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun AgeStepper(
+    value: String,
+    enabled: Boolean,
+    isError: Boolean,
+    onValueChange: (String) -> Unit
+) {
+    val current = value.toIntOrNull()
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        OutlinedIconButton(
+            onClick = {
+                current?.let { onValueChange((it - 1).coerceIn(MIN_AGE, MAX_AGE).toString()) }
+            },
+            enabled = enabled && current != null
+        ) {
+            Icon(
+                imageVector = Icons.Default.Remove,
+                contentDescription = "Decrease age"
+            )
+        }
+
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            placeholder = {
+                Text(
+                    text = "–",
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            singleLine = true,
+            isError = isError,
+            enabled = enabled,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            textStyle = MaterialTheme.typography.titleLarge.copy(textAlign = TextAlign.Center),
+            modifier = Modifier.width(96.dp)
+        )
+
+        OutlinedIconButton(
+            onClick = {
+                current?.let { onValueChange((it + 1).coerceIn(MIN_AGE, MAX_AGE).toString()) }
+            },
+            enabled = enabled && current != null
+        ) {
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = "Increase age"
+            )
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun GenderDropdown(
+private fun GenderSegmentedRow(
     selected: GenderOption,
     enabled: Boolean,
     onSelected: (GenderOption) -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
-
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { if (enabled) expanded = it }
-    ) {
-        OutlinedTextField(
-            value = selected.label,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text("Gender") },
-            trailingIcon = {
-                Icon(
-                    imageVector = Icons.Default.ArrowDropDown,
-                    contentDescription = null
-                )
-            },
-            enabled = enabled,
-            modifier = Modifier
-                .fillMaxWidth()
-                .menuAnchor()
-        )
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
-        ) {
-            GenderOption.entries.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(option.label) },
-                    onClick = {
-                        onSelected(option)
-                        expanded = false
-                    }
-                )
+    val options = GenderOption.entries
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        options.forEachIndexed { index, option ->
+            SegmentedButton(
+                selected = option == selected,
+                onClick = { onSelected(option) },
+                enabled = enabled,
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size)
+            ) {
+                Text(text = option.shortLabel())
             }
         }
     }
 }
+
+private fun GenderOption.shortLabel(): String =
+    if (this == GenderOption.NOT_SPECIFIED) "N/A" else label
