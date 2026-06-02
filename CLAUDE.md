@@ -16,7 +16,9 @@ BioMetrixOperator is an Android mobile application written in Kotlin using Jetpa
 - Room 2.7.1 for local database
 - OkHttp 5.3.2 for WebSocket
 - Vico 2.1.2 for charts
-- Target: Android API 24–36
+- Play Services Wearable (Data Layer) for the watch ↔ tablet link
+- Samsung Health Sensor SDK (local AAR, `:wear` only) for Galaxy Watch sensors
+- Target: Android API 24–36 (`:app`); `:wear` floors at API 28 (Samsung SDK requirement)
 
 ## Build Commands
 
@@ -25,6 +27,10 @@ BioMetrixOperator is an Android mobile application written in Kotlin using Jetpa
 ./gradlew build                    # Full build
 ./gradlew assembleDebug            # Debug APK only
 ./gradlew bundleRelease            # Signed release AAB (uses keystore from local.properties)
+
+# Per-module (two modules: :app tablet, :wear watch)
+./gradlew :app:assembleDebug       # Tablet/phone APK
+./gradlew :wear:assembleDebug      # Wear OS companion APK
 
 # Run
 ./gradlew installDebug             # Install debug APK on connected device/emulator
@@ -52,10 +58,17 @@ MainActivity (entry point)
             └── Composable screens
 ```
 
-**Module Structure:** Single `:app` module with standard Android source sets:
-- `app/src/main/` — Production code
-- `app/src/test/` — Unit tests (JUnit 4)
-- `app/src/androidTest/` — Instrumented tests (AndroidX Test)
+**Module Structure:** Two Gradle modules:
+- `:app` — the tablet/phone application (minSdk 24).
+  - `app/src/main/` — Production code
+  - `app/src/test/` — Unit tests (JUnit 4)
+  - `app/src/androidTest/` — Instrumented tests (AndroidX Test)
+- `:wear` — a thin Wear OS companion (minSdk 28, **same** `applicationId`) that reads Galaxy
+  Watch sensors via the Samsung Health Sensor SDK and streams them to the tablet over the Wearable
+  Data Layer. See [doc/sensor_galaxy_watch.md](doc/sensor_galaxy_watch.md). The Samsung SDK is a
+  local AAR at `wear/libs/`. `settings.gradle.kts` uses `FAIL_ON_PROJECT_REPOS`, so module-level
+  `repositories {}` blocks are forbidden — repos (incl. the `flatDir` for both `app/libs` and
+  `wear/libs`) live only in `settings.gradle.kts`.
 
 ## Application Purpose
 
@@ -93,11 +106,25 @@ The app has three main responsibilities:
 |--------|--------|------------|----------------|
 | eSense Pulse | Mindfield | BLE | Heart rate (BPM), RR intervals |
 | eSense Respiration | Mindfield | Audio jack | Respiration rate |
+| Galaxy Watch 8 | Samsung | Wearable Data Layer (via `:wear` companion) | Heart rate (BPM), IBI (ms), EDA (µS), battery |
 
-**BLE Requirements:**
+Per-sensor references live in [doc/](doc/): [sensor_esense_pulse.md](doc/sensor_esense_pulse.md),
+[sensor_esense_respiration.md](doc/sensor_esense_respiration.md),
+[sensor_galaxy_watch.md](doc/sensor_galaxy_watch.md).
+
+**BLE Requirements (eSense Pulse):**
 - Android 12+: `BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT` permissions
 - Android 11 and below: `BLUETOOTH`, `BLUETOOTH_ADMIN`, `ACCESS_FINE_LOCATION` permissions
 - **Location Services must be enabled** on the device for BLE scanning to work
+
+**Galaxy Watch 8 (Phase 1 — live display only):** the Watch 8 has **no BLE Heart Rate Profile**;
+its sensors (especially EDA) are reachable only through Samsung's Health Sensor SDK running **on the
+watch**. The `:wear` companion reads them and streams JSON readings to the tablet via `MessageClient`
+(Bluetooth, no internet); the tablet receives them in `WatchListenerService` → `WatchSensorReceiver`
+(Hilt singleton) and shows them under **Sensors → Galaxy Watch**. **No DB/recording/export wiring
+yet.** Continuous screen-off delivery requires a foreground `health` service, `BODY_SENSORS_BACKGROUND`,
+and a 1 Hz `HealthTracker.flush()` loop — see [doc/sensor_galaxy_watch.md](doc/sensor_galaxy_watch.md)
+for the full rationale (incl. what does *not* work).
 
 ## Package Structure
 
@@ -152,6 +179,11 @@ com.biometrix.operator/
 │   │   │   └── model/
 │   │   │       ├── BleDevice.kt
 │   │   │       └── BleGattService.kt
+│   │   └── watch/                          # Galaxy Watch (Data Layer receiver side)
+│   │       ├── WatchListenerService.kt     # WearableListenerService; parses incoming messages
+│   │       ├── WatchSensorReceiver.kt      # Hilt singleton sink + inferred connection state
+│   │       └── model/
+│   │           └── WatchReading.kt
 │   └── vr/
 │       ├── VRWebSocketClient.kt
 │       ├── MdnsDiscoveryService.kt          # mDNS headset auto-discovery
@@ -187,13 +219,16 @@ com.biometrix.operator/
 │       │   │   ├── BleServiceExplorer.kt
 │       │   │   ├── HeartRateDisplay.kt
 │       │   │   └── RrIntervalDisplay.kt
-│       │   └── mindfield/
-│       │       ├── pulse/
-│       │       │   ├── EsensePulseScreen.kt
-│       │       │   └── EsensePulseViewModel.kt
-│       │       └── respiration/
-│       │           ├── EsenseRespirationScreen.kt
-│       │           └── EsenseRespirationViewModel.kt
+│       │   ├── mindfield/
+│       │   │   ├── pulse/
+│       │   │   │   ├── EsensePulseScreen.kt
+│       │   │   │   └── EsensePulseViewModel.kt
+│       │   │   └── respiration/
+│       │   │       ├── EsenseRespirationScreen.kt
+│       │   │       └── EsenseRespirationViewModel.kt
+│       │   └── watch/                       # Galaxy Watch live-readings screen
+│       │       ├── WatchSensorScreen.kt
+│       │       └── WatchSensorViewModel.kt
 │       ├── participants/
 │       │   ├── ParticipantEntryScreen.kt
 │       │   └── ParticipantEntryViewModel.kt
@@ -222,6 +257,16 @@ com.biometrix.operator/
     ├── Color.kt
     ├── Theme.kt
     └── Type.kt
+```
+
+**`:wear` module** (`com.biometrix.operator.wear`):
+
+```
+com.biometrix.operator.wear/
+├── MainActivity.kt           # Minimal Start/Stop watch UI + runtime permission requests
+├── WatchSensorService.kt     # Foreground health service; owns the Samsung SDK, flush() loop, sends STOP
+├── WatchDataSender.kt        # MessageClient sender; resolves/caches the biometrix_phone node
+└── WatchMessage.kt           # Builds JSON lines (reading, capabilities, batch, stop)
 ```
 
 ## Navigation Routes
