@@ -20,10 +20,11 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         flatDir {
-            dirs("app/libs")
+            dirs("app/libs", "wear/libs")
         }
     }
 }
 
 rootProject.name = "BioMetrixOperator"
 include(":app")
+include(":wear")
