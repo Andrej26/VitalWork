@@ -25,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.biometrix.operator.presentation.screens.sensors.mindfield.pulse.EsensePulseScreen
 import com.biometrix.operator.presentation.screens.sensors.mindfield.respiration.EsenseRespirationScreen
+import com.biometrix.operator.presentation.screens.sensors.watch.WatchSensorScreen
 
 /**
  * Router screen that dispatches to the correct sensor detail screen based on sensorId.
@@ -39,6 +40,7 @@ fun SensorDetailScreen(
         // Mindfield eSense sensors
         "esense_pulse" -> EsensePulseScreen(onNavigateBack = onNavigateBack)
         "esense_respiration" -> EsenseRespirationScreen(onNavigateBack = onNavigateBack)
+        "galaxy_watch" -> WatchSensorScreen(onNavigateBack = onNavigateBack)
         else -> UnknownSensorScreen(sensorId = sensorId, onNavigateBack = onNavigateBack)
     }
 }

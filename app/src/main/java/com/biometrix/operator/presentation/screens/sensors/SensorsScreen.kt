@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Watch
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -39,6 +40,7 @@ fun SensorsScreen(
 ) {
     val bleConnectionState by viewModel.bleConnectionState.collectAsState()
     val respirationState by viewModel.respirationState.collectAsState()
+    val watchConnectionState by viewModel.watchConnectionState.collectAsState()
 
     Scaffold(
         topBar = {
@@ -99,6 +101,14 @@ fun SensorsScreen(
                     icon = Icons.Default.Mic,
                     connectionState = respirationState.toConnectionState(),
                     onClick = { onNavigateToSensorDetail("esense_respiration") }
+                )
+
+                SensorTypeCard(
+                    name = "Galaxy Watch",
+                    description = "HR / IBI / EDA (Wear OS)",
+                    icon = Icons.Default.Watch,
+                    connectionState = watchConnectionState,
+                    onClick = { onNavigateToSensorDetail("galaxy_watch") }
                 )
             }
         }

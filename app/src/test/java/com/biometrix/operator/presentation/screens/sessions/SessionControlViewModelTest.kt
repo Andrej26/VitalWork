@@ -10,6 +10,7 @@ import com.biometrix.operator.data.model.ConnectionState
 import com.biometrix.operator.data.recording.FakeScenarioRecordingRepository
 import com.biometrix.operator.data.recording.model.DataRecordingState
 import com.biometrix.operator.data.repository.ConnectionRepository
+import com.biometrix.operator.data.sensor.watch.WatchSensorReceiver
 import com.biometrix.operator.data.repository.ScenarioRepository
 import com.biometrix.operator.data.repository.SessionRepository
 import com.biometrix.operator.data.sensor.FakeSensorDevice
@@ -77,6 +78,7 @@ class SessionControlViewModelTest {
             vrWebSocketClient = fakeVrClient,
             bleManager = fakeBleManager,
             respirationDevice = fakeRespiration,
+            watchReceiver = WatchSensorReceiver(),
             lanAvailableFlow = lanAvailableFlow
         )
         scenarioRepository = ScenarioRepository(fakeScenarioDao, fakeSensorSampleDao)

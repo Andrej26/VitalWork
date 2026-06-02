@@ -9,6 +9,7 @@ import com.biometrix.operator.data.sensor.audio.MindfieldRespiration
 import com.biometrix.operator.data.sensor.ble.BleEvent
 import com.biometrix.operator.data.sensor.ble.BleManager
 import com.biometrix.operator.data.sensor.ble.model.BleDevice
+import com.biometrix.operator.data.sensor.watch.WatchSensorReceiver
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharedFlow
 import com.biometrix.operator.data.vr.VRConnectionManager
@@ -27,6 +28,7 @@ class ConnectionRepository @Inject constructor(
     private val vrWebSocketClient: VRConnectionManager,
     private val bleManager: BleManager,
     @Named("respiration") private val respirationDevice: SensorDevice,
+    private val watchReceiver: WatchSensorReceiver,
     @Named("lanAvailable") private val lanAvailableFlow: StateFlow<Boolean>
 ) {
     /** VR headset WebSocket connection state */
@@ -48,6 +50,9 @@ class ConnectionRepository @Inject constructor(
 
     /** Audio sensor (eSense Respiration) connection state */
     val respirationState: StateFlow<DeviceState> = respirationDevice.state
+
+    /** Galaxy Watch (Data Layer channel) connection state */
+    val watchConnectionState: StateFlow<ConnectionState> = watchReceiver.connectionState
 
     /** Heart rate from BLE sensor (null if not receiving) */
     val heartRate: StateFlow<Int?> = bleManager.heartRate
