@@ -58,6 +58,25 @@ class WatchSensorReceiver @Inject constructor() {
     private val _batteryLevel = MutableStateFlow<Int?>(null)
     val batteryLevel: StateFlow<Int?> = _batteryLevel.asStateFlow()
 
+    /**
+     * Snapshot of the low-battery alert tier from the **last-known** battery level, read on demand
+     * (e.g. when the Home screen resumes between sessions). Deliberately ignores the current
+     * connection state: the check happens right at the start-a-new-session decision point, so the
+     * last value the watch reported is the truth we care about even if the watch was just set down.
+     * `_batteryLevel` is never cleared on disconnect, so this stays meaningful until a fresh reading
+     * arrives (or the process is recreated). CRITICAL is checked first so it always wins.
+     *
+     * Boundary semantics: `<=`, matching the eSense Pulse low-battery check.
+     */
+    fun currentBatteryAlert(): WatchBatteryAlert {
+        val lvl = _batteryLevel.value ?: return WatchBatteryAlert.NONE
+        return when {
+            lvl <= WatchBatteryThresholds.CRITICAL_PCT -> WatchBatteryAlert.CRITICAL
+            lvl <= WatchBatteryThresholds.WARNING_PCT -> WatchBatteryAlert.WARNING
+            else -> WatchBatteryAlert.NONE
+        }
+    }
+
     fun onCapabilities(csv: String) {
         markActivity()
         _availableTrackers.value = csv.split(",").map { it.trim() }.filter { it.isNotEmpty() }
