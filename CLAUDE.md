@@ -120,10 +120,13 @@ Per-sensor references live in [doc/](doc/): [sensor_esense_pulse.md](doc/sensor_
 **Galaxy Watch 8 (Phase 1 — live display only):** the Watch 8 has **no BLE Heart Rate Profile**;
 its sensors (especially EDA) are reachable only through Samsung's Health Sensor SDK running **on the
 watch**. The `:wear` companion reads them and streams JSON readings to the tablet via `MessageClient`
-(Bluetooth, no internet); the tablet receives them in `WatchListenerService` → `WatchSensorReceiver`
+over the Wearable Data Layer; the tablet receives them in `WatchListenerService` → `WatchSensorReceiver`
 (Hilt singleton) and shows them under **Sensors → Galaxy Watch**. **No DB/recording/export wiring
 yet.** Continuous screen-off delivery requires a foreground `health` service, `BODY_SENSORS_BACKGROUND`,
-and a 1 Hz `HealthTracker.flush()` loop — see [doc/sensor_galaxy_watch.md](doc/sensor_galaxy_watch.md)
+and a 1 Hz `HealthTracker.flush()` loop. **The link must run over direct Bluetooth** — if the phone's
+Bluetooth is off the Data Layer silently falls back to the Google cloud relay, which can't deliver to
+a dozing phone (presents as "connection drops whenever the phone sleeps"); the Galaxy Watch screen
+shows a Bluetooth-off warning to prevent this. See [doc/sensor_galaxy_watch.md](doc/sensor_galaxy_watch.md)
 for the full rationale (incl. what does *not* work).
 
 ## Package Structure

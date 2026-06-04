@@ -35,7 +35,7 @@
 └──────────────────────────────────┬──────────────────────────────────────────┘
                                     │  Wearable Data Layer
                                     │  MessageClient.sendMessage(node, "/biometrix/sensors", json)
-                                    │  Bluetooth-direct, no internet
+                                    │  Bluetooth-direct *if phone BT is on* — else cloud relay (dies in Doze!)
                                     ▼
 ┌─────────────────────────── Android Tablet (:app module) ─────────────────────┐
 │  WatchListenerService : WearableListenerService (auto-started on message)     │
@@ -72,6 +72,35 @@ is **stateless** — each reading is an independent message, nothing to stall, n
 The tablet advertises a capability named `biometrix_phone` in `app/src/main/res/values/wear.xml`
 (`android_wear_capabilities`); the watch resolves it via `CapabilityClient` and caches the node id.
 On send failure the cached id is cleared so the next send re-resolves.
+
+> **CRITICAL — "Bluetooth-direct" is the *best case*, not a guarantee (verified on-device).** The
+> Data Layer has two transports between the same two nodes: a **direct Bluetooth** link (the node is
+> `isNearby == true`) and a **Google cloud relay** (a non-nearby node, routed via Wi-Fi/internet —
+> visible as `CloudNode` RPC traffic in logcat). **If the phone's Bluetooth is OFF, there is no
+> nearby node and the link silently falls back to the cloud relay.** The cloud relay only delivers
+> while *both* devices are awake; the instant the phone's screen turns off / it Dozes, cloud delivery
+> stalls and **the phone receives nothing** — the watch keeps sending fine. This presents exactly as
+> "the connection drops every time the phone sleeps." It is a **transport** problem, not a Doze-policy
+> or wake-lock problem — disabling Doze on the phone does **not** fix it; turning the phone's
+> Bluetooth on does.
+>
+> Two compounding factors made this sticky:
+> 1. `WatchDataSender.resolveNodeId()` picked `firstOrNull { isNearby } ?: firstOrNull()` — i.e. it
+>    **fell back to the cloud node** when no nearby node existed, and cached it.
+> 2. The cache is only cleared on a send **failure**, but cloud sends report **success** (queued to
+>    the relay), so once latched onto the cloud node it never re-resolved to Bluetooth even after BT
+>    came back — a watch Stop→Start was needed to force re-resolution.
+>
+> Verify which transport is live:
+> ```bash
+> # On the WATCH: is there a nearby (Bluetooth) node, or only cloud?
+> adb -s <watch> shell dumpsys activity service WearableService | grep -E "Nearby node ID|connected out of|Status:"
+> #   "Nearby node ID: null" + "Status: DISCONNECTED"  → running over the cloud relay (will die in Doze)
+> # On the PHONE: is Bluetooth even on?
+> adb -s <phone> shell dumpsys bluetooth_manager | grep -E "^  state:"
+> ```
+> The phone surfaces a **"Bluetooth Disabled" warning card** on Sensors → Galaxy Watch when its
+> adapter is off (see UI section), mirroring eSense Pulse, so the operator is told to turn it on.
 
 **Why the listener is a `WearableListenerService`.** Declared with a `MESSAGE_RECEIVED`
 intent-filter, it **auto-starts the tablet app on a matching message even if the app isn't
@@ -290,7 +319,18 @@ permissions on the tablet — it only receives messages.
 | [app/.../data/sensor/watch/WatchSensorReceiver.kt](../app/src/main/java/com/biometrix/operator/data/sensor/watch/WatchSensorReceiver.kt) | Hilt singleton sink; exposes flows; inferred connection state + watchdog |
 | [app/.../data/sensor/watch/model/WatchReading.kt](../app/src/main/java/com/biometrix/operator/data/sensor/watch/model/WatchReading.kt) | `WatchReading(type, value, accuracy, t)` |
 | [app/.../presentation/screens/sensors/watch/WatchSensorScreen.kt](../app/src/main/java/com/biometrix/operator/presentation/screens/sensors/watch/WatchSensorScreen.kt) | Sensors → Galaxy Watch live-readings screen |
-| [app/.../presentation/screens/sensors/watch/WatchSensorViewModel.kt](../app/src/main/java/com/biometrix/operator/presentation/screens/sensors/watch/WatchSensorViewModel.kt) | Reads receiver flows for the screen |
+| [app/.../presentation/screens/sensors/watch/WatchSensorViewModel.kt](../app/src/main/java/com/biometrix/operator/presentation/screens/sensors/watch/WatchSensorViewModel.kt) | Reads receiver flows for the screen; also tracks the **phone's Bluetooth adapter** state (`ACTION_STATE_CHANGED` receiver → `bluetoothEnabled` flow) |
+| [app/.../presentation/components/BluetoothDisabledCard.kt](../app/src/main/java/com/biometrix/operator/presentation/components/BluetoothDisabledCard.kt) | Reusable "Bluetooth Disabled — tap to enable" warning card, shared with the eSense Pulse screen |
+
+### Phone-side Bluetooth warning (UI)
+
+The watch link needs the phone's **Bluetooth on** to use the direct (nearby) transport. So
+`WatchSensorScreen` shows the shared `BluetoothDisabledCard` at the top whenever
+`viewModel.bluetoothEnabled` is false; tapping it launches `BluetoothAdapter.ACTION_REQUEST_ENABLE`.
+The card disappears reactively when BT turns on (observed via the `ACTION_STATE_CHANGED` receiver in
+the ViewModel). This mirrors the eSense Pulse screen's `BluetoothDisabledCard` exactly. It is a
+**warning only** — it does not change which Data Layer transport the *watch* picks; that is decided
+on the watch by `WatchDataSender` (see *Transport*).
 
 ### Receiver State (flows)
 
@@ -321,6 +361,16 @@ mirroring the eSense Pulse recording flow.
   `MessageClient` design has no stream to freeze. If it recurs, suspect the FGS recreation churn
   (see lifecycle gotchas) — check `adb logcat` for repeating `unbind Tracker Service` /
   `Health SDK connection ended`.
+
+**Connection drops every time the PHONE sleeps / screen turns off (watch still sending)**
+- The phone's **Bluetooth is off**, so the link is running over the **cloud relay**, which can't
+  deliver to a dozing phone. This is *not* a Doze/wake-lock problem on the phone — disabling Doze
+  won't fix it. **Turn the phone's Bluetooth on** (and ensure the watch is BT-bonded to *this* phone
+  via Galaxy Wearable so a `isNearby` node exists). After enabling BT, **Stop→Start tracking on the
+  watch** so `WatchDataSender` re-resolves onto the nearby node instead of staying latched on the
+  cloud node. See the CRITICAL note in *Transport* above. Confirm: on the watch,
+  `dumpsys activity service WearableService` should show a non-null `Nearby node ID` and
+  `Status: CONNECTED`.
 
 **SDK stops firing entirely the moment the screen blanks**
 - `BODY_SENSORS_BACKGROUND` is not granted. Grant it (settings, "Allow all the time"), or via adb

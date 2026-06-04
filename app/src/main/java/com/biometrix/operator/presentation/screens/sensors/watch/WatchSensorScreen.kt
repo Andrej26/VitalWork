@@ -1,5 +1,9 @@
 package com.biometrix.operator.presentation.screens.sensors.watch
 
+import android.bluetooth.BluetoothAdapter
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -26,11 +30,13 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.biometrix.operator.data.model.ConnectionState
+import com.biometrix.operator.presentation.components.BluetoothDisabledCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,6 +48,12 @@ fun WatchSensorScreen(
     val readings by viewModel.latestByType.collectAsState()
     val trackers by viewModel.availableTrackers.collectAsState()
     val battery by viewModel.batteryLevel.collectAsState()
+    val bluetoothEnabled by viewModel.bluetoothEnabled.collectAsState()
+    val context = LocalContext.current
+
+    val enableBluetoothLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { /* adapter state is observed reactively via viewModel.bluetoothEnabled */ }
 
     Scaffold(
         topBar = {
@@ -66,6 +78,17 @@ fun WatchSensorScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // Bluetooth Disabled Warning — the watch link runs over direct Bluetooth, so without it
+            // data can't arrive reliably (the cloud relay dies when the phone sleeps). Same card and
+            // behaviour as the eSense Pulse screen.
+            if (!bluetoothEnabled) {
+                BluetoothDisabledCard(
+                    onClick = {
+                        enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+                    }
+                )
+            }
+
             // Connection status
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
