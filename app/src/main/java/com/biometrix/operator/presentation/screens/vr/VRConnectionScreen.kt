@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -33,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.biometrix.operator.data.model.ConnectionState
+import com.biometrix.operator.data.vr.VrPairingManager
 import com.biometrix.operator.presentation.components.ConnectionStatusBadge
 import com.biometrix.operator.presentation.log.LogEntry
 
@@ -89,28 +91,37 @@ fun VRConnectionScreen(
                         ConnectionStatusBadge(state = uiState.connectionState)
                     }
                     Text(
-                        text = "The VR headset connects to this tablet. Give the address below to " +
-                            "the VR app; it discovers the tablet automatically over Wi-Fi.",
+                        text = "Launch the VR app and leave it in its menu. When the headset appears " +
+                            "below, tap Connect to bond this tablet to it; after that the tablet " +
+                            "accepts data only from that headset.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "Tablet address: " +
+                        text = "Tablet address (diagnostics): " +
                             (uiState.tabletIpAddress?.let { "$it:${uiState.httpPort}" }
                                 ?: "no Wi-Fi connection"),
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall,
                         fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.SemiBold
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     if (uiState.connectionState == ConnectionState.CONNECTED) {
                         Text(
-                            text = "Receiving VR events.",
+                            text = "VR headset connected.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
                 }
             }
+
+            // Pairing: pending claim → Connect; bonded → bond info; lost heartbeat → warning.
+            PairingCard(
+                pairingState = uiState.pairingState,
+                candidate = uiState.candidate,
+                connectionState = uiState.connectionState,
+                onConnect = viewModel::confirmPairing
+            )
 
             // Event log
             Row(
@@ -130,6 +141,92 @@ fun VRConnectionScreen(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 items(uiState.logEntries) { entry -> LogRow(entry) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PairingCard(
+    pairingState: VrPairingManager.PairingState,
+    candidate: VrPairingManager.VrCandidate?,
+    connectionState: ConnectionState,
+    onConnect: () -> Unit
+) {
+    // While bonded, surface a lost-connection warning if the heartbeat has gone silent.
+    val bondedButLost = pairingState == VrPairingManager.PairingState.BONDED &&
+        connectionState != ConnectionState.CONNECTED
+
+    val containerColor = when {
+        bondedButLost -> MaterialTheme.colorScheme.errorContainer
+        pairingState == VrPairingManager.PairingState.PENDING ->
+            MaterialTheme.colorScheme.secondaryContainer
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = containerColor)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            when (pairingState) {
+                VrPairingManager.PairingState.UNPAIRED -> {
+                    Text(
+                        text = "Waiting for a VR headset…",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = "No headset is broadcasting yet. Start the VR app to see it here.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                VrPairingManager.PairingState.PENDING -> {
+                    Text(
+                        text = "VR headset wants to connect",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = candidate?.let { "${it.questId} at ${it.sourceIp}" } ?: "",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Button(onClick = onConnect, modifier = Modifier.fillMaxWidth()) {
+                        Text("Connect")
+                    }
+                }
+                VrPairingManager.PairingState.BONDED -> {
+                    if (bondedButLost) {
+                        Text(
+                            text = "VR connection lost",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Text(
+                            text = "No heartbeat from the headset. Recording continues; the tablet " +
+                                "will reconnect automatically when the headset comes back.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    } else {
+                        Text(
+                            text = "Bonded to VR headset",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = candidate?.let { "${it.questId} at ${it.sourceIp}" } ?: "",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
             }
         }
     }

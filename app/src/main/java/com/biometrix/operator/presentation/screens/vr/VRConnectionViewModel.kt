@@ -6,6 +6,7 @@ import com.biometrix.operator.data.model.ConnectionState
 import com.biometrix.operator.data.network.NetworkChecker
 import com.biometrix.operator.data.vr.VrEvent
 import com.biometrix.operator.data.vr.VrEventReceiver
+import com.biometrix.operator.data.vr.VrPairingManager
 import com.biometrix.operator.presentation.log.LogEntry
 import com.biometrix.operator.presentation.log.LogType
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -29,12 +30,15 @@ data class VRConnectionUiState(
     val connectionState: ConnectionState = ConnectionState.DISCONNECTED,
     val tabletIpAddress: String? = null,
     val httpPort: Int = 8080,
+    val pairingState: VrPairingManager.PairingState = VrPairingManager.PairingState.UNPAIRED,
+    val candidate: VrPairingManager.VrCandidate? = null,
     val logEntries: List<LogEntry> = emptyList()
 )
 
 @HiltViewModel
 class VRConnectionViewModel @Inject constructor(
     private val vrEventReceiver: VrEventReceiver,
+    private val vrPairingManager: VrPairingManager,
     private val networkChecker: NetworkChecker
 ) : ViewModel() {
 
@@ -48,11 +52,32 @@ class VRConnectionViewModel @Inject constructor(
     init {
         observeConnectionState()
         observeEvents()
+        observePairing()
+    }
+
+    /** Operator tapped Connect: bond to the candidate Quest. */
+    fun confirmPairing() {
+        vrPairingManager.confirm()
+    }
+
+    private fun observePairing() {
+        viewModelScope.launch {
+            vrPairingManager.pairingState.collect { state ->
+                _uiState.update { it.copy(pairingState = state) }
+            }
+        }
+        viewModelScope.launch {
+            vrPairingManager.candidate.collect { candidate ->
+                _uiState.update { it.copy(candidate = candidate) }
+            }
+        }
     }
 
     private fun observeConnectionState() {
+        // The headset indicator tracks heartbeat liveness (stays connected through quiet scenarios),
+        // matching the app-wide VR status in ConnectionRepository.
         viewModelScope.launch {
-            vrEventReceiver.connectionState.collect { state ->
+            vrEventReceiver.heartbeatState.collect { state ->
                 _uiState.update { it.copy(connectionState = state) }
                 val logType = if (state == ConnectionState.CONNECTED) LogType.SUCCESS else LogType.INFO
                 addLogEntry(logType, "VR ${state.name.lowercase()}")

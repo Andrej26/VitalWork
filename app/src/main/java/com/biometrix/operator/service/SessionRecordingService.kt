@@ -20,8 +20,10 @@ import com.biometrix.operator.R
 import com.biometrix.operator.data.recording.ScenarioRecordingRepository
 import com.biometrix.operator.data.recording.model.DataRecordingState
 import com.biometrix.operator.data.repository.SessionRepository
+import com.biometrix.operator.data.vr.VrDiscoveryListener
+import com.biometrix.operator.data.vr.VrEventReceiver
 import com.biometrix.operator.data.vr.VrHttpServer
-import kotlinx.coroutines.runBlocking
+import com.biometrix.operator.data.vr.VrPairingManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -51,6 +53,9 @@ class SessionRecordingService : Service() {
     @Inject lateinit var sessionRepository: SessionRepository
     @Inject lateinit var recordingRepository: ScenarioRecordingRepository
     @Inject lateinit var vrHttpServer: VrHttpServer
+    @Inject lateinit var vrDiscoveryListener: VrDiscoveryListener
+    @Inject lateinit var vrPairingManager: VrPairingManager
+    @Inject lateinit var vrEventReceiver: VrEventReceiver
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var observerJob: Job? = null
@@ -72,10 +77,13 @@ class SessionRecordingService : Service() {
         // on an already-running service, e.g. after a START_STICKY null-intent restart.
         startForegroundWithType(buildNotification(isRecording = false, durationMs = 0L))
         startObserving()
-        // Start the VR HTTP server + UDP beacon for the lifetime of this (ACTIVE) session.
-        // The beacon advertises the current active session id so the Quest echoes it back.
-        // Idempotent: safe on a START_STICKY null-intent restart.
-        vrHttpServer.start { runBlocking { sessionRepository.getActiveSessionOnce()?.id } }
+        // Start the VR HTTP server for the lifetime of this (ACTIVE) session. Idempotent: safe on a
+        // START_STICKY null-intent restart.
+        vrHttpServer.start()
+        // Begin VR pairing: reset any stale bond and start listening for a Quest's discovery
+        // broadcast. The listener is stopped once bonded and restarted on heartbeat-loss re-arm.
+        vrPairingManager.onSessionStart()
+        vrDiscoveryListener.start()
         return START_STICKY
     }
 
@@ -86,6 +94,27 @@ class SessionRecordingService : Service() {
      */
     private fun startObserving() {
         if (observerJob != null) return
+
+        // Stop the discovery listener once a Quest is bonded; resume it if the bond is dropped
+        // (re-arm). The listener's own start/stop are idempotent + @Synchronized.
+        scope.launch {
+            vrPairingManager.pairingState.collect { state ->
+                if (state == VrPairingManager.PairingState.BONDED) {
+                    vrDiscoveryListener.stop()
+                } else {
+                    vrDiscoveryListener.start()
+                }
+            }
+        }
+
+        // Heartbeat loss from the bonded Quest → re-arm pairing so a restarted Quest can rebond to
+        // this same active session. Recording keeps running (no teardown here).
+        scope.launch {
+            vrEventReceiver.heartbeatLost.collect {
+                vrPairingManager.reArm()
+            }
+        }
+
         observerJob = scope.launch {
             combine(
                 sessionRepository.activeSession,
@@ -168,6 +197,8 @@ class SessionRecordingService : Service() {
     }
 
     private fun stopForegroundAndSelf() {
+        vrDiscoveryListener.stop()
+        vrPairingManager.onSessionEnd()
         vrHttpServer.stop()
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -211,6 +242,8 @@ class SessionRecordingService : Service() {
         observerJob?.cancel()
         observerJob = null
         scope.cancel()
+        vrDiscoveryListener.stop()
+        vrPairingManager.onSessionEnd()
         vrHttpServer.stop()
         releaseWifiLock()
         super.onDestroy()

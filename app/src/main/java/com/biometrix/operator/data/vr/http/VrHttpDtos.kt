@@ -38,6 +38,10 @@ data class ReactionResponse(val reactionTimestampMs: Long)
 @Serializable
 data class StopResponse(val status: String = "ended")
 
+/** `200` response to `heartbeat`: a simple ack so the Quest knows the bond is still honored. */
+@Serializable
+data class HeartbeatResponse(val status: String = "alive")
+
 /** Error body for `409`/`400` so the VR side can log a specific reason. */
 @Serializable
 data class ErrorResponse(val reason: String, val value: String? = null)

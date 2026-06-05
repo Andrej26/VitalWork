@@ -31,8 +31,12 @@ class ConnectionRepository @Inject constructor(
     private val watchReceiver: WatchSensorReceiver,
     @Named("lanAvailable") private val lanAvailableFlow: StateFlow<Boolean>
 ) {
-    /** VR headset connection state (inferred from time-since-last-event; no dial-out/reconnect). */
-    val vrConnectionState: StateFlow<ConnectionState> = vrEventReceiver.connectionState
+    /**
+     * VR headset connection state — driven by the bonded Quest's heartbeat (~5 s), not by sparse
+     * scenario events, so it stays CONNECTED through a long quiet scenario and only drops ~10 s after
+     * heartbeats stop. (The event-activity state lives on as an internal log in [VrEventReceiver].)
+     */
+    val vrConnectionState: StateFlow<ConnectionState> = vrEventReceiver.heartbeatState
 
     /** BLE sensor (eSense Pulse) connection state */
     val bleConnectionState: StateFlow<ConnectionState> = bleManager.connectionState

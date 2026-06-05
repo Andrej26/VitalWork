@@ -144,5 +144,61 @@ class VrEventReceiverTest {
         advanceTimeBy(2_000L)
         runCurrent()
         assertEquals(ConnectionState.DISCONNECTED, receiver.connectionState.value)
+
+        receiver.stop() // cancel the watchdog so the shared test scheduler can drain
+    }
+
+    @Test
+    fun heartbeat_doesNotFlipEventWatchdog() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val receiver = VrEventReceiver(
+            scenarioRepository = scenarioRepository,
+            clock = { now },
+            dispatcher = dispatcher
+        )
+
+        receiver.markHeartbeat()
+        runCurrent()
+
+        // Heartbeat drives its own state but must NOT touch the event watchdog (regression guard
+        // for the conflation bug: a single heartbeat used to pin the event badge CONNECTED forever).
+        assertEquals(ConnectionState.CONNECTED, receiver.heartbeatState.value)
+        assertEquals(ConnectionState.DISCONNECTED, receiver.connectionState.value)
+
+        // Cancel the watchdog poll loop so runTest's end-of-body advanceUntilIdle() can drain the
+        // shared test scheduler — an uncancelled `while(isActive){ delay() }` loop spins it forever.
+        receiver.stop()
+    }
+
+    @Test
+    fun heartbeat_survivesLongEventQuietGap_thenLostWhenHeartbeatsStop() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val receiver = VrEventReceiver(
+            scenarioRepository = scenarioRepository,
+            clock = { now },
+            dispatcher = dispatcher
+        )
+
+        receiver.markHeartbeat()
+        runCurrent()
+        assertEquals(ConnectionState.CONNECTED, receiver.heartbeatState.value)
+
+        // A long event-quiet gap (> the 30 s event timeout) with heartbeats still arriving keeps the
+        // bond alive — this is the 10-minute-quiet-scenario case.
+        now += 40_000L
+        receiver.markHeartbeat()
+        advanceTimeBy(2_000L)
+        runCurrent()
+        assertEquals(ConnectionState.CONNECTED, receiver.heartbeatState.value)
+
+        // Now stop heartbeats: after the ~10 s heartbeat timeout it goes lost (state flips).
+        now += 11_000L
+        advanceTimeBy(2_000L)
+        runCurrent()
+        assertEquals(ConnectionState.DISCONNECTED, receiver.heartbeatState.value)
+
+        // Cancel the watchdog poll loop so runTest's end-of-body advanceUntilIdle() can drain the
+        // shared test scheduler — an uncancelled `while(isActive){ delay() }` loop spins it forever.
+        receiver.stop()
     }
 }

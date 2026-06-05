@@ -50,10 +50,15 @@ class VrEventReceiver(
 
 
     private companion object {
-        // The Quest sends no periodic traffic, only discrete events, so the timeout is generous:
-        // a session can sit between scenarios for a while. This is a coarse "is VR alive" hint.
+        // The Quest sends no periodic *events*, only discrete ones, so this timeout is generous:
+        // a session can sit between scenarios for a while. This is a coarse "any activity?" hint
+        // for the internal event log only — it must NOT gate the bond (see heartbeat liveness below).
         const val INACTIVITY_TIMEOUT_MS = 30_000L
         const val POLL_INTERVAL_MS = 1_000L
+        // Heartbeat liveness: the bonded Quest POSTs /vr/heartbeat ~every 5 s. Declare it lost after
+        // ~10 s (2 missed). This — not event-inactivity — is the real "is the Quest alive" signal,
+        // so a 10-minute quiet scenario stays connected as long as heartbeats keep arriving.
+        const val HEARTBEAT_TIMEOUT_MS = 10_000L
         // A reaction/event retry can land just after stop; keep the ended scenario addressable
         // briefly so a late, in-order measurement is saved instead of 409'd and lost.
         const val GRACE_WINDOW_MS = 3_000L
@@ -66,10 +71,25 @@ class VrEventReceiver(
     val events: SharedFlow<VrEvent> = _events.asSharedFlow()
 
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
+    /** Coarse event-activity state (internal log/badge only). Does NOT reflect bond liveness. */
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
+
+    private val _heartbeatState = MutableStateFlow(ConnectionState.DISCONNECTED)
+    /**
+     * Heartbeat-driven liveness of the bonded Quest — the signal the app-wide VR indicator should
+     * use. CONNECTED while heartbeats arrive; DISCONNECTED after [HEARTBEAT_TIMEOUT_MS] of silence.
+     */
+    val heartbeatState: StateFlow<ConnectionState> = _heartbeatState.asStateFlow()
+
+    private val _heartbeatLost = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    /** Emitted once each time heartbeats stop after having been alive; the service re-arms pairing. */
+    val heartbeatLost: SharedFlow<Unit> = _heartbeatLost.asSharedFlow()
 
     @Volatile private var lastMessageMs: Long = 0L
     private var watchdogJob: Job? = null
+
+    @Volatile private var lastHeartbeatMs: Long = 0L
+    private var heartbeatWatchdogJob: Job? = null
 
     // Active-scenario mirror, written by the VM (single writer). Guarded by `this`.
     private var activeSessionId: Long? = null
@@ -181,5 +201,45 @@ class VrEventReceiver(
                 }
             }
         }
+    }
+
+    // ── Heartbeat liveness (independent of the event watchdog) ────────────────
+
+    /**
+     * Record a heartbeat from the bonded Quest. Deliberately does NOT touch [markActivity] / the
+     * event watchdog — otherwise a single heartbeat would pin the event badge to CONNECTED forever.
+     */
+    fun markHeartbeat() {
+        lastHeartbeatMs = clock()
+        _heartbeatState.value = ConnectionState.CONNECTED
+        ensureHeartbeatWatchdog()
+    }
+
+    @Synchronized
+    private fun ensureHeartbeatWatchdog() {
+        if (heartbeatWatchdogJob?.isActive == true) return
+        heartbeatWatchdogJob = scope.launch {
+            while (isActive) {
+                delay(POLL_INTERVAL_MS)
+                if (_heartbeatState.value == ConnectionState.CONNECTED &&
+                    clock() - lastHeartbeatMs > HEARTBEAT_TIMEOUT_MS
+                ) {
+                    // Was alive, now silent → mark lost once and signal the service to re-arm.
+                    _heartbeatState.value = ConnectionState.DISCONNECTED
+                    _heartbeatLost.tryEmit(Unit)
+                }
+            }
+        }
+    }
+
+    /**
+     * Cancel the internal watchdog coroutines. Lets tests (whose dispatcher shares the runTest
+     * scheduler) terminate the otherwise-infinite poll loops so the scheduler can go idle.
+     */
+    fun stop() {
+        watchdogJob?.cancel()
+        watchdogJob = null
+        heartbeatWatchdogJob?.cancel()
+        heartbeatWatchdogJob = null
     }
 }

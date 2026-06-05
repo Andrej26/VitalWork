@@ -3,6 +3,7 @@ package com.biometrix.operator.data.vr
 import com.biometrix.operator.data.db.ScenarioCode
 import com.biometrix.operator.data.vr.http.ErrorResponse
 import com.biometrix.operator.data.vr.http.EventResponse
+import com.biometrix.operator.data.vr.http.HeartbeatResponse
 import com.biometrix.operator.data.vr.http.ReactionResponse
 import com.biometrix.operator.data.vr.http.ScenarioRequest
 import com.biometrix.operator.data.vr.http.StartResponse
@@ -15,6 +16,7 @@ import io.ktor.server.cio.CIOApplicationEngine
 import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.plugins.origin
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.RoutingContext
@@ -33,10 +35,11 @@ import javax.inject.Singleton
 @Singleton
 class VrHttpServer @Inject constructor(
     private val receiver: VrEventReceiver,
-    private val beacon: VrUdpBeacon
+    private val pairingManager: VrPairingManager
 ) {
     private companion object {
         const val PORT = 8080
+        const val QUEST_ID_HEADER = "X-Vr-Quest-Id"
     }
 
     private val json = Json {
@@ -47,7 +50,7 @@ class VrHttpServer @Inject constructor(
     private var engine: EmbeddedServer<CIOApplicationEngine, CIOApplicationEngine.Configuration>? = null
 
     @Synchronized
-    fun start(sessionIdProvider: () -> Long?) {
+    fun start() {
         if (engine != null) return
         engine = embeddedServer(CIO, port = PORT, host = "0.0.0.0") {
             install(ContentNegotiation) { json(json) }
@@ -56,14 +59,13 @@ class VrHttpServer @Inject constructor(
                 post("/vr/scenario/event") { handleEvent() }
                 post("/vr/scenario/reaction") { handleReaction() }
                 post("/vr/scenario/stop") { handleStop() }
+                post("/vr/heartbeat") { handleHeartbeat() }
             }
         }.also { it.start(wait = false) }
-        beacon.start(sessionIdProvider)
     }
 
     @Synchronized
     fun stop() {
-        beacon.stop()
         engine?.stop(gracePeriodMillis = 0, timeoutMillis = 500)
         engine = null
     }
@@ -117,11 +119,37 @@ class VrHttpServer @Inject constructor(
         }
     }
 
+    /** Liveness ping from the bonded Quest (independent of sparse scenario events). */
+    private suspend fun RoutingContext.handleHeartbeat() {
+        if (!authorized()) return
+        receiver.markHeartbeat()
+        call.respond(HeartbeatResponse())
+    }
+
     /**
-     * Receives + validates the shared body. Returns null (and sends a 400) if the scenario name is
-     * unknown, so the route handler can early-return.
+     * The pairing gate every route checks first. Reads the caller's source IP + `X-Vr-Quest-Id`
+     * header and rejects (403, no detail) anything that isn't the bonded Quest — so a second Quest
+     * in the room (or a stray request before the operator taps Connect) is silently ignored.
+     * Returns false (and sends 403) when unauthorized, so the caller can early-return.
+     */
+    private suspend fun RoutingContext.authorized(): Boolean {
+        val questId = call.request.headers[QUEST_ID_HEADER]
+        val sourceIp = call.request.origin.remoteAddress
+        if (!pairingManager.isAuthorized(questId, sourceIp)) {
+            call.respond(HttpStatusCode.Forbidden, ErrorResponse(reason = "not_paired"))
+            return false
+        }
+        return true
+    }
+
+    /**
+     * Gate + receive + validate the shared body. Returns null when the request is unauthorized (403)
+     * or the scenario name is unknown (400), so the route handler can early-return. The gate runs for
+     * **all four** scenario routes (start included) — it's the only place a rogue Quest's `start` is
+     * stopped before it reaches the ViewModel.
      */
     private suspend fun RoutingContext.parse(): Pair<Long, ScenarioCode>? {
+        if (!authorized()) return null
         val body = call.receive<ScenarioRequest>()
         val code = runCatching { ScenarioCode.valueOf(body.scenarioId) }.getOrNull()
         if (code == null) {
