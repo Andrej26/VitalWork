@@ -12,7 +12,7 @@ import com.biometrix.operator.data.sensor.ble.model.BleDevice
 import com.biometrix.operator.data.sensor.watch.WatchSensorReceiver
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharedFlow
-import com.biometrix.operator.data.vr.VRConnectionManager
+import com.biometrix.operator.data.vr.VrEventReceiver
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
@@ -25,25 +25,14 @@ import javax.inject.Singleton
  */
 @Singleton
 class ConnectionRepository @Inject constructor(
-    private val vrWebSocketClient: VRConnectionManager,
+    private val vrEventReceiver: VrEventReceiver,
     private val bleManager: BleManager,
     @Named("respiration") private val respirationDevice: SensorDevice,
     private val watchReceiver: WatchSensorReceiver,
     @Named("lanAvailable") private val lanAvailableFlow: StateFlow<Boolean>
 ) {
-    /** VR headset WebSocket connection state */
-    val vrConnectionState: StateFlow<ConnectionState> = vrWebSocketClient.connectionState
-
-    /** Whether VR connection is currently auto-reconnecting */
-    val vrIsReconnecting: StateFlow<Boolean> = vrWebSocketClient.isReconnecting
-
-    /** Whether the StressChamber scene is currently active (shared lock across ViewModels) */
-    private val _isStressChamberSceneActive = MutableStateFlow(false)
-    val isStressChamberSceneActive: StateFlow<Boolean> = _isStressChamberSceneActive
-
-    fun setStressChamberSceneActive(active: Boolean) {
-        _isStressChamberSceneActive.value = active
-    }
+    /** VR headset connection state (inferred from time-since-last-event; no dial-out/reconnect). */
+    val vrConnectionState: StateFlow<ConnectionState> = vrEventReceiver.connectionState
 
     /** BLE sensor (eSense Pulse) connection state */
     val bleConnectionState: StateFlow<ConnectionState> = bleManager.connectionState

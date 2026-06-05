@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config xmlns:tools="http://schemas.android.com/tools">
-    <!-- Cleartext is required for WebSocket connection to VR headset on local network -->
+    <!-- Cleartext permitted for plain-HTTP traffic with the VR headset / server on the local network -->
     <base-config cleartextTrafficPermitted="true" tools:ignore="InsecureBaseConfiguration">
         <trust-anchors>
             <certificates src="system" />

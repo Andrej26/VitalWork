@@ -1,24 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
-    <!-- Network (VR WebSocket) -->
+    <!-- Network (VR HTTP server + UDP presence beacon on the LAN) -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-
-    <!-- mDNS discovery (NsdManager needs multicast to receive mDNS responses) -->
-    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
 
     <!-- Audio (eSense Respiration) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
-    <!-- Foreground service: keep sensors recording + VR WebSocket alive while the screen is locked -->
+    <!-- Foreground service: keep sensors recording + VR HTTP server alive while the screen is locked -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
-    <!-- Required to hold the Wi-Fi lock that keeps the VR WebSocket alive under Doze -->
+    <!-- Required to hold the Wi-Fi lock that keeps the VR HTTP server reachable under Doze -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!-- Notification for the recording foreground service (Android 13+) -->

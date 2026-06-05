@@ -170,34 +170,14 @@ fun SessionControlScreen(
         viewModel.setBlePermissionsGranted(permissions.values.all { it })
     }
 
-    val wifiSettingsLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { /* NetworkCallback in MdnsDiscoveryService handles auto-restart */ }
-
-    @Suppress("DEPRECATION")
-    val wifiSettingsIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        Intent(Settings.Panel.ACTION_WIFI)
-    } else {
-        Intent(Settings.ACTION_WIFI_SETTINGS)
-    }
-
-    // VR biofeedback state
+    // VR auto-recording cue (set when the Quest's scenario_start triggers recording)
     val vrTriggeredRecording by viewModel.vrTriggeredRecording.collectAsState()
-    val lastVrBiofeedbackEvent by viewModel.lastVrBiofeedbackEvent.collectAsState()
 
     // Low signal warning
     val respirationLowSignalWarning by viewModel.respirationLowSignalWarning.collectAsState()
 
     // Respiration disconnect reason (for error dialog)
     val respirationDisconnectReason by viewModel.respirationDisconnectReason.collectAsState()
-
-    // VR mDNS discovery state
-    val discoveredVrDevices by viewModel.discoveredVrDevices.collectAsState()
-    val isVrDiscovering by viewModel.isVrDiscovering.collectAsState()
-    val selectedVrDevice by viewModel.selectedVrDevice.collectAsState()
-    val vrIsReconnecting by viewModel.vrIsReconnecting.collectAsState()
-    val isVrWifiAvailable by viewModel.isVrWifiAvailable.collectAsState()
-    val isStressChamberSceneActive by viewModel.isStressChamberSceneActive.collectAsState()
 
     // Convert DeviceState to ConnectionState for UI consistency
     val respirationConnectionState = respirationSensorState.toConnectionState()
@@ -599,109 +579,20 @@ fun SessionControlScreen(
                         ConnectionStatusBadge(state = vrConnectionState)
                     }
 
-                    val isVrConnectedOrConnecting = vrConnectionState == ConnectionState.CONNECTED ||
-                            vrConnectionState == ConnectionState.CONNECTING
-                    if (!isVrWifiAvailable && !isVrConnectedOrConnecting) {
-                        Card(
-                            onClick = { wifiSettingsLauncher.launch(wifiSettingsIntent) },
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.errorContainer
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.WifiOff,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(24.dp),
-                                    tint = MaterialTheme.colorScheme.onErrorContainer
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "Wi-Fi Disabled",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Medium,
-                                        color = MaterialTheme.colorScheme.onErrorContainer
-                                    )
-                                    Text(
-                                        text = "Tap here to enable Wi-Fi.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onErrorContainer
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp),
-                                    tint = MaterialTheme.colorScheme.onErrorContainer
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
-                    if (isVrConnectedOrConnecting) {
-                        VrConnectedState(
-                            device = selectedVrDevice,
-                            connectionState = vrConnectionState,
-                            onDisconnect = { viewModel.disconnectVr() }
-                        )
-                    } else {
-                        VrScanningState(
-                            discoveredDevices = discoveredVrDevices,
-                            isDiscovering = isVrDiscovering,
-                            onSelectDevice = { viewModel.selectAndConnectVrDevice(it) },
-                            onRescan = { viewModel.rescanVrDevices() }
-                        )
-                    }
-
-                    if (vrConnectionState == ConnectionState.CONNECTED) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            FilledTonalButton(
-                                onClick = { viewModel.sendTutorialCommand() },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.PlayArrow,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Tutorial")
-                            }
-
-                            FilledTonalButton(
-                                onClick = {
-                                    viewModel.sendStartSceneCommand()
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                enabled = isAnySensorConnected
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.SkipNext,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Start StressChamber")
-                            }
-
-                            if (!isAnySensorConnected) {
-                                Text(
-                                    text = "Connect a sensor to enable scene start",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.error
-                                )
-                            }
-                        }
-                    }
+                    // The tablet is now an HTTP server: the Quest connects to us and drives
+                    // scenarios via POSTs. There is nothing to dial out to or command from here.
+                    // Connection is inferred from recent VR events; setup diagnostics (tablet
+                    // IP/port, event log) live on the dedicated VR screen.
+                    Text(
+                        text = when (vrConnectionState) {
+                            ConnectionState.CONNECTED ->
+                                "VR headset connected — scenarios are driven by the Quest."
+                            else ->
+                                "Waiting for the VR headset to connect. Open VR Control for the tablet address and event log."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 
@@ -1203,119 +1094,6 @@ private fun respirationErrorMessage(reason: String): String = when {
     reason.contains("Init Failed", ignoreCase = true) ->
         "Failed to initialize the sensor. Try disconnecting and reconnecting the audio cable."
     else -> reason
-}
-
-@Composable
-private fun VrScanningState(
-    discoveredDevices: List<com.biometrix.operator.data.vr.model.DiscoveredVrDevice>,
-    isDiscovering: Boolean,
-    onSelectDevice: (com.biometrix.operator.data.vr.model.DiscoveredVrDevice) -> Unit,
-    onRescan: () -> Unit
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.weight(1f)
-        ) {
-            if (isDiscovering) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.dp
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Scanning for VR devices...",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                Text(
-                    text = "No devices found",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-        FilledTonalButton(
-            onClick = onRescan
-        ) {
-            Text(text = "Rescan")
-        }
-    }
-
-    if (discoveredDevices.isNotEmpty()) {
-        HorizontalDivider()
-        discoveredDevices.forEach { device ->
-            VrDiscoveredDeviceItem(device = device, onClick = { onSelectDevice(device) })
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun VrDiscoveredDeviceItem(
-    device: com.biometrix.operator.data.vr.model.DiscoveredVrDevice,
-    onClick: () -> Unit
-) {
-    Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = device.name,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = "${device.host}:${device.port}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun VrConnectedState(
-    device: com.biometrix.operator.data.vr.model.DiscoveredVrDevice?,
-    connectionState: ConnectionState,
-    onDisconnect: () -> Unit
-) {
-    if (device != null) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Text(
-                text = device.name,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = "${device.host}:${device.port}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-    OutlinedButton(
-        onClick = onDisconnect,
-        modifier = Modifier.fillMaxWidth(),
-        enabled = connectionState != ConnectionState.CONNECTING
-    ) {
-        Text(text = "Disconnect")
-    }
 }
 
 @Composable

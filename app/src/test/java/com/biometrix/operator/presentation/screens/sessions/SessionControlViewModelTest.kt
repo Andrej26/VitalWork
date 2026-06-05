@@ -15,12 +15,11 @@ import com.biometrix.operator.data.repository.ScenarioRepository
 import com.biometrix.operator.data.repository.SessionRepository
 import com.biometrix.operator.data.sensor.FakeSensorDevice
 import com.biometrix.operator.data.sensor.ble.FakeBleManager
+import com.biometrix.operator.data.db.ScenarioCode
 import com.biometrix.operator.data.system.FakeLocationChecker
 import com.biometrix.operator.data.system.FakeSystemReadinessChecker
-import com.biometrix.operator.data.vr.FakeVRConnectionManager
-import com.biometrix.operator.data.vr.FakeVrDeviceDiscovery
-import com.biometrix.operator.data.vr.model.ServerMessage
-import com.biometrix.operator.data.vr.model.WebSocketMessage
+import com.biometrix.operator.data.vr.VrEvent
+import com.biometrix.operator.data.vr.VrEventReceiver
 import com.biometrix.operator.presentation.components.BleDialogState
 import com.biometrix.operator.presentation.screens.sessions.components.NotesSaveStatus
 import kotlinx.coroutines.Dispatchers
@@ -45,8 +44,7 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class SessionControlViewModelTest {
 
-    private lateinit var fakeVrClient: FakeVRConnectionManager
-    private lateinit var fakeDiscovery: FakeVrDeviceDiscovery
+    private lateinit var vrEventReceiver: VrEventReceiver
     private lateinit var fakeBleManager: FakeBleManager
     private lateinit var fakeRespiration: FakeSensorDevice
     private lateinit var fakeSessionDao: FakeSessionDao
@@ -63,8 +61,6 @@ class SessionControlViewModelTest {
 
     @Before
     fun setUp() {
-        fakeVrClient = FakeVRConnectionManager()
-        fakeDiscovery = FakeVrDeviceDiscovery()
         fakeBleManager = FakeBleManager()
         fakeRespiration = FakeSensorDevice()
         fakeSessionDao = FakeSessionDao()
@@ -73,15 +69,16 @@ class SessionControlViewModelTest {
         fakeScenarioRecordingRepo = FakeScenarioRecordingRepository()
         fakeLocationChecker = FakeLocationChecker(locationEnabled = true)
         lanAvailableFlow = MutableStateFlow(true)
+        scenarioRepository = ScenarioRepository(fakeScenarioDao, fakeSensorSampleDao)
+        vrEventReceiver = VrEventReceiver(scenarioRepository)
 
         connectionRepository = ConnectionRepository(
-            vrWebSocketClient = fakeVrClient,
+            vrEventReceiver = vrEventReceiver,
             bleManager = fakeBleManager,
             respirationDevice = fakeRespiration,
             watchReceiver = WatchSensorReceiver(),
             lanAvailableFlow = lanAvailableFlow
         )
-        scenarioRepository = ScenarioRepository(fakeScenarioDao, fakeSensorSampleDao)
         sessionRepository = SessionRepository(fakeSessionDao, fakeScenarioDao, fakeSensorSampleDao)
     }
 
@@ -109,16 +106,20 @@ class SessionControlViewModelTest {
             sensorRecordingRepository = fakeScenarioRecordingRepo,
             sessionRepository = sessionRepository,
             scenarioRepository = scenarioRepository,
-            vrWebSocketClient = fakeVrClient,
-            mdnsDiscovery = fakeDiscovery,
+            vrEventReceiver = vrEventReceiver,
             locationChecker = fakeLocationChecker,
             readinessChecker = FakeSystemReadinessChecker(),
             savedStateHandle = savedState
         )
     }
 
-    private fun vrEvent(name: String, value: Int? = null): WebSocketMessage.Event =
-        WebSocketMessage.Event(ServerMessage(type = "event", success = true, msg = name, value = value))
+    private suspend fun emitScenarioStart(code: ScenarioCode = ScenarioCode.FALLING_PALLET) {
+        vrEventReceiver.submit(VrEvent.ScenarioStart(sessionId, code, System.currentTimeMillis()))
+    }
+
+    private suspend fun emitScenarioStop(code: ScenarioCode = ScenarioCode.FALLING_PALLET) {
+        vrEventReceiver.submit(VrEvent.ScenarioStop(sessionId, code, System.currentTimeMillis()))
+    }
 
     @Test
     fun init_loadsSessionFromRepository() = runTest {
@@ -143,7 +144,7 @@ class SessionControlViewModelTest {
     }
 
     @Test
-    fun vrStartEvent_legacyPath_whenSensorConnected_createsPlaceholderScenarioAndStarts() = runTest {
+    fun vrScenarioStart_whenSensorConnected_createsRealScenarioAndStarts() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         seedActiveSession()
         fakeBleManager.connectionState.value = ConnectionState.CONNECTED
@@ -151,23 +152,25 @@ class SessionControlViewModelTest {
         val vm = createVm()
         advanceUntilIdle()
 
-        fakeVrClient.messages.emit(vrEvent("start_recording"))
+        emitScenarioStart(ScenarioCode.BLIND_CORNER)
         advanceUntilIdle()
 
         assertEquals(1, fakeScenarioRecordingRepo.startRecordingCallCount)
         assertEquals(1, fakeScenarioDao.scenarios.size)
+        // The real scenario code is recorded (no placeholder).
+        assertEquals(ScenarioCode.BLIND_CORNER, fakeScenarioDao.scenarios[0].scenarioCode)
         assertTrue(vm.vrTriggeredRecording.value)
     }
 
     @Test
-    fun vrStartEvent_whenNoSensorConnected_doesNotStartRecording() = runTest {
+    fun vrScenarioStart_whenNoSensorConnected_doesNotStartRecording() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         seedActiveSession()
 
         val vm = createVm()
         advanceUntilIdle()
 
-        fakeVrClient.messages.emit(vrEvent("start_recording"))
+        emitScenarioStart()
         advanceUntilIdle()
 
         assertEquals(0, fakeScenarioRecordingRepo.startRecordingCallCount)
@@ -175,7 +178,7 @@ class SessionControlViewModelTest {
     }
 
     @Test
-    fun vrStopEvent_whileRecording_stopsRecordingAndDeactivatesScene() = runTest {
+    fun vrScenarioStop_whileRecording_stopsRecording() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         seedActiveSession()
         fakeBleManager.connectionState.value = ConnectionState.CONNECTED
@@ -183,18 +186,15 @@ class SessionControlViewModelTest {
         val vm = createVm()
         advanceUntilIdle()
 
-        fakeVrClient.messages.emit(vrEvent("start_recording"))
+        emitScenarioStart()
         advanceUntilIdle()
         assertEquals(DataRecordingState.RECORDING, fakeScenarioRecordingRepo.recordingState.value)
 
-        connectionRepository.setStressChamberSceneActive(true)
-
-        fakeVrClient.messages.emit(vrEvent("stop_recording"))
+        emitScenarioStop()
         advanceUntilIdle()
 
         assertEquals(1, fakeScenarioRecordingRepo.stopRecordingCallCount)
         assertFalse(vm.vrTriggeredRecording.value)
-        assertFalse(connectionRepository.isStressChamberSceneActive.value)
     }
 
     @Test
@@ -233,7 +233,6 @@ class SessionControlViewModelTest {
         assertEquals(1, fakeScenarioRecordingRepo.stopRecordingCallCount)
         assertEquals(SessionStatus.COMPLETED, fakeSessionDao.sessions[0].status)
         assertTrue(vm.endSessionResult.value is EndSessionResult.Success)
-        assertEquals(1, fakeVrClient.suppressAutoReconnectCallCount)
     }
 
     @Test

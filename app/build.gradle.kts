@@ -80,8 +80,13 @@ dependencies {
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
-    implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)
+
+    // VR link: embedded HTTP server (tablet receives the Quest's scenario-event POSTs)
+    implementation(libs.ktor.server.core)
+    implementation(libs.ktor.server.cio)
+    implementation(libs.ktor.server.content.negotiation)
+    implementation(libs.ktor.serialization.kotlinx.json)
     implementation(files("libs/eSense_sdk_2_lib.jar"))
 
     // Wearable Data Layer (receive Galaxy Watch sensor stream over ChannelClient)

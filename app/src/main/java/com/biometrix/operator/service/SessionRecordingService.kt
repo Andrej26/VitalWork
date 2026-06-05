@@ -20,6 +20,8 @@ import com.biometrix.operator.R
 import com.biometrix.operator.data.recording.ScenarioRecordingRepository
 import com.biometrix.operator.data.recording.model.DataRecordingState
 import com.biometrix.operator.data.repository.SessionRepository
+import com.biometrix.operator.data.vr.VrHttpServer
+import kotlinx.coroutines.runBlocking
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -48,6 +50,7 @@ class SessionRecordingService : Service() {
 
     @Inject lateinit var sessionRepository: SessionRepository
     @Inject lateinit var recordingRepository: ScenarioRecordingRepository
+    @Inject lateinit var vrHttpServer: VrHttpServer
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var observerJob: Job? = null
@@ -69,6 +72,10 @@ class SessionRecordingService : Service() {
         // on an already-running service, e.g. after a START_STICKY null-intent restart.
         startForegroundWithType(buildNotification(isRecording = false, durationMs = 0L))
         startObserving()
+        // Start the VR HTTP server + UDP beacon for the lifetime of this (ACTIVE) session.
+        // The beacon advertises the current active session id so the Quest echoes it back.
+        // Idempotent: safe on a START_STICKY null-intent restart.
+        vrHttpServer.start { runBlocking { sessionRepository.getActiveSessionOnce()?.id } }
         return START_STICKY
     }
 
@@ -161,6 +168,7 @@ class SessionRecordingService : Service() {
     }
 
     private fun stopForegroundAndSelf() {
+        vrHttpServer.stop()
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -203,6 +211,7 @@ class SessionRecordingService : Service() {
         observerJob?.cancel()
         observerJob = null
         scope.cancel()
+        vrHttpServer.stop()
         releaseWifiLock()
         super.onDestroy()
     }

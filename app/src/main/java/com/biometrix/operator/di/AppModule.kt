@@ -22,10 +22,6 @@ import com.biometrix.operator.data.system.LocationChecker
 import com.biometrix.operator.data.system.LocationCheckerImpl
 import com.biometrix.operator.data.system.SystemReadinessChecker
 import com.biometrix.operator.data.system.SystemReadinessCheckerImpl
-import com.biometrix.operator.data.vr.MdnsDiscoveryService
-import com.biometrix.operator.data.vr.VRConnectionManager
-import com.biometrix.operator.data.vr.VRWebSocketClient
-import com.biometrix.operator.data.vr.VrDeviceDiscovery
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -97,18 +93,6 @@ object AppModule {
     @Singleton
     fun provideSensorSampleDao(database: AppDatabase): SensorSampleDao =
         database.sensorSampleDao()
-
-    @Provides
-    @Singleton
-    fun provideVRConnectionManager(networkChecker: NetworkChecker): VRConnectionManager {
-        return VRWebSocketClient(networkChecker)
-    }
-
-    @Provides
-    @Singleton
-    fun provideVrDeviceDiscovery(mdnsDiscoveryService: MdnsDiscoveryService): VrDeviceDiscovery {
-        return mdnsDiscoveryService
-    }
 
     @Provides
     @Singleton

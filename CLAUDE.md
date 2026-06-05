@@ -14,7 +14,7 @@ BioMetrixOperator is an Android mobile application written in Kotlin using Jetpa
 - Gradle 9.3.0 with Kotlin DSL and version catalog
 - Hilt/Dagger for dependency injection
 - Room 2.7.1 for local database
-- OkHttp 5.3.2 for WebSocket
+- Ktor 3.3.0 (CIO embedded HTTP server) — receives VR scenario events from the Quest
 - Vico 2.1.2 for charts
 - Play Services Wearable (Data Layer) for the watch ↔ tablet link
 - Samsung Health Sensor SDK (local AAR, `:wear` only) for Galaxy Watch sensors
@@ -74,7 +74,7 @@ MainActivity (entry point)
 
 The app has three main responsibilities:
 
-1. **VR Control** — WebSocket client connecting to the BioMetrix VR app on a Meta Quest headset over local Wi-Fi
+1. **VR Control** — embedded HTTP server (Ktor) that the Meta Quest VR app POSTs scenario events to over local Wi-Fi; the tablet advertises itself via a UDP presence beacon (Unreal Engine has no mDNS). The tablet stamps each event's arrival time (tablet clock only; no device sync)
 2. **Sensor Data Collection** — Gather physiological data (heart rate, RR intervals, ECG, respiration) from BLE and audio jack sensors
 3. **Test Management** — Organize anonymous clinical test sessions with recordings, SUDS scores, local storage, and JSON/CSV export
 
@@ -187,12 +187,13 @@ com.biometrix.operator/
 │   │       ├── WatchSensorReceiver.kt      # Hilt singleton sink + inferred connection state
 │   │       └── model/
 │   │           └── WatchReading.kt
-│   └── vr/
-│       ├── VRWebSocketClient.kt
-│       ├── MdnsDiscoveryService.kt          # mDNS headset auto-discovery
-│       └── model/
-│           ├── DiscoveredVrDevice.kt
-│           └── WebSocketMessage.kt
+│   └── vr/                                 # VR link (tablet = HTTP server; Quest = client)
+│       ├── VrHttpServer.kt                  # Ktor CIO server; 4 routes → VrEventReceiver
+│       ├── VrEventReceiver.kt              # Hilt singleton sink; accept/reject + ack-after-write + inferred connection state
+│       ├── VrUdpBeacon.kt                   # UDP presence broadcast (ip/port/sessionId) every 5 s
+│       ├── VrEvent.kt                       # sealed VrEvent (ScenarioStart/StimulusEvent/Reaction/ScenarioStop) + VrEventResult
+│       └── http/
+│           └── VrHttpDtos.kt                # @Serializable wire DTOs (ScenarioRequest + responses)
 ├── presentation/
 │   ├── components/                          # Reusable UI components
 │   │   ├── BioSensorCard.kt
@@ -278,7 +279,7 @@ com.biometrix.operator.wear/
 |-------|--------|-------------|
 | `tutorial` | TutorialScreen | First-launch onboarding |
 | `home` | HomeScreen | Main dashboard with navigation cards |
-| `vr_control` | VRConnectionScreen | VR headset connection (manual IP or mDNS discovery) |
+| `vr_control` | VRConnectionScreen | VR link diagnostics (tablet IP/port + live received-event log) |
 | `sensors` | SensorsScreen | List of available sensors |
 | `sensors/{sensorId}` | SensorDetailScreen | Router to vendor-specific sensor screen |
 | `participants/new` | ParticipantEntryScreen | Anonymized participant entry (creates participant + session) |
@@ -313,9 +314,9 @@ Reaction time is **derived** at export from `reactionTimestampMs − eventTimest
 ## Data Flow
 
 ```
-Meta Quest VR ◄──WebSocket──► VRWebSocketClient ──► VRConnectionViewModel ──► UI
-                               ▲
-                      MdnsDiscoveryService (auto-discovery)
+Meta Quest VR ──HTTP POST──► VrHttpServer ──► VrEventReceiver ──► SessionControlViewModel ──► UI
+                  ▲                               │ (ack-after-write)
+       VrUdpBeacon (tablet advertises ip/port/sessionId)   └──► ScenarioRepository (event/reaction timestamps)
 
 eSense Pulse  ◄────BLE──────► BleManager ──────────► EsensePulseViewModel ──► UI
 eSense Resp.  ◄────Audio────► MindfieldRespiration ► EsenseRespirationViewModel ► UI
@@ -366,7 +367,7 @@ Unit tests live under `app/src/test/` and run on the host JVM (no device/emulato
 | File | Target | What it covers |
 |------|--------|----------------|
 | `data/recording/GapDetectorTest.kt` | `GapDetector.kt` | Gap detection edge cases: empty input, startup threshold, boundary conditions, mixed sensor types, unsorted input, per-sensor-type routing |
-| `data/vr/model/WebSocketMessageTest.kt` | `WebSocketMessage.kt` | `ServerMessage` JSON serialization: minimal/full/failure decoding, round-trip, malformed JSON, missing fields, unknown fields |
+| `data/vr/VrEventReceiverTest.kt` | `VrEventReceiver.kt` | Event/reaction persistence + accept, reject when no active scenario, first-write-wins, late-reaction grace window, heartbeat-less liveness watchdog |
 | `data/repository/ParticipantRepositoryTest.kt` | `ParticipantRepository.kt` | Code generation (`P-001`…), uniqueness validation, fetch by ID/code |
 | `data/repository/SessionRepositoryTest.kt` | `SessionRepository.kt` | Session lifecycle: `sessionCode` format (BMX-yyMMdd-HHmmss), participant FK, sample-count aggregation from scenarios at end, status transitions, notes persistence, deletion |
 | `data/repository/ScenarioRepositoryTest.kt` | `ScenarioRepository.kt` | Scenario lifecycle: create with derived `scenarioCategory`, event/reaction timestamp updates, end (sets `endedAt`), batch sample insert |
@@ -376,6 +377,5 @@ Unit tests live under `app/src/test/` and run on the host JVM (no device/emulato
 | `presentation/screens/participants/ParticipantEntryViewModelTest.kt` | `ParticipantEntryViewModel.kt` | Form validation, duplicate-code rejection, success emission, active-session redirect |
 | `presentation/screens/sessions/SessionControlViewModelTest.kt` | `SessionControlViewModel.kt` | Session loading, scenario-driven recording, end-session flow |
 | `presentation/screens/sessions/SessionDetailViewModelTest.kt` | `SessionDetailViewModel.kt` | Session/scenario loading, export workflow with `markUploaded` transition |
-| `presentation/screens/vr/VRConnectionViewModelTest.kt` | `VRConnectionViewModel.kt` | VR connection state machine, command sending, discovery lifecycle |
 
 Tests mirror the production package structure (e.g., `GapDetectorTest.kt` is in the same package as `GapDetector.kt`). This enables Android Studio's **Ctrl+Shift+T** navigation between production code and its test.

@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.biometrix.operator.data.db.ScenarioCode
 import com.biometrix.operator.data.db.ScenarioEntity
 import com.biometrix.operator.data.db.SessionEntity
 import com.biometrix.operator.data.model.ConnectionState
@@ -18,10 +17,8 @@ import com.biometrix.operator.data.repository.SessionRepository
 import com.biometrix.operator.data.sensor.DeviceState
 import com.biometrix.operator.data.sensor.ble.BleEvent
 import com.biometrix.operator.data.sensor.ble.model.BleDevice
-import com.biometrix.operator.data.vr.VRConnectionManager
-import com.biometrix.operator.data.vr.VrDeviceDiscovery
-import com.biometrix.operator.data.vr.model.DiscoveredVrDevice
-import com.biometrix.operator.data.vr.model.WebSocketMessage
+import com.biometrix.operator.data.vr.VrEvent
+import com.biometrix.operator.data.vr.VrEventReceiver
 import com.biometrix.operator.presentation.components.BleDialogState
 import com.biometrix.operator.presentation.components.DialogAction
 import com.biometrix.operator.presentation.components.gattStatusToString
@@ -49,8 +46,7 @@ class SessionControlViewModel @Inject constructor(
     private val sensorRecordingRepository: ScenarioRecordingRepository,
     private val sessionRepository: SessionRepository,
     private val scenarioRepository: ScenarioRepository,
-    private val vrWebSocketClient: VRConnectionManager,
-    private val mdnsDiscovery: VrDeviceDiscovery,
+    private val vrEventReceiver: VrEventReceiver,
     private val locationChecker: LocationChecker,
     private val readinessChecker: com.biometrix.operator.data.system.SystemReadinessChecker,
     savedStateHandle: SavedStateHandle
@@ -92,26 +88,12 @@ class SessionControlViewModel @Inject constructor(
         }
     }
 
-    companion object {
-        // Legacy VR events from the previous NarrowingChamber/StressChamber project. The new
-        // logistics VR app will not emit these; the wiring is kept inert until the new
-        // protocol (scenario_start / event_triggered / reaction_recorded / scenario_end)
-        // replaces it. Tracked as a follow-up cleanup.
-        private const val VR_EVENT_START_BIOFEEDBACK = "start_recording"
-        private const val VR_EVENT_STOP_BIOFEEDBACK = "stop_recording"
-
-        // Placeholder scenario used when the legacy VR `start_recording` message arrives
-        // (which only happens if you point this app at an old-project VR build during
-        // development). Will be removed when the new VR protocol lands.
-        private val LEGACY_VR_PLACEHOLDER_SCENARIO = ScenarioCode.FALLING_PALLET
-    }
-
     val sessionId: Long = savedStateHandle.get<Long>("sessionId") ?: -1L
 
     private val _session = MutableStateFlow<SessionEntity?>(null)
     val session: StateFlow<SessionEntity?> = _session.asStateFlow()
 
-    /** VR headset WebSocket connection state */
+    /** VR headset connection state (inferred from time-since-last-event) */
     val vrConnectionState: StateFlow<ConnectionState> = connectionRepository.vrConnectionState
 
     /** BLE sensor (eSense Pulse) connection state */
@@ -193,32 +175,9 @@ class SessionControlViewModel @Inject constructor(
     private var lastConnectedDevice: BleDevice? = null
     private var bleFirstDataJob: Job? = null
 
-    /** Whether the current recording was triggered by a legacy VR biofeedback command */
+    /** Whether the current recording was triggered (auto-started) by a VR scenario_start event */
     private val _vrTriggeredRecording = MutableStateFlow(false)
     val vrTriggeredRecording: StateFlow<Boolean> = _vrTriggeredRecording.asStateFlow()
-
-    /** Latest legacy VR biofeedback event for UI feedback */
-    private val _lastVrBiofeedbackEvent = MutableStateFlow<VrBiofeedbackEvent?>(null)
-    val lastVrBiofeedbackEvent: StateFlow<VrBiofeedbackEvent?> = _lastVrBiofeedbackEvent.asStateFlow()
-
-    /** Whether the legacy StressChamber scene is currently active (shared via ConnectionRepository) */
-    val isStressChamberSceneActive: StateFlow<Boolean> = connectionRepository.isStressChamberSceneActive
-
-    /** VR devices discovered via mDNS */
-    val discoveredVrDevices: StateFlow<List<DiscoveredVrDevice>> = mdnsDiscovery.discoveredDevices
-
-    /** Whether mDNS discovery is active */
-    val isVrDiscovering: StateFlow<Boolean> = mdnsDiscovery.isDiscovering
-
-    /** Whether Wi-Fi is available for VR discovery */
-    val isVrWifiAvailable: StateFlow<Boolean> = mdnsDiscovery.isWifiAvailable
-
-    /** Currently selected (connected) VR device */
-    private val _selectedVrDevice = MutableStateFlow<DiscoveredVrDevice?>(null)
-    val selectedVrDevice: StateFlow<DiscoveredVrDevice?> = _selectedVrDevice.asStateFlow()
-
-    /** Whether VR connection is auto-reconnecting */
-    val vrIsReconnecting: StateFlow<Boolean> = connectionRepository.vrIsReconnecting
 
     /** Scenarios for this session */
     val scenarios: StateFlow<List<ScenarioEntity>> = if (sessionId > 0) {
@@ -272,9 +231,6 @@ class SessionControlViewModel @Inject constructor(
             }
         }
 
-        // Start mDNS discovery for VR headset
-        mdnsDiscovery.startDiscovery()
-
         // Unified BLE connection-state handler: dialog dismissal, HR-notification kickoff,
         // watchdog cancellation, and post-disconnect resets.
         viewModelScope.launch {
@@ -295,28 +251,15 @@ class SessionControlViewModel @Inject constructor(
             }
         }
 
-        // Legacy VR biofeedback bridge. Inert against the new logistics VR app (which
-        // doesn't emit start_recording / stop_recording). Kept until the new scenario-
-        // based protocol replaces it.
+        // VR scenario lifecycle from the Quest (HTTP events via VrEventReceiver). Only the
+        // lifecycle events (start/stop) are handled here; the receiver writes event/reaction
+        // timestamps itself (ack-after-write). Gating preserved: session ACTIVE + a sensor connected.
         viewModelScope.launch {
-            vrWebSocketClient.messages.collect { message ->
-                when (message) {
-                    is WebSocketMessage.Event -> {
-                        handleVrBiofeedbackEvent(
-                            message.serverMessage.msg ?: "",
-                            message.serverMessage.value
-                        )
-                    }
-                    else -> { /* Ignore other message types */ }
-                }
-            }
-        }
-
-        // Clear legacy StressChamber scene lock when VR disconnects (safety valve)
-        viewModelScope.launch {
-            connectionRepository.vrConnectionState.collect { state ->
-                if (state == ConnectionState.DISCONNECTED || state == ConnectionState.ERROR) {
-                    connectionRepository.setStressChamberSceneActive(false)
+            vrEventReceiver.events.collect { event ->
+                when (event) {
+                    is VrEvent.ScenarioStart -> handleVrScenarioStart(event)
+                    is VrEvent.ScenarioStop -> handleVrScenarioStop()
+                    else -> { /* StimulusEvent / Reaction handled by the receiver */ }
                 }
             }
         }
@@ -397,26 +340,6 @@ class SessionControlViewModel @Inject constructor(
         }
     }
 
-    private fun handleVrBiofeedbackEvent(eventName: String, value: Int?) {
-        @Suppress("UNUSED_PARAMETER") value
-        when (eventName) {
-            VR_EVENT_START_BIOFEEDBACK -> {
-                _lastVrBiofeedbackEvent.value = VrBiofeedbackEvent(
-                    type = VrBiofeedbackEventType.START,
-                    timestamp = System.currentTimeMillis()
-                )
-                startRecordingFromVr()
-            }
-            VR_EVENT_STOP_BIOFEEDBACK -> {
-                _lastVrBiofeedbackEvent.value = VrBiofeedbackEvent(
-                    type = VrBiofeedbackEventType.STOP,
-                    timestamp = System.currentTimeMillis()
-                )
-                stopRecordingFromVr()
-            }
-        }
-    }
-
     private fun anySensorConnected(): Boolean {
         val bleConnected = connectionRepository.bleConnectionState.value == ConnectionState.CONNECTED
         val respState = connectionRepository.respirationState.value
@@ -425,12 +348,11 @@ class SessionControlViewModel @Inject constructor(
     }
 
     /**
-     * Legacy code path: when an old-project VR build sends `start_recording`, create a
-     * placeholder scenario and begin sensor capture. The new logistics VR app will
-     * provide its own scenario_start / event / reaction / end protocol; this path is
-     * inert against that app.
+     * VR `scenario_start`: create the scenario row for the real [ScenarioCode] the Quest sent,
+     * register it with the receiver (so subsequent event/reaction POSTs resolve to it), and begin
+     * sensor capture. Gated on an ACTIVE session with at least one sensor connected.
      */
-    private fun startRecordingFromVr() {
+    private fun handleVrScenarioStart(event: VrEvent.ScenarioStart) {
         viewModelScope.launch {
             val session = _session.value ?: return@launch
             val currentState = sensorRecordingRepository.recordingState.value
@@ -441,24 +363,24 @@ class SessionControlViewModel @Inject constructor(
             ) {
                 val scenario = scenarioRepository.createScenario(
                     sessionId = session.id,
-                    scenarioCode = LEGACY_VR_PLACEHOLDER_SCENARIO
+                    scenarioCode = event.code
                 )
-                val scenarioIdentifier = "${session.sessionCode}-${LEGACY_VR_PLACEHOLDER_SCENARIO.officialCode}"
+                vrEventReceiver.setActiveScenario(session.id, scenario.id, event.code)
+                val scenarioIdentifier = "${session.sessionCode}-${event.code.officialCode}"
                 _vrTriggeredRecording.value = true
                 sensorRecordingRepository.startRecording(scenario.id, scenarioIdentifier)
             }
         }
     }
 
-    private fun stopRecordingFromVr() {
-        connectionRepository.setStressChamberSceneActive(false)
+    /** VR `scenario_stop`: stop sensor capture, finalize the scenario row, clear the active mirror. */
+    private fun handleVrScenarioStop() {
         viewModelScope.launch {
-            val currentState = sensorRecordingRepository.recordingState.value
-
-            if (currentState == DataRecordingState.RECORDING) {
+            if (sensorRecordingRepository.recordingState.value == DataRecordingState.RECORDING) {
                 sensorRecordingRepository.stopRecording()
-                _vrTriggeredRecording.value = false
             }
+            vrEventReceiver.clearActiveScenario()
+            _vrTriggeredRecording.value = false
         }
     }
 
@@ -492,10 +414,6 @@ class SessionControlViewModel @Inject constructor(
         _notes.value = text
     }
 
-    fun clearLastVrBiofeedbackEvent() {
-        _lastVrBiofeedbackEvent.value = null
-    }
-
     fun endSessionAndSave() {
         viewModelScope.launch {
             _isEndingSession.value = true
@@ -508,7 +426,6 @@ class SessionControlViewModel @Inject constructor(
                 sessionRepository.endSession(sessionId)
 
                 _endSessionResult.value = EndSessionResult.Success(sessionId)
-                vrWebSocketClient.suppressAutoReconnect()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -624,41 +541,6 @@ class SessionControlViewModel @Inject constructor(
         }
     }
 
-    // --- VR connection methods ---
-
-    fun selectAndConnectVrDevice(device: DiscoveredVrDevice) {
-        _selectedVrDevice.value = device
-        mdnsDiscovery.stopDiscovery()
-        vrWebSocketClient.connect(device.host)
-    }
-
-    fun rescanVrDevices() {
-        vrWebSocketClient.disconnect()
-        _selectedVrDevice.value = null
-        mdnsDiscovery.startDiscovery()
-    }
-
-    fun disconnectVr() {
-        vrWebSocketClient.disconnect()
-        _selectedVrDevice.value = null
-        mdnsDiscovery.startDiscovery()
-    }
-
-    fun sendTutorialCommand() {
-        vrWebSocketClient.sendCommand(
-            "trigger_event",
-            mapOf("target" to "NCEvents", "eventName" to "StartTutorial")
-        )
-    }
-
-    fun sendStartSceneCommand() {
-        connectionRepository.setStressChamberSceneActive(true)
-        vrWebSocketClient.sendCommand(
-            "scene",
-            mapOf("action" to "load", "sceneName" to "StressChamber")
-        )
-    }
-
     fun clearRespirationDisconnectReason() {
         connectionRepository.clearRespirationDisconnectReason()
     }
@@ -678,22 +560,9 @@ class SessionControlViewModel @Inject constructor(
         return String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds)
     }
 
-    override fun onCleared() {
-        super.onCleared()
-        mdnsDiscovery.stopDiscovery()
-    }
 }
 
 sealed class EndSessionResult {
     data class Success(val sessionId: Long) : EndSessionResult()
     data class Error(val message: String) : EndSessionResult()
 }
-
-enum class VrBiofeedbackEventType {
-    START, STOP
-}
-
-data class VrBiofeedbackEvent(
-    val type: VrBiofeedbackEventType,
-    val timestamp: Long
-)
