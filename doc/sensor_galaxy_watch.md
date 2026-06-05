@@ -107,6 +107,28 @@ intent-filter, it **auto-starts the tablet app on a matching message even if the
 running** — so the Hilt singleton receiver is created on demand and data is captured without the
 user opening the watch screen.
 
+### Bluetooth-direct vs. cloud relay — why this is not a "Wi-Fi or Bluetooth" choice
+
+It is tempting to think of the link as choosing between *Bluetooth* and *Wi-Fi*. It isn't. Both
+transports are the **same** Wearable Data Layer; what varies is the route the Data Layer picks
+underneath, and that is **not configurable** — it is decided by whether a *nearby* node exists. The
+"Wi-Fi" path is **not** a clean local socket between watch and tablet — it is **Google's cloud
+relay routed over the internet**. That distinction is what makes Bluetooth-direct the only viable
+choice for this project:
+
+| Criterion | Bluetooth-direct (nearby node) | Cloud relay (over Wi-Fi/internet) |
+|-----------|--------------------------------|-----------------------------------|
+| **Stability** | Drops only if out of radio range | **Cannot deliver to a dozing/screen-off phone** — stalls the instant the phone Dozes (see CRITICAL note above) |
+| **Latency** | Low, local radio hop | Higher — round-trips through Google's servers |
+| **System requirements** | None — no Wi-Fi, router, or internet; just BT on + BT-bonded via Galaxy Wearable | Internet on **both** devices, both signed into the same Google account |
+| **Privacy** | Physiological data (HR/IBI/**EDA**) never leaves the two devices | Data is **routed through Google's servers** — a real consideration for a clinical/research study |
+| **Battery (radio)** | Low (BLE-class radio) | Higher (Wi-Fi radio + internet round-trips) **and** still fails in Doze |
+
+**Conclusion:** Bluetooth-direct wins on every axis, decisively on stability. Note the dominant
+battery cost of this system is **not** the transport radio but the screen-off 1 Hz `flush()` loop
+holding the AP busy (the open item in *The Screen-Off Problem*) — that cost is the same regardless
+of which transport the Data Layer picks.
+
 ## Message Format
 
 Newline-free single-object JSON, hand-built (no serializer) to keep the payload tiny. The tablet
