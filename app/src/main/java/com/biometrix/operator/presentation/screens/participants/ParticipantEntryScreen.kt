@@ -139,15 +139,16 @@ fun ParticipantEntryScreen(
                             }
                         }
 
-                        // Participant code
+                        // Participant code — auto-generated from the device prefix (Settings),
+                        // read-only so it can't be edited into a colliding code.
                         OutlinedTextField(
                             value = uiState.participantCode,
-                            onValueChange = viewModel::onCodeChange,
+                            onValueChange = {},
+                            readOnly = true,
                             label = { Text("Participant code") },
                             singleLine = true,
                             isError = uiState.codeError != null,
                             supportingText = uiState.codeError?.let { { Text(it) } },
-                            enabled = !uiState.isSubmitting,
                             modifier = Modifier.fillMaxWidth()
                         )
 

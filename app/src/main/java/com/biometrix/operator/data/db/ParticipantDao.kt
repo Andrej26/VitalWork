@@ -23,6 +23,9 @@ interface ParticipantDao {
     @Query("SELECT COUNT(*) FROM participants")
     suspend fun getParticipantCount(): Int
 
+    @Query("SELECT COUNT(*) FROM participants WHERE participantCode LIKE :prefix || '-%'")
+    suspend fun getParticipantCountByPrefix(prefix: String): Int
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(participant: ParticipantEntity): Long
 

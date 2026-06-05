@@ -15,6 +15,7 @@ import com.biometrix.operator.presentation.screens.sensors.SensorsScreen
 import com.biometrix.operator.presentation.screens.sessions.SessionControlScreen
 import com.biometrix.operator.presentation.screens.sessions.SessionDetailScreen
 import com.biometrix.operator.presentation.screens.sessions.SessionsScreen
+import com.biometrix.operator.presentation.screens.settings.SettingsScreen
 import com.biometrix.operator.presentation.screens.tutorial.TutorialScreen
 
 sealed class Route(val route: String) {
@@ -34,6 +35,7 @@ sealed class Route(val route: String) {
             "sessions/review/$sessionId?showCsvSaved=$showCsvSaved"
     }
     data object Tutorial : Route("tutorial")
+    data object Settings : Route("settings")
 }
 
 @Composable
@@ -49,6 +51,7 @@ fun AppNavigation(
                 onNavigateToTutorial = { navController.navigate(Route.Tutorial.route) },
                 onNavigateToSensors = { navController.navigate(Route.Sensors.route) },
                 onNavigateToVrControl = { navController.navigate(Route.VrControl.route) },
+                onNavigateToSettings = { navController.navigate(Route.Settings.route) },
                 onNavigateToSessions = { navController.navigate(Route.Sessions.route) },
                 onNavigateToParticipantEntry = {
                     navController.navigate(Route.ParticipantEntry.route)
@@ -59,6 +62,12 @@ fun AppNavigation(
                 onNavigateToSessionReview = { sessionId ->
                     navController.navigate(Route.SessionReview.createRoute(sessionId))
                 }
+            )
+        }
+
+        composable(Route.Settings.route) {
+            SettingsScreen(
+                onNavigateBack = { navController.popBackStack() }
             )
         }
 

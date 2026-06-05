@@ -160,7 +160,8 @@ com.biometrix.operator/
 │   ├── network/
 │   │   └── NetworkChecker.kt               # LAN connectivity checker
 │   ├── prefs/
-│   │   └── TutorialPreferencesRepository.kt
+│   │   ├── TutorialPreferencesRepository.kt
+│   │   └── SettingsRepository.kt            # Device prefix (A/B/C/D) for code generation; interface + SharedPrefs impl
 │   ├── recording/
 │   │   ├── GapDetector.kt                  # Sensor data gap detection
 │   │   ├── ScenarioRecordingRepository.kt
@@ -251,6 +252,9 @@ com.biometrix.operator/
 │       │       ├── SensorSummaryCard.kt
 │       │       ├── SessionCard.kt
 │       │       └── SessionNotesField.kt
+│       ├── settings/                       # Device prefix selection (A/B/C/D)
+│       │   ├── SettingsScreen.kt
+│       │   └── SettingsViewModel.kt
 │       ├── tutorial/
 │       │   ├── TutorialScreen.kt
 │       │   └── TutorialViewModel.kt
@@ -280,6 +284,7 @@ com.biometrix.operator.wear/
 | `tutorial` | TutorialScreen | First-launch onboarding |
 | `home` | HomeScreen | Main dashboard with navigation cards |
 | `vr_control` | VRConnectionScreen | VR link diagnostics (tablet IP/port + live received-event log) |
+| `settings` | SettingsScreen | Device prefix (A/B/C/D) tagging participant + session codes so parallel tablets don't collide |
 | `sensors` | SensorsScreen | List of available sensors |
 | `sensors/{sensorId}` | SensorDetailScreen | Router to vendor-specific sensor screen |
 | `participants/new` | ParticipantEntryScreen | Anonymized participant entry (creates participant + session) |
@@ -310,6 +315,8 @@ Room database (version 2) with 4 entities. Cascade-delete on all foreign keys.
 `ScenarioCode` carries the official short code (e.g. `A1`) and display label as enum properties — they're stored descriptively in the DB so renumbering doesn't break old rows.
 
 Reaction time is **derived** at export from `reactionTimestampMs − eventTimestampMs`; not stored. Session duration is derived from `endedAt − startedAt`. All timestamps come from Android's `System.currentTimeMillis()` so cross-stream alignment needs no clock-sync.
+
+**Device prefix (multi-tablet testing):** each tablet picks a one-time prefix (A/B/C/D) under **Settings** (`SettingsRepository`, SharedPreferences, default `A`). The prefix tags both the generated participant code (`A-001`) and session code (`BMX-A-yyMMdd-HHmmss`), so several tablets testing in parallel never mint colliding codes that would look like one duplicated participant after the server merge. The participant-code field is read-only (auto-generated) to keep the scheme typo-proof; participant numbering is counted **per prefix** (`ParticipantDao.getParticipantCountByPrefix`). Operators must agree beforehand which device owns which letter — collisions are only prevented across devices with *distinct* letters.
 
 ## Data Flow
 
@@ -368,8 +375,8 @@ Unit tests live under `app/src/test/` and run on the host JVM (no device/emulato
 |------|--------|----------------|
 | `data/recording/GapDetectorTest.kt` | `GapDetector.kt` | Gap detection edge cases: empty input, startup threshold, boundary conditions, mixed sensor types, unsorted input, per-sensor-type routing |
 | `data/vr/VrEventReceiverTest.kt` | `VrEventReceiver.kt` | Event/reaction persistence + accept, reject when no active scenario, first-write-wins, late-reaction grace window, heartbeat-less liveness watchdog |
-| `data/repository/ParticipantRepositoryTest.kt` | `ParticipantRepository.kt` | Code generation (`P-001`…), uniqueness validation, fetch by ID/code |
-| `data/repository/SessionRepositoryTest.kt` | `SessionRepository.kt` | Session lifecycle: `sessionCode` format (BMX-yyMMdd-HHmmss), participant FK, sample-count aggregation from scenarios at end, status transitions, notes persistence, deletion |
+| `data/repository/ParticipantRepositoryTest.kt` | `ParticipantRepository.kt` | Code generation (`A-001`…, per-device-prefix scoped), uniqueness validation, fetch by ID/code |
+| `data/repository/SessionRepositoryTest.kt` | `SessionRepository.kt` | Session lifecycle: `sessionCode` format (BMX-{prefix}-yyMMdd-HHmmss), participant FK, sample-count aggregation from scenarios at end, status transitions, notes persistence, deletion |
 | `data/repository/ScenarioRepositoryTest.kt` | `ScenarioRepository.kt` | Scenario lifecycle: create with derived `scenarioCategory`, event/reaction timestamp updates, end (sets `endedAt`), batch sample insert |
 | `data/export/SessionExportMapperTest.kt` | `SessionExportMapper.kt` | Export data transformation (Section 7 shape): participant + session + scenarios + samples; sensor type mapping, gap detection per scenario, derived reaction time |
 | `data/recording/ScenarioRecordingRepositoryImplTest.kt` | `ScenarioRecordingRepositoryImpl.kt` | Start/stop state machine, sensor detection, sample buffering + flushing, scenario-end finalization |

@@ -9,6 +9,7 @@ import com.biometrix.operator.data.db.ScenarioEntity
 import com.biometrix.operator.data.db.SensorSampleEntity
 import com.biometrix.operator.data.db.SensorType
 import com.biometrix.operator.data.db.SessionStatus
+import com.biometrix.operator.data.prefs.FakeSettingsRepository
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -29,15 +30,21 @@ class SessionRepositoryTest {
         fakeSessionDao = FakeSessionDao()
         fakeScenarioDao = FakeScenarioDao()
         fakeSensorSampleDao = FakeSensorSampleDao()
-        repository = SessionRepository(fakeSessionDao, fakeScenarioDao, fakeSensorSampleDao)
+        repository = SessionRepository(
+            fakeSessionDao,
+            fakeScenarioDao,
+            fakeSensorSampleDao,
+            FakeSettingsRepository("A")
+        )
     }
 
     @Test
     fun createSession_formatsCodeCorrectly() = runTest {
         val session = repository.createSession(participantId = 1L)
 
-        assertTrue(session.sessionCode.startsWith("BMX-"))
-        assertTrue(session.sessionCode.substring(4).matches(Regex("\\d{6}-\\d{6}")))
+        assertTrue(session.sessionCode.startsWith("BMX-A-"))
+        // Tail after "BMX-A-" is the yyMMdd-HHmmss timestamp token.
+        assertTrue(session.sessionCode.removePrefix("BMX-A-").matches(Regex("\\d{6}-\\d{6}")))
         assertEquals(SessionStatus.ACTIVE, session.status)
         assertEquals(1L, session.participantId)
     }

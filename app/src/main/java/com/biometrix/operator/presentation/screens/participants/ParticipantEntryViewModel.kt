@@ -63,14 +63,6 @@ class ParticipantEntryViewModel @Inject constructor(
         }
     }
 
-    fun onCodeChange(value: String) {
-        _uiState.value = _uiState.value.copy(
-            participantCode = value,
-            codeError = null,
-            submitError = null
-        )
-    }
-
     fun onAgeChange(value: String) {
         val sanitized = value.filter { it.isDigit() }.take(3)
         _uiState.value = _uiState.value.copy(

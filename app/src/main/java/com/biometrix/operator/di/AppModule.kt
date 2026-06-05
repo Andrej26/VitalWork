@@ -18,6 +18,8 @@ import com.biometrix.operator.data.sensor.audio.MindfieldRespiration
 import com.biometrix.operator.data.sensor.ble.BleManager
 import com.biometrix.operator.data.sensor.ble.BleManagerImpl
 import com.biometrix.operator.data.network.NetworkChecker
+import com.biometrix.operator.data.prefs.SettingsRepository
+import com.biometrix.operator.data.prefs.SharedPrefsSettingsRepository
 import com.biometrix.operator.data.system.LocationChecker
 import com.biometrix.operator.data.system.LocationCheckerImpl
 import com.biometrix.operator.data.system.SystemReadinessChecker
@@ -50,6 +52,10 @@ abstract class AppBindsModule {
     @Binds
     @Singleton
     abstract fun bindSessionUploader(impl: SessionExportService): SessionUploader
+
+    @Binds
+    @Singleton
+    abstract fun bindSettingsRepository(impl: SharedPrefsSettingsRepository): SettingsRepository
 }
 
 @Module

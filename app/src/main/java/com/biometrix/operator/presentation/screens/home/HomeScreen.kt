@@ -54,6 +54,7 @@ fun HomeScreen(
     onNavigateToTutorial: () -> Unit,
     onNavigateToSensors: () -> Unit,
     onNavigateToVrControl: () -> Unit,
+    onNavigateToSettings: () -> Unit,
     onNavigateToSessions: () -> Unit,
     onNavigateToParticipantEntry: () -> Unit,
     onNavigateToSessionActive: (Long) -> Unit,
@@ -212,7 +213,8 @@ fun HomeScreen(
                 SecondaryNavRow(
                     onSensors = onNavigateToSensors,
                     onVrControl = onNavigateToVrControl,
-                    onTutorial = onNavigateToTutorial
+                    onTutorial = onNavigateToTutorial,
+                    onSettings = onNavigateToSettings
                 )
             }
         }

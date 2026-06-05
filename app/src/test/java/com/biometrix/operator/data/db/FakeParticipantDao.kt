@@ -18,6 +18,9 @@ class FakeParticipantDao : ParticipantDao {
 
     override suspend fun getParticipantCount(): Int = participants.size
 
+    override suspend fun getParticipantCountByPrefix(prefix: String): Int =
+        participants.count { it.participantCode.startsWith("$prefix-") }
+
     override suspend fun insert(participant: ParticipantEntity): Long {
         if (participants.any { it.participantCode == participant.participantCode }) {
             throw IllegalStateException("duplicate participantCode")

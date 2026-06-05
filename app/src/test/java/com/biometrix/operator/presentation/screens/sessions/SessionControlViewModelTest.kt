@@ -7,6 +7,7 @@ import com.biometrix.operator.data.db.FakeSessionDao
 import com.biometrix.operator.data.db.SessionEntity
 import com.biometrix.operator.data.db.SessionStatus
 import com.biometrix.operator.data.model.ConnectionState
+import com.biometrix.operator.data.prefs.FakeSettingsRepository
 import com.biometrix.operator.data.recording.FakeScenarioRecordingRepository
 import com.biometrix.operator.data.recording.model.DataRecordingState
 import com.biometrix.operator.data.repository.ConnectionRepository
@@ -79,7 +80,12 @@ class SessionControlViewModelTest {
             watchReceiver = WatchSensorReceiver(),
             lanAvailableFlow = lanAvailableFlow
         )
-        sessionRepository = SessionRepository(fakeSessionDao, fakeScenarioDao, fakeSensorSampleDao)
+        sessionRepository = SessionRepository(
+            fakeSessionDao,
+            fakeScenarioDao,
+            fakeSensorSampleDao,
+            FakeSettingsRepository("A")
+        )
     }
 
     @After

@@ -6,6 +6,7 @@ import com.biometrix.operator.data.db.FakeSensorSampleDao
 import com.biometrix.operator.data.db.FakeSessionDao
 import com.biometrix.operator.data.db.SessionEntity
 import com.biometrix.operator.data.db.SessionStatus
+import com.biometrix.operator.data.prefs.FakeSettingsRepository
 import com.biometrix.operator.data.repository.ParticipantRepository
 import com.biometrix.operator.data.repository.SessionRepository
 import kotlinx.coroutines.Dispatchers
@@ -41,8 +42,13 @@ class ParticipantEntryViewModelTest {
         sessionDao = FakeSessionDao()
         scenarioDao = FakeScenarioDao()
         sampleDao = FakeSensorSampleDao()
-        participantRepository = ParticipantRepository(participantDao)
-        sessionRepository = SessionRepository(sessionDao, scenarioDao, sampleDao)
+        participantRepository = ParticipantRepository(participantDao, FakeSettingsRepository("A"))
+        sessionRepository = SessionRepository(
+            sessionDao,
+            scenarioDao,
+            sampleDao,
+            FakeSettingsRepository("A")
+        )
     }
 
     @After
@@ -58,7 +64,7 @@ class ParticipantEntryViewModelTest {
         val vm = newViewModel()
         advanceUntilIdle()
 
-        assertEquals("P-001", vm.uiState.value.participantCode)
+        assertEquals("A-001", vm.uiState.value.participantCode)
         assertTrue(vm.uiState.value.isInitialized)
     }
 
@@ -83,23 +89,10 @@ class ParticipantEntryViewModelTest {
     }
 
     @Test
-    fun submit_emptyCode_setsCodeError() = runTest {
-        val vm = newViewModel()
-        advanceUntilIdle()
-
-        vm.onCodeChange("   ")
-        vm.submit()
-        advanceUntilIdle()
-
-        assertEquals("Participant code is required", vm.uiState.value.codeError)
-    }
-
-    @Test
     fun submit_invalidAge_setsAgeError() = runTest {
         val vm = newViewModel()
         advanceUntilIdle()
 
-        vm.onCodeChange("P-100")
         vm.onAgeChange("12")
         vm.submit()
         advanceUntilIdle()
@@ -108,13 +101,15 @@ class ParticipantEntryViewModelTest {
     }
 
     @Test
-    fun submit_duplicateCode_setsCodeError() = runTest {
-        participantRepository.createParticipant("P-007")
+    fun submit_duplicateGeneratedCode_setsCodeError() = runTest {
+        // Pre-seed a participant whose code equals the code this device will generate (A-001),
+        // so the uniqueness safety-net in submit() still fires even though the field is locked.
+        participantRepository.createParticipant("A-001")
 
         val vm = newViewModel()
         advanceUntilIdle()
+        assertEquals("A-001", vm.uiState.value.participantCode)
 
-        vm.onCodeChange("P-007")
         vm.submit()
         advanceUntilIdle()
 
@@ -126,7 +121,6 @@ class ParticipantEntryViewModelTest {
         val vm = newViewModel()
         advanceUntilIdle()
 
-        vm.onCodeChange("P-100")
         vm.onAgeChange("30")
         vm.onGenderChange(GenderOption.MALE)
 
@@ -136,7 +130,7 @@ class ParticipantEntryViewModelTest {
 
         assertTrue(event is ParticipantEntryEvent.SessionStarted)
         val participant = participantDao.participants.single()
-        assertEquals("P-100", participant.participantCode)
+        assertEquals("A-001", participant.participantCode)
         assertEquals(30, participant.age)
         assertEquals("M", participant.gender)
 
@@ -151,7 +145,6 @@ class ParticipantEntryViewModelTest {
         val vm = newViewModel()
         advanceUntilIdle()
 
-        vm.onCodeChange("P-100")
         vm.submit()
         val event = vm.events.first()
         advanceUntilIdle()
