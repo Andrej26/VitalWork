@@ -146,6 +146,12 @@ fun VRConnectionScreen(
     }
 }
 
+/** Operator-facing description of a candidate: prefer the human label, fall back to the id. */
+private fun VrPairingManager.VrCandidate.display(): String {
+    val name = label?.takeIf { it.isNotBlank() } ?: questId
+    return "$name at $sourceIp"
+}
+
 @Composable
 private fun PairingCard(
     pairingState: VrPairingManager.PairingState,
@@ -192,7 +198,7 @@ private fun PairingCard(
                         fontWeight = FontWeight.Medium
                     )
                     Text(
-                        text = candidate?.let { "${it.questId} at ${it.sourceIp}" } ?: "",
+                        text = candidate?.display() ?: "",
                         style = MaterialTheme.typography.bodyMedium,
                         fontFamily = FontFamily.Monospace
                     )
@@ -221,7 +227,7 @@ private fun PairingCard(
                             fontWeight = FontWeight.Medium
                         )
                         Text(
-                            text = candidate?.let { "${it.questId} at ${it.sourceIp}" } ?: "",
+                            text = candidate?.display() ?: "",
                             style = MaterialTheme.typography.bodyMedium,
                             fontFamily = FontFamily.Monospace
                         )

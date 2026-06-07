@@ -50,6 +50,16 @@ class VrPairingManagerTest {
     }
 
     @Test
+    fun isBondedTo_trueOnlyForBondedQuest() {
+        manager.onClaim("quest-A", "192.168.1.50")
+        assertFalse(manager.isBondedTo("quest-A")) // pending, not bonded yet
+
+        manager.confirm()
+        assertTrue(manager.isBondedTo("quest-A"))
+        assertFalse(manager.isBondedTo("quest-B"))
+    }
+
+    @Test
     fun confirm_withoutCandidate_isNoOp() {
         manager.confirm()
         assertEquals(PairingState.UNPAIRED, manager.pairingState.value)

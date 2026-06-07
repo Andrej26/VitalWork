@@ -95,14 +95,14 @@ class SessionRecordingService : Service() {
     private fun startObserving() {
         if (observerJob != null) return
 
-        // Stop the discovery listener once a Quest is bonded; resume it if the bond is dropped
-        // (re-arm). The listener's own start/stop are idempotent + @Synchronized.
+        // When the operator bonds, reply to the Quest with this tablet's address so it learns where
+        // to POST (fully automatic — no manual IP entry). The listener keeps running for the whole
+        // session: while bonded it only replies to the bonded Quest (re-sending if the first reply
+        // was lost) and ignores everyone else; after a re-arm it resumes normal pairing.
         scope.launch {
             vrPairingManager.pairingState.collect { state ->
                 if (state == VrPairingManager.PairingState.BONDED) {
-                    vrDiscoveryListener.stop()
-                } else {
-                    vrDiscoveryListener.start()
+                    vrDiscoveryListener.sendBondReply()
                 }
             }
         }

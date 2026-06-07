@@ -30,8 +30,11 @@ class VrPairingManager @Inject constructor() {
 
     enum class PairingState { UNPAIRED, PENDING, BONDED }
 
-    /** The Quest that has claimed (PENDING) or is bonded (BONDED). */
-    data class VrCandidate(val questId: String, val sourceIp: String)
+    /**
+     * The Quest that has claimed (PENDING) or is bonded (BONDED). [label] is an optional
+     * human-readable name the operator sees (e.g. "Station Left"); [questId] is the unique id.
+     */
+    data class VrCandidate(val questId: String, val sourceIp: String, val label: String? = null)
 
     private val _pairingState = MutableStateFlow(PairingState.UNPAIRED)
     val pairingState: StateFlow<PairingState> = _pairingState.asStateFlow()
@@ -42,15 +45,15 @@ class VrPairingManager @Inject constructor() {
 
     /** A Quest broadcast was received. While UNPAIRED, promotes to PENDING with this candidate. */
     @Synchronized
-    fun onClaim(questId: String, sourceIp: String) {
+    fun onClaim(questId: String, sourceIp: String, label: String? = null) {
         when (_pairingState.value) {
             PairingState.UNPAIRED -> {
-                _candidate.value = VrCandidate(questId, sourceIp)
+                _candidate.value = VrCandidate(questId, sourceIp, label)
                 _pairingState.value = PairingState.PENDING
             }
             PairingState.PENDING -> {
                 // Refresh the candidate (e.g. the Quest's IP changed before the operator tapped).
-                _candidate.value = VrCandidate(questId, sourceIp)
+                _candidate.value = VrCandidate(questId, sourceIp, label)
             }
             PairingState.BONDED -> {
                 // Already bonded; ignore stray broadcasts (incl. from a second Quest in the room).
@@ -73,6 +76,11 @@ class VrPairingManager @Inject constructor() {
         val bonded = _candidate.value ?: return false
         return questId == bonded.questId && sourceIp == bonded.sourceIp
     }
+
+    /** True when bonded to this specific Quest — used to (re)send the pairing reply to it. */
+    @Synchronized
+    fun isBondedTo(questId: String): Boolean =
+        _pairingState.value == PairingState.BONDED && _candidate.value?.questId == questId
 
     /** Drop the bond (e.g. heartbeat loss) and return to listening. */
     @Synchronized
