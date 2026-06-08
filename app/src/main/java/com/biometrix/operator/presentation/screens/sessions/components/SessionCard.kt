@@ -7,12 +7,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -31,7 +35,9 @@ import java.util.Locale
 @Composable
 internal fun SessionCard(
     session: SessionEntity,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    isUploading: Boolean = false,
+    onUpload: (() -> Unit)? = null
 ) {
     val dateFormat = SimpleDateFormat("MMM dd, yyyy hh:mm a", Locale.getDefault())
 
@@ -101,6 +107,24 @@ internal fun SessionCard(
             }
 
             Spacer(modifier = Modifier.width(8.dp))
+
+            // Manual "Upload to server" for sessions not yet on the server (pending state).
+            if (session.status == SessionStatus.COMPLETED && onUpload != null) {
+                if (isUploading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    IconButton(onClick = onUpload) {
+                        Icon(
+                            imageVector = Icons.Default.CloudUpload,
+                            contentDescription = "Upload to server",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
 
             Icon(
                 imageVector = Icons.Default.ChevronRight,

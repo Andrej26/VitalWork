@@ -10,6 +10,7 @@ import com.biometrix.operator.data.db.SessionDao
 import com.biometrix.operator.data.export.SessionExportService
 import com.biometrix.operator.data.export.SessionExporter
 import com.biometrix.operator.data.export.SessionUploader
+import com.biometrix.operator.data.export.upload.SessionHttpUploader
 import com.biometrix.operator.data.recording.ScenarioRecordingRepository
 import com.biometrix.operator.data.recording.ScenarioRecordingRepositoryImpl
 import com.biometrix.operator.data.repository.ScenarioRepository
@@ -51,7 +52,7 @@ abstract class AppBindsModule {
 
     @Binds
     @Singleton
-    abstract fun bindSessionUploader(impl: SessionExportService): SessionUploader
+    abstract fun bindSessionUploader(impl: SessionHttpUploader): SessionUploader
 
     @Binds
     @Singleton
