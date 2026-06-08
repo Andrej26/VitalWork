@@ -102,13 +102,16 @@ class ParticipantEntryViewModelTest {
 
     @Test
     fun submit_duplicateGeneratedCode_setsCodeError() = runTest {
-        // Pre-seed a participant whose code equals the code this device will generate (A-001),
-        // so the uniqueness safety-net in submit() still fires even though the field is locked.
-        participantRepository.createParticipant("A-001")
+        // Code generation is count-based (count-by-prefix + 1), so a gap left by a deleted
+        // participant ("A-001" missing) makes the count-derived suggestion ("A-003") collide
+        // with an existing row. Seed that exact gap so the uniqueness safety-net in submit()
+        // still fires even though the field is locked.
+        participantRepository.createParticipant("A-002")
+        participantRepository.createParticipant("A-003")
 
         val vm = newViewModel()
         advanceUntilIdle()
-        assertEquals("A-001", vm.uiState.value.participantCode)
+        assertEquals("A-003", vm.uiState.value.participantCode)
 
         vm.submit()
         advanceUntilIdle()
