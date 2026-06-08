@@ -40,6 +40,8 @@ data class SessionDetailUiState(
     val uploadState: UploadState = UploadState.Idle
 )
 
+private const val AUTO_UPLOAD_ENABLED = false
+
 @HiltViewModel
 class SessionDetailViewModel @Inject constructor(
     private val sessionRepository: SessionRepository,
@@ -84,8 +86,12 @@ class SessionDetailViewModel @Inject constructor(
      * Auto-fire the server upload once when a freshly-completed (not-yet-UPLOADED) session with data is
      * opened — this is the post-session upload path. Sessions already UPLOADED, empty, or in-flight are
      * skipped; the operator can still trigger a manual upload via [uploadSession].
+     *
+     * Disabled while [AUTO_UPLOAD_ENABLED] is false (server-integration testing); flip it back to true
+     * once uploads are verified end-to-end. The manual "Upload to server" button always works regardless.
      */
     private fun maybeAutoUpload(session: SessionEntity?) {
+        if (!AUTO_UPLOAD_ENABLED) return
         if (autoUploadAttempted) return
         if (session == null || session.status != SessionStatus.COMPLETED) return
         if (_uiState.value.scenarios.isEmpty()) return
