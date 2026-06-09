@@ -7,8 +7,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -38,6 +42,11 @@ class WatchSensorReceiver @Inject constructor() {
         // is the safety net for the watch dying / going out of range (no goodbye sent).
         const val INACTIVITY_TIMEOUT_MS = 6_000L
         const val POLL_INTERVAL_MS = 1_000L
+
+        // A reading whose watch-stamp is within this window of arrival is "live" (not Doze backlog),
+        // so its (arrival − t) is a trustworthy phone↔watch clock offset. Burst-delivered samples
+        // have a much larger (arrival − t) and must NOT set the offset.
+        const val LIVE_READING_WINDOW_MS = 2_000L
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -61,6 +70,31 @@ class WatchSensorReceiver @Inject constructor() {
     val batteryLevel: StateFlow<Int?> = _batteryLevel.asStateFlow()
 
     /**
+     * Per-sample EDA stream (carries the watch-stamped timestamp + µS value), used by the recording
+     * layer. Hot, no replay; DROP_OLDEST so a slow collector can never block the binder thread that
+     * calls [onReading]. Apply [correctedTimestamp] to each reading's timestamp before storage.
+     */
+    private val _edaSampleFlow = MutableSharedFlow<WatchReading>(
+        extraBufferCapacity = 64,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    val edaSampleFlow: SharedFlow<WatchReading> = _edaSampleFlow.asSharedFlow()
+
+    /**
+     * Phone↔watch clock offset in ms: `phoneClock ≈ watchClock + offsetMs`. Captured once from the
+     * first genuinely-live reading after each (re)connect (see [LIVE_READING_WINDOW_MS]); reset to
+     * "uncaptured" on disconnect so a fresh offset is taken next session. 0 until captured (= trust
+     * the watch clock as-is, the safe fallback).
+     */
+    @Volatile
+    private var clockOffsetMs: Long = 0L
+    @Volatile
+    private var offsetCaptured: Boolean = false
+
+    /** Map a watch-stamped timestamp onto the phone clock using the captured offset. */
+    fun correctedTimestamp(watchTimestampMs: Long): Long = watchTimestampMs + clockOffsetMs
+
+    /**
      * Snapshot of the low-battery alert tier from the **last-known** battery level, read on demand
      * (e.g. when the Home screen resumes between sessions). Deliberately ignores the current
      * connection state: the check happens right at the start-a-new-session decision point, so the
@@ -80,15 +114,32 @@ class WatchSensorReceiver @Inject constructor() {
     }
 
     fun onCapabilities(csv: String) {
-        markActivity()
+        markActivity(System.currentTimeMillis())
         _availableTrackers.value = csv.split(",").map { it.trim() }.filter { it.isNotEmpty() }
     }
 
     fun onReading(reading: WatchReading) {
-        markActivity()
+        val arrivalMs = System.currentTimeMillis()
+        markActivity(arrivalMs)
+        maybeCaptureClockOffset(reading, arrivalMs)
         _latestByType.value = _latestByType.value.toMutableMap().apply { put(reading.type, reading) }
-        if (reading.type == "BATTERY") {
-            _batteryLevel.value = reading.value.toInt()
+        when (reading.type) {
+            "BATTERY" -> _batteryLevel.value = reading.value.toInt()
+            "EDA" -> _edaSampleFlow.tryEmit(reading)
+        }
+    }
+
+    /**
+     * Capture the phone↔watch clock offset once per connection, from the first reading that is
+     * genuinely live (arrival ≈ watch-stamp). Burst-delivered samples (large arrival − t) are skipped
+     * so a watch connecting mid-Doze-backlog can't poison the offset for the whole session.
+     */
+    private fun maybeCaptureClockOffset(reading: WatchReading, arrivalMs: Long) {
+        if (offsetCaptured) return
+        val delta = arrivalMs - reading.timestampMs
+        if (kotlin.math.abs(delta) <= LIVE_READING_WINDOW_MS) {
+            clockOffsetMs = delta
+            offsetCaptured = true
         }
     }
 
@@ -97,11 +148,13 @@ class WatchSensorReceiver @Inject constructor() {
     fun onStop() {
         watchdogJob?.cancel(); watchdogJob = null
         _connectionState.value = ConnectionState.DISCONNECTED
+        // Force a fresh clock offset on the next connection.
+        offsetCaptured = false
     }
 
     /** Record a message arrival and ensure the inactivity watchdog is running. */
-    private fun markActivity() {
-        lastMessageMs = System.currentTimeMillis()
+    private fun markActivity(arrivalMs: Long) {
+        lastMessageMs = arrivalMs
         _connectionState.value = ConnectionState.CONNECTED
         ensureWatchdog()
     }
@@ -114,6 +167,8 @@ class WatchSensorReceiver @Inject constructor() {
                 delay(POLL_INTERVAL_MS)
                 if (System.currentTimeMillis() - lastMessageMs > INACTIVITY_TIMEOUT_MS) {
                     _connectionState.value = ConnectionState.DISCONNECTED
+                    // A real drop (6 s silence) — recompute the offset on the next reconnect.
+                    offsetCaptured = false
                 }
             }
         }

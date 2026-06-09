@@ -10,7 +10,7 @@ data class ScenarioRecordingUiState(
     val heartRateSampleCount: Int = 0,
     val respirationSampleCount: Int = 0,
     val esenseRrIntervalSampleCount: Int = 0,
-    val gsrSampleCount: Int = 0,
+    val edaSampleCount: Int = 0,
     val scenarioIdentifier: String? = null,
     val isRecording: Boolean = false,
     val heartRateWasEnabled: Boolean = false,

@@ -41,13 +41,13 @@ class SessionExportMapperTest {
             sample(scenario.id, SensorType.HEART_RATE),
             sample(scenario.id, SensorType.ESENSE_RR_INTERVAL),
             sample(scenario.id, SensorType.RESPIRATION),
-            sample(scenario.id, SensorType.GSR)
+            sample(scenario.id, SensorType.EDA)
         )
 
         val result = mapper.buildScenarioExport(scenario, samples)
 
         assertEquals(
-            listOf("heart_rate", "rr_interval", "respiration", "gsr"),
+            listOf("heart_rate", "rr_interval", "respiration", "eda"),
             result.samples.map { it.sensorType }
         )
     }
@@ -122,7 +122,7 @@ class SessionExportMapperTest {
             hrSampleCount = 100,
             respirationSampleCount = 50,
             rrIntervalSampleCount = 80,
-            gsrSampleCount = 12
+            edaSampleCount = 12
         )
 
         val result = mapper.buildExportData(participant, session, emptyList())
@@ -131,7 +131,7 @@ class SessionExportMapperTest {
         assertEquals(100, result.session.statistics.hrSampleCount)
         assertEquals(50, result.session.statistics.respirationSampleCount)
         assertEquals(80, result.session.statistics.rrIntervalSampleCount)
-        assertEquals(12, result.session.statistics.gsrSampleCount)
+        assertEquals(12, result.session.statistics.edaSampleCount)
     }
 
     @Test
@@ -196,7 +196,7 @@ class SessionExportMapperTest {
         hrSampleCount: Int = 0,
         respirationSampleCount: Int = 0,
         rrIntervalSampleCount: Int = 0,
-        gsrSampleCount: Int = 0
+        edaSampleCount: Int = 0
     ) = SessionEntity(
         id = 1L,
         participantId = 1L,
@@ -208,7 +208,7 @@ class SessionExportMapperTest {
         hrSampleCount = hrSampleCount,
         respirationSampleCount = respirationSampleCount,
         rrIntervalSampleCount = rrIntervalSampleCount,
-        gsrSampleCount = gsrSampleCount,
+        edaSampleCount = edaSampleCount,
         scenarioCount = scenarioCount
     )
 

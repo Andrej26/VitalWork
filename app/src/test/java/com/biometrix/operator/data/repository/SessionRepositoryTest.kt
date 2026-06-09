@@ -68,7 +68,7 @@ class SessionRepositoryTest {
         fakeSensorSampleDao.samples.addAll(samples(s1.id, SensorType.HEART_RATE, count = 10))
         fakeSensorSampleDao.samples.addAll(samples(s2.id, SensorType.HEART_RATE, count = 5))
         fakeSensorSampleDao.samples.addAll(samples(s1.id, SensorType.RESPIRATION, count = 3))
-        fakeSensorSampleDao.samples.addAll(samples(s2.id, SensorType.GSR, count = 7))
+        fakeSensorSampleDao.samples.addAll(samples(s2.id, SensorType.EDA, count = 7))
         // Samples on the unfinished scenario should not be counted.
         fakeSensorSampleDao.samples.addAll(samples(unfinished.id, SensorType.HEART_RATE, count = 999))
 
@@ -79,7 +79,7 @@ class SessionRepositoryTest {
         assertEquals(2, updated.scenarioCount)
         assertEquals(15, updated.hrSampleCount)
         assertEquals(3, updated.respirationSampleCount)
-        assertEquals(7, updated.gsrSampleCount)
+        assertEquals(7, updated.edaSampleCount)
         assertNotNull(updated.endedAt)
     }
 

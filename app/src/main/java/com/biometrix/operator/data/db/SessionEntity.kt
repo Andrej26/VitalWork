@@ -48,7 +48,7 @@ data class SessionEntity(
 
     val rrIntervalSampleCount: Int = 0,
 
-    val gsrSampleCount: Int = 0,
+    val edaSampleCount: Int = 0,
 
     val scenarioCount: Int = 0
 )

@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.BluetoothDisabled
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Watch
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Sensors
@@ -82,6 +83,7 @@ import com.biometrix.operator.data.db.SessionStatus
 import com.biometrix.operator.data.model.ConnectionState
 import com.biometrix.operator.data.recording.model.DataRecordingState
 import com.biometrix.operator.data.sensor.ble.model.BleDevice
+import com.biometrix.operator.data.sensor.watch.WatchBatteryAlert
 import com.biometrix.operator.data.system.SessionPrerequisite
 import com.biometrix.operator.presentation.components.ReadinessWarningCard
 import com.biometrix.operator.presentation.components.onPermissionDenied
@@ -118,12 +120,17 @@ fun SessionControlScreen(
     val vrConnectionState by viewModel.vrConnectionState.collectAsState()
     val pulseSensorState by viewModel.bleConnectionState.collectAsState()
     val respirationSensorState by viewModel.respirationState.collectAsState()
+    val watchConnectionState by viewModel.watchConnectionState.collectAsState()
 
     // Live sensor values
     val heartRate by viewModel.heartRate.collectAsState()
     val bleBatteryLevel by viewModel.bleBatteryLevel.collectAsState()
     val respirationRate by viewModel.respirationRate.collectAsState()
     val pulseLatestRr by viewModel.pulseLatestRr.collectAsState()
+    val watchEda by viewModel.watchEda.collectAsState()
+    val watchBatteryLevel by viewModel.watchBatteryLevel.collectAsState()
+    val watchBatteryAlert by viewModel.watchBatteryAlert.collectAsState()
+    val showWatchRecoveryDialog by viewModel.showWatchRecoveryDialog.collectAsState()
 
     // Recording state
     val recordingUiState by viewModel.recordingUiState.collectAsState()
@@ -183,7 +190,8 @@ fun SessionControlScreen(
     val respirationConnectionState = respirationSensorState.toConnectionState()
 
     val isAnySensorConnected = pulseSensorState == ConnectionState.CONNECTED ||
-            respirationConnectionState == ConnectionState.CONNECTED
+            respirationConnectionState == ConnectionState.CONNECTED ||
+            watchConnectionState == ConnectionState.CONNECTED
 
     val context = LocalContext.current
 
@@ -284,7 +292,7 @@ fun SessionControlScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showBackDialog = false
-                    viewModel.endSessionAndSave()
+                    viewModel.requestEndSession()
                 }) {
                     Text("Save & Exit")
                 }
@@ -337,7 +345,7 @@ fun SessionControlScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showEndSessionConfirmation = false
-                    viewModel.endSessionAndSave()
+                    viewModel.requestEndSession()
                 }) {
                     Text("End Session")
                 }
@@ -345,6 +353,36 @@ fun SessionControlScreen(
             dismissButton = {
                 TextButton(onClick = { showEndSessionConfirmation = false }) {
                     Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Watch EDA recovery — the watch link is down at End Session, so it may still hold sleep-buffered
+    // EDA it never delivered. Prompt the operator to wake it before finalizing (data isn't lost; the
+    // watch buffers locally and flushes on wake). "End anyway" finalizes with whatever has arrived.
+    if (showWatchRecoveryDialog) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissWatchRecoveryDialog() },
+            icon = {
+                Icon(Icons.Default.Watch, contentDescription = null)
+            },
+            title = { Text("Galaxy Watch not reachable") },
+            text = {
+                Text(
+                    "The watch link is down. It may still hold EDA recorded while it was asleep. " +
+                        "Wake the watch (tap its screen) and make sure Bluetooth is on to recover it, " +
+                        "then end the session. You can also end now and finalize with the data already received."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.dismissWatchRecoveryDialog() }) {
+                    Text("Wait & recover")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.confirmEndSessionAnyway() }) {
+                    Text("End anyway", color = MaterialTheme.colorScheme.error)
                 }
             }
         )
@@ -495,6 +533,21 @@ fun SessionControlScreen(
                 }
             }
 
+            // Galaxy Watch low-battery warning — surfaced before/while a session runs so the operator
+            // doesn't start a long session on a dying watch (and risk losing the End-Session flush).
+            if (watchBatteryAlert != WatchBatteryAlert.NONE && watchBatteryLevel != null) {
+                WatchBatteryWarningBanner(
+                    level = watchBatteryLevel!!,
+                    critical = watchBatteryAlert == WatchBatteryAlert.CRITICAL
+                )
+            }
+
+            // Galaxy Watch link-lost warning — the watch buffers EDA locally, so data isn't lost on a
+            // brief drop; warn so the operator restores Bluetooth (don't pause the session).
+            if (watchBatteryLevel != null && watchConnectionState != ConnectionState.CONNECTED) {
+                WatchLinkLostBanner()
+            }
+
             // Mindfield eSense device group
             val eSenseConnectionState = when {
                 pulseSensorState == ConnectionState.CONNECTED ||
@@ -544,6 +597,27 @@ fun SessionControlScreen(
                     connectionState = respirationConnectionState,
                     sampleCount = recordingUiState.respirationSampleCount,
                     onClick = { viewModel.onRespirationCardClick(context) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            // Galaxy Watch 8 device group — live EDA (µS). Phone-side recording wiring; the watch
+            // streams EDA over the Data Layer and is captured/sliced into scenarios on the tablet.
+            DeviceSensorGroup(
+                deviceName = "Galaxy Watch 8",
+                connectionState = watchConnectionState,
+                batteryLevel = watchBatteryLevel
+            ) {
+                LiveSensorCard(
+                    icon = Icons.Default.Watch,
+                    label = "EDA",
+                    value = if (watchConnectionState == ConnectionState.CONNECTED && watchEda != null)
+                        String.format(java.util.Locale.US, "%.2f", watchEda)
+                    else "--",
+                    unit = "µS",
+                    connectionState = watchConnectionState,
+                    sampleCount = recordingUiState.edaSampleCount,
+                    batteryLevel = watchBatteryLevel,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -685,6 +759,31 @@ fun SessionControlScreen(
                         Text(
                             text = if (recordingUiState.isRespirationConnected)
                                 "${recordingUiState.respirationSampleCount} samples"
+                            else "Not connected",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Watch,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Galaxy Watch EDA",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            text = if (watchConnectionState == ConnectionState.CONNECTED)
+                                "${recordingUiState.edaSampleCount} samples"
                             else "Not connected",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1154,6 +1253,81 @@ private fun SensorLostDuringRecordingBanner(sensorNames: List<String>) {
                 Text(
                     text = "Recording continues — reconnect to resume data capture",
                     color = MaterialTheme.colorScheme.onErrorContainer,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WatchLinkLostBanner() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Watch,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onErrorContainer,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+                Text(
+                    text = "Galaxy Watch link lost",
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "EDA keeps buffering on the watch — turn its Bluetooth back on to recover it",
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WatchBatteryWarningBanner(level: Int, critical: Boolean) {
+    val container = if (critical) MaterialTheme.colorScheme.errorContainer
+                    else MaterialTheme.colorScheme.tertiaryContainer
+    val onContainer = if (critical) MaterialTheme.colorScheme.onErrorContainer
+                      else MaterialTheme.colorScheme.onTertiaryContainer
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = container)
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Warning,
+                contentDescription = null,
+                tint = onContainer,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+                Text(
+                    text = if (critical) "Galaxy Watch battery critical ($level%)"
+                           else "Galaxy Watch battery low ($level%)",
+                    color = onContainer,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Charge it before a long session — a dead watch can't deliver its buffered EDA",
+                    color = onContainer,
                     style = MaterialTheme.typography.bodySmall
                 )
             }

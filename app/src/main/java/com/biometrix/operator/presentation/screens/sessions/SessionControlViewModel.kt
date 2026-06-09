@@ -17,6 +17,8 @@ import com.biometrix.operator.data.repository.SessionRepository
 import com.biometrix.operator.data.sensor.DeviceState
 import com.biometrix.operator.data.sensor.ble.BleEvent
 import com.biometrix.operator.data.sensor.ble.model.BleDevice
+import com.biometrix.operator.data.sensor.watch.WatchBatteryAlert
+import com.biometrix.operator.data.sensor.watch.WatchBatteryThresholds
 import com.biometrix.operator.data.vr.VrEvent
 import com.biometrix.operator.data.vr.VrEventReceiver
 import com.biometrix.operator.presentation.components.BleDialogState
@@ -35,6 +37,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -102,6 +105,30 @@ class SessionControlViewModel @Inject constructor(
     /** Audio sensor (eSense Respiration) state */
     val respirationState: StateFlow<DeviceState> = connectionRepository.respirationState
 
+    /** Galaxy Watch (Data Layer) connection state */
+    val watchConnectionState: StateFlow<ConnectionState> = connectionRepository.watchConnectionState
+
+    /** Latest Galaxy Watch EDA value (µS), null until first reading */
+    val watchEda: StateFlow<Float?> = connectionRepository.watchEda
+
+    /** Galaxy Watch battery level (0-100), null until first reading */
+    val watchBatteryLevel: StateFlow<Int?> = connectionRepository.watchBatteryLevel
+
+    /**
+     * Low-battery alert tier for the Galaxy Watch, derived from its last-known battery level so the
+     * operator is warned before starting a long session on a dying watch (CRITICAL wins over WARNING).
+     */
+    val watchBatteryAlert: StateFlow<WatchBatteryAlert> = connectionRepository.watchBatteryLevel
+        .map { level ->
+            when {
+                level == null -> WatchBatteryAlert.NONE
+                level <= WatchBatteryThresholds.CRITICAL_PCT -> WatchBatteryAlert.CRITICAL
+                level <= WatchBatteryThresholds.WARNING_PCT -> WatchBatteryAlert.WARNING
+                else -> WatchBatteryAlert.NONE
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), WatchBatteryAlert.NONE)
+
     /** Live heart rate value */
     val heartRate: StateFlow<Int?> = connectionRepository.heartRate
 
@@ -131,6 +158,15 @@ class SessionControlViewModel @Inject constructor(
     val notesSaveStatus: StateFlow<NotesSaveStatus> = _notesSaveStatus.asStateFlow()
     private var userHasEditedNotes = false
     private var savedDismissJob: Job? = null
+
+    /**
+     * Shown when the operator hits End Session while the Galaxy Watch link is down. The watch may
+     * still hold sleep-buffered EDA it hasn't delivered; prompting the operator to wake it (tap its
+     * screen / turn Bluetooth on) lets that buffer flush before we finalize. Purely advisory — the
+     * operator can always end anyway.
+     */
+    private val _showWatchRecoveryDialog = MutableStateFlow(false)
+    val showWatchRecoveryDialog: StateFlow<Boolean> = _showWatchRecoveryDialog.asStateFlow()
 
     /** Session ending state */
     private val _isEndingSession = MutableStateFlow(false)
@@ -211,7 +247,7 @@ class SessionControlViewModel @Inject constructor(
             heartRateSampleCount = metadata?.heartRateSampleCount ?: 0,
             respirationSampleCount = metadata?.respirationSampleCount ?: 0,
             esenseRrIntervalSampleCount = metadata?.esenseRrIntervalSampleCount ?: 0,
-            gsrSampleCount = metadata?.gsrSampleCount ?: 0,
+            edaSampleCount = metadata?.edaSampleCount ?: 0,
             scenarioIdentifier = metadata?.scenarioIdentifier,
             isRecording = state == DataRecordingState.RECORDING,
             heartRateWasEnabled = metadata?.heartRateRecording ?: false,
@@ -229,6 +265,10 @@ class SessionControlViewModel @Inject constructor(
                 _session.value = session
                 _notes.value = session?.notes ?: ""
             }
+            // Begin continuous Galaxy Watch EDA capture for the whole session. Idempotent: the watch
+            // streams independently of scenarios and buffers in Doze, so we accumulate session-wide
+            // and slice into scenarios at End Session. Safe even if no watch is connected.
+            sensorRecordingRepository.startWatchEdaSession()
         }
 
         // Unified BLE connection-state handler: dialog dismissal, HR-notification kickoff,
@@ -344,7 +384,8 @@ class SessionControlViewModel @Inject constructor(
         val bleConnected = connectionRepository.bleConnectionState.value == ConnectionState.CONNECTED
         val respState = connectionRepository.respirationState.value
         val respConnected = respState == DeviceState.Streaming || respState == DeviceState.Connected
-        return bleConnected || respConnected
+        val watchConnected = connectionRepository.watchConnectionState.value == ConnectionState.CONNECTED
+        return bleConnected || respConnected || watchConnected
     }
 
     /**
@@ -443,14 +484,51 @@ class SessionControlViewModel @Inject constructor(
         _notes.value = text
     }
 
+    /**
+     * Entry point for the End-Session button. If a Galaxy Watch was in use this session but its link
+     * is currently down, show the recovery dialog first (the watch may hold undelivered sleep-buffered
+     * EDA). Otherwise finalize immediately.
+     */
+    fun requestEndSession() {
+        val watchWasInUse = connectionRepository.watchBatteryLevel.value != null
+        val watchDown = watchConnectionState.value != ConnectionState.CONNECTED
+        if (watchWasInUse && watchDown) {
+            _showWatchRecoveryDialog.value = true
+        } else {
+            endSessionAndSave()
+        }
+    }
+
+    /** Operator dismissed the recovery dialog by choosing to finalize regardless. */
+    fun confirmEndSessionAnyway() {
+        _showWatchRecoveryDialog.value = false
+        endSessionAndSave()
+    }
+
+    /** Operator cancelled End Session from the recovery dialog (e.g. to go wake the watch). */
+    fun dismissWatchRecoveryDialog() {
+        _showWatchRecoveryDialog.value = false
+    }
+
     fun endSessionAndSave() {
         viewModelScope.launch {
             _isEndingSession.value = true
             try {
-                // Stop recording if active
+                // Stop recording if active — this sets the last scenario's endedAt, closing its window.
                 if (sensorRecordingRepository.recordingState.value == DataRecordingState.RECORDING) {
                     sensorRecordingRepository.stopRecording()
                 }
+
+                // If the watch reconnected, give its sleep-buffered EDA a brief moment to flush in
+                // before we slice — bounded so a dead/absent watch never hangs End Session.
+                if (watchConnectionState.value == ConnectionState.CONNECTED) {
+                    delay(WATCH_FLUSH_GRACE_MS)
+                }
+
+                // Drain the session-long watch EDA buffer into scenarios BY TIMESTAMP WINDOW, before
+                // endSession rolls up the per-type sample counts. Scenarios now all have endedAt set.
+                val scenarios = scenarioRepository.getScenariosForSessionOnce(sessionId)
+                sensorRecordingRepository.drainAndFinalizeWatchEda(scenarios)
 
                 sessionRepository.endSession(sessionId)
 
@@ -470,6 +548,9 @@ class SessionControlViewModel @Inject constructor(
             if (sensorRecordingRepository.recordingState.value == DataRecordingState.RECORDING) {
                 sensorRecordingRepository.stopRecording()
             }
+            // Tear down the watch EDA session without persisting (empty windows → nothing written,
+            // collector cancelled, buffers cleared) before the session is deleted.
+            sensorRecordingRepository.drainAndFinalizeWatchEda(emptyList())
             sessionRepository.deleteSession(sessionId)
         }
     }
@@ -589,6 +670,10 @@ class SessionControlViewModel @Inject constructor(
         return String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds)
     }
 
+    private companion object {
+        /** Bounded wait for a just-reconnected watch to flush its sleep buffer before slicing. */
+        const val WATCH_FLUSH_GRACE_MS = 2_000L
+    }
 }
 
 sealed class EndSessionResult {

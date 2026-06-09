@@ -9,7 +9,7 @@ enum class SensorType {
     HEART_RATE,
     RESPIRATION,
     ESENSE_RR_INTERVAL,
-    GSR
+    EDA
 }
 
 @Entity(
@@ -43,6 +43,6 @@ data class SensorSampleEntity(
     val sensorType: SensorType,
 
     /** Sensor reading value. Units depend on sensorType:
-     *  BPM (heart rate), ms (RR interval), breaths/min (respiration), μS (GSR). */
+     *  BPM (heart rate), ms (RR interval), breaths/min (respiration), μS (EDA, Galaxy Watch). */
     val value: Float
 )

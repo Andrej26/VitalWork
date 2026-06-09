@@ -18,6 +18,7 @@ import com.biometrix.operator.data.sensor.SensorDevice
 import com.biometrix.operator.data.sensor.audio.MindfieldRespiration
 import com.biometrix.operator.data.sensor.ble.BleManager
 import com.biometrix.operator.data.sensor.ble.BleManagerImpl
+import com.biometrix.operator.data.sensor.watch.WatchSensorReceiver
 import com.biometrix.operator.data.network.NetworkChecker
 import com.biometrix.operator.data.prefs.SettingsRepository
 import com.biometrix.operator.data.prefs.SharedPrefsSettingsRepository
@@ -121,8 +122,11 @@ object AppModule {
     fun provideScenarioRecordingRepository(
         bleManager: BleManager,
         @Named("respiration") respirationDevice: SensorDevice,
-        scenarioRepository: ScenarioRepository
+        scenarioRepository: ScenarioRepository,
+        watchReceiver: WatchSensorReceiver
     ): ScenarioRecordingRepository {
-        return ScenarioRecordingRepositoryImpl(bleManager, respirationDevice, scenarioRepository)
+        return ScenarioRecordingRepositoryImpl(
+            bleManager, respirationDevice, scenarioRepository, watchReceiver
+        )
     }
 }

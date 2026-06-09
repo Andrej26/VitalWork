@@ -9,12 +9,20 @@ import com.biometrix.operator.data.sensor.audio.MindfieldRespiration
 import com.biometrix.operator.data.sensor.ble.BleEvent
 import com.biometrix.operator.data.sensor.ble.BleManager
 import com.biometrix.operator.data.sensor.ble.model.BleDevice
+import com.biometrix.operator.data.sensor.watch.WatchBatteryAlert
 import com.biometrix.operator.data.sensor.watch.WatchSensorReceiver
+import com.biometrix.operator.data.sensor.watch.model.WatchReading
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharedFlow
 import com.biometrix.operator.data.vr.VrEventReceiver
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
@@ -31,6 +39,9 @@ class ConnectionRepository @Inject constructor(
     private val watchReceiver: WatchSensorReceiver,
     @Named("lanAvailable") private val lanAvailableFlow: StateFlow<Boolean>
 ) {
+    /** Long-lived scope for repository-owned derived flows (process-scoped singleton). */
+    private val repoScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
     /**
      * VR headset connection state — driven by the bonded Quest's heartbeat (~5 s), not by sparse
      * scenario events, so it stays CONNECTED through a long quiet scenario and only drops ~10 s after
@@ -46,6 +57,24 @@ class ConnectionRepository @Inject constructor(
 
     /** Galaxy Watch (Data Layer channel) connection state */
     val watchConnectionState: StateFlow<ConnectionState> = watchReceiver.connectionState
+
+    /** Per-sample EDA stream from the Galaxy Watch (µS); carries the watch-stamped timestamp. */
+    val watchEdaSampleFlow: SharedFlow<WatchReading> = watchReceiver.edaSampleFlow
+
+    /** Latest EDA value (µS) from the Galaxy Watch for live display, null until first reading. */
+    val watchEda: StateFlow<Float?> = watchReceiver.latestByType
+        .map { it["EDA"]?.value }
+        .stateIn(repoScope, SharingStarted.Eagerly, null)
+
+    /** Galaxy Watch battery level percentage (0-100), null until first reading. */
+    val watchBatteryLevel: StateFlow<Int?> = watchReceiver.batteryLevel
+
+    /** Map a watch-stamped timestamp onto the phone clock (phone↔watch offset correction). */
+    fun watchCorrectedTimestamp(watchTimestampMs: Long): Long =
+        watchReceiver.correctedTimestamp(watchTimestampMs)
+
+    /** Current low-battery alert tier from the watch's last-known battery level. */
+    fun watchBatteryAlert(): WatchBatteryAlert = watchReceiver.currentBatteryAlert()
 
     /** Heart rate from BLE sensor (null if not receiving) */
     val heartRate: StateFlow<Int?> = bleManager.heartRate
