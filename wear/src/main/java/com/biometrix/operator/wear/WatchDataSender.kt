@@ -8,6 +8,7 @@ import com.google.android.gms.wearable.Wearable
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
@@ -30,6 +31,10 @@ class WatchDataSender(context: Context) {
         private const val TAG = "WatchDataSender"
         const val PHONE_CAPABILITY = "biometrix_phone"
         const val MESSAGE_PATH = "/biometrix/sensors"
+
+        /** Retry node resolution at Start so a not-yet-propagated tablet capability isn't fatal. */
+        private const val CONNECT_RETRIES = 10
+        private const val CONNECT_RETRY_DELAY_MS = 1_500L
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -43,12 +48,30 @@ class WatchDataSender(context: Context) {
     var isConnected: Boolean = false
         private set
 
-    /** Resolve the paired tablet node. Safe to call repeatedly. */
+    /**
+     * Resolve the paired tablet node, retrying for a while. The tablet only advertises the
+     * [PHONE_CAPABILITY] while its app process is alive, and that capability can take several
+     * seconds to propagate across the Data Layer (worse on a cross-vendor pairing). A single
+     * lookup at Start therefore loses a race if the phone app isn't already up — which presented
+     * as "tap Start, nothing happens". Retry with backoff so the watch keeps looking instead of
+     * giving up after one attempt.
+     */
     fun connect(onResult: (Boolean) -> Unit = {}) {
         scope.launch {
-            val node = resolveNodeId()
+            var node = resolveNodeId()
+            var attempt = 0
+            while (node == null && attempt < CONNECT_RETRIES) {
+                attempt++
+                Log.w(TAG, "Tablet '$PHONE_CAPABILITY' not found yet; retry $attempt/$CONNECT_RETRIES")
+                delay(CONNECT_RETRY_DELAY_MS)
+                node = resolveNodeId()
+            }
             isConnected = node != null
-            if (node == null) Log.w(TAG, "No paired tablet advertising '$PHONE_CAPABILITY' found")
+            if (node == null) {
+                Log.w(TAG, "No paired tablet advertising '$PHONE_CAPABILITY' found after $attempt retries")
+            } else {
+                Log.i(TAG, "Resolved tablet node $node")
+            }
             onResult(node != null)
         }
     }
@@ -61,7 +84,9 @@ class WatchDataSender(context: Context) {
                 .await()
             val nodes = capInfo.nodes
             val id = (nodes.firstOrNull { it.isNearby } ?: nodes.firstOrNull())?.id
-            cachedNodeId = id
+            // Only cache a real hit — never cache null, or a Start-time miss would latch forever
+            // and no later send could ever re-resolve once the phone app comes up.
+            if (id != null) cachedNodeId = id
             id
         } catch (e: Exception) {
             Log.e(TAG, "node resolve failed", e)

@@ -207,30 +207,60 @@ application processor (AP) suspends. Two things then stall:
 2. If the app lacks background-sensor permission, the SDK **stops delivering entirely** once
    backgrounded.
 
-### What did NOT work (verified on-device — do not repeat)
+### What did NOT work — a wake lock cannot defeat Wear Doze (verified on-device twice; do not repeat)
 
-A `PARTIAL_WAKE_LOCK` + battery-optimization exemption (`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` +
-`dumpsys deviceidle whitelist`). On the Galaxy Watch 8 the OEM Doze implementation shows the wake
-lock as **`DISABLED`** in `dumpsys power` even when the app is whitelisted, and the SDK still stopped
-firing. **The standard Android "wake lock + exemption" advice is the wrong lever for the Samsung SDK
-path.** Both were removed from the final code.
+A `PARTIAL_WAKE_LOCK` to keep the AP awake so the flush loop keeps ticking. **This does not work on
+the Galaxy Watch 8 — it is a Wear OS platform limit, not a code bug.** Measured (2026-06):
 
-### What actually works (three load-bearing pieces)
+- While the watch is **Awake**, the lock is honored: `dumpsys power` shows
+  `PARTIAL_WAKE_LOCK 'biometrix:watchsensors' ACQ=…`.
+- The instant `mWakefulness=Dozing` (both natural screen-off **and** forced `deviceidle`), the same
+  lock flips to **`DISABLED`** — the OEM power HAL suppresses it. The AP then suspends, the flush
+  coroutine's `delay()` freezes, and the phone receives nothing until the next maintenance wake
+  (measured gaps of ~27 s, growing as Doze deepens).
+
+This matches Google IssueTracker **#228086086 "Partial Wake Lock disabled by Doze in android Wear"**
+— wake locks are deliberately disabled by Wear Doze. The earlier `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`
++ `deviceidle whitelist` attempt failed for the same root reason. **There is no app-side lever that
+keeps the AP awake through Wear Doze; the wake-lock code was removed.** (The Samsung blog *"Continuous
+Heart Rate Tracking … Even with the Screen Off"*, 2026-04-23, that suggests a wake lock was validated
+only on **Watch 5/6/7** via the generic `SensorManager` path — not the Watch 8 / Health Sensor SDK /
+EDA path used here.)
+
+### What this means: the data is COMPLETE, only LIVE delivery is delayed (the key insight)
+
+Crucially, **the sensors keep sampling at a gapless 1 Hz on the watch the whole time it dozes** —
+measured: EDA `onSensorDataReceived` timestamps exactly 1000 ms apart through `Dozing`, HR + IBI the
+same. Doze suspends **delivery to the phone**, not **sampling**. Because every reading carries its own
+`System.currentTimeMillis()` stamp, the burst-delivered batch reconstructs a **complete, correctly
+ordered 1 Hz timeline** on the phone. So for **recording into the DB**, screen-off bursts lose no data
+— only the *live preview* lags. This is acceptable and is the chosen model (Phase-1 decision 2026-06).
+
+### What actually works (three load-bearing pieces — for SCREEN-ON continuity + screen-off completeness)
 
 | # | Piece | Why it's required |
 |---|-------|-------------------|
-| 1 | Foreground service, **type `health`**, with the FGS type **asserted at runtime** via `ServiceCompat.startForeground(this, id, notif, FOREGROUND_SERVICE_TYPE_HEALTH)` | Keeps the **process** alive & resident. Without the runtime assertion on API 34+, the OS demotes the process to *cached* the moment the launching Activity leaves TOP, then `START_STICKY` recreates it — producing a connect→unbind churn every ~2–10 s. |
+| 1 | Foreground service, **type `health`**, FGS type **asserted at runtime** via `ServiceCompat.startForeground(this, id, notif, FOREGROUND_SERVICE_TYPE_HEALTH)` | Keeps the **process** alive & resident. Without the runtime assertion on API 34+, the OS demotes the process to *cached* when the launching Activity leaves TOP, then `START_STICKY` recreates it — connect→unbind churn every ~2–10 s. |
 | 2 | **`BODY_SENSORS_BACKGROUND`** permission (API 31+), granted separately (settings-routed) | Without it the SDK **stops delivering sensor data** once backgrounded / dozing. This is what stopped the *total* shutoff (vs. mere batching). |
-| 3 | **`HealthTracker.flush()` driven on a ~1 s loop** while tracking | Screen-off, the SDK batches. `flush()` forces the buffered batch out **immediately**, so instead of an 11-sample burst every 11 s the phone gets 1–2 samples every second → continuous 1 Hz. |
+| 3 | **`HealthTracker.flush()` on a `FLUSH_INTERVAL_MS` loop** while tracking | **Screen ON:** forces the SDK's buffer out each interval → continuous 1 Hz live feed. **Screen OFF in Doze:** the loop's `delay()` freezes with the AP, so this has no effect until the next maintenance wake — that is the platform limit above, not a bug. |
 
-**Verified result:** with all three in place and `mWakefulness=Dozing`, the EDA timestamps arrive
-unbroken at 1 s intervals and the phone receives ~1 msg/s with no gap > ~1.4 s. This is the Samsung-
-sanctioned mechanism (per Samsung Developer blog *"Continuous Heart Rate Tracking on Galaxy Watch,
-Even with the Screen Off"*, 2026-04-23, and the SDK getting-started guide).
+**Measured result (screen ON):** continuous ~1 Hz, no gap > ~1.4 s. **Screen OFF in Doze:** bursts
+on each maintenance wake (gap grows over time), every sample timestamp-correct → complete recorded
+data, lagged live preview.
 
-> Open item: **battery cost** of holding the AP busy at 1 Hz for an hour has not yet been measured.
-> Measure with `dumpsys batterystats` over a ~15 min mock session and extrapolate before relying on
-> hour-long untethered sessions.
+> **For true continuous LIVE screen-off delivery (incl. EDA) the only mechanism is to prevent Doze by
+> keeping the watch display ON during sessions** (charging/tethered). Health Services' MCU path keeps
+> HR screen-off without a wake lock but exposes **no EDA**, so it cannot carry this study's full signal
+> set. Not implemented; recorded-data completeness (above) was deemed sufficient for Phase 1.
+
+> **Future recording phase — edge-safety requirement.** When DB recording is wired up, screen-off
+> bursts mean a batch may land *after* the operator hits Stop, or a gap may straddle Start. The
+> recorder must therefore: (a) trigger a `flush()` (or accept a short grace window) at record
+> **start/stop** so window edges aren't truncated, and (b) bound the saved window by each sample's own
+> `t`, not by arrival time. Otherwise the unpredictable record windows can lose their edge samples.
+
+> Open item: **battery cost** of the screen-on (no-Doze) mode for live sessions is unmeasured; quantify
+> with `dumpsys batterystats` over a ~15 min mock session before relying on long untethered sessions.
 
 ## Connection State (inferred — there is no "connection" object)
 
@@ -239,8 +269,10 @@ dropped. State is **inferred** in `WatchSensorReceiver`:
 
 - Every message updates a `@Volatile lastMessageMs` and sets `CONNECTED`.
 - A single poll loop (`POLL_INTERVAL_MS = 1 s`) sets `DISCONNECTED` if
-  `now - lastMessageMs > INACTIVITY_TIMEOUT_MS` (**4 s**). One poll loop watching a volatile
-  timestamp is race-free vs. rearming a debounce job from a binder thread.
+  `now - lastMessageMs > INACTIVITY_TIMEOUT_MS` (**6 s** — headroom over the 1 Hz cadence so an
+  occasional 1–2 s gap doesn't flap the state). One poll loop watching a volatile timestamp is
+  race-free vs. rearming a debounce job from a binder thread. (Note: this only smooths brief gaps;
+  it does **not** mask screen-off Doze bursts, whose gaps grow well past 6 s — see *Screen-Off Problem*.)
 - A normal **Stop is signalled explicitly**: the watch sends `{"type":"STOP"}` before teardown, and
   `onStop()` flips to `DISCONNECTED` **instantly** (no watchdog wait). The watchdog is only the
   safety net for the abnormal case — watch dies / out of range — where no goodbye can be sent.
@@ -252,7 +284,7 @@ DISCONNECTED
 CONNECTED ──(STOP message)──────────────► DISCONNECTED   (instant, normal Stop)
   │                                   ▲
   │ messages keep arriving (~1 Hz)    │
-  └──(no message for > 4 s)───────────┘   (watchdog, abnormal drop)
+  └──(no message for > 6 s)───────────┘   (watchdog, abnormal drop)
 ```
 
 ## Watch-Side Service Lifecycle (gotchas)
@@ -373,10 +405,18 @@ mirroring the eSense Pulse recording flow.
 
 ## Troubleshooting and Edge Cases
 
-**Phone shows "disconnected" most of the time while data clearly flows**
-- The watchdog is inferring from message arrival. If screen-off bursts exceed the timeout, the UI
-  false-flips. Ensure the `flush()` loop is running (continuous 1 Hz) and `INACTIVITY_TIMEOUT_MS`
-  is set sensibly (4 s for a 1 Hz stream).
+**Connection flaps CONNECTED↔DISCONNECTED repeatedly when the watch screen turns off / sleeps**
+- **Expected on this platform — not a bug.** Screen-off the watch dozes, the AP suspends, and the
+  Samsung SDK delivers in bursts on each maintenance wake (gap grows over time). The phone's inferred
+  state flaps because data arrives in clumps separated by long silences. A `PARTIAL_WAKE_LOCK` does
+  **not** fix it — Wear Doze forcibly DISABLES it (Google issue #228086086; see *Screen-Off Problem →
+  What did NOT work*). The data itself is **not lost**: each sample is timestamped 1 Hz on the watch
+  and arrives complete, just late. For continuous **live** screen-off delivery the only option is to
+  keep the watch **display on** during sessions (prevents Doze).
+
+**Phone shows "disconnected" most of the time while data clearly flows (screen ON)**
+- The watchdog infers from message arrival. With the screen on, ensure the `flush()` loop is running
+  (continuous 1 Hz) and `INACTIVITY_TIMEOUT_MS` is sensible (**6 s** for a 1 Hz stream).
 
 **Data appears then freezes / "connected but frozen"**
 - Historical symptom of the old `ChannelClient` stream nulling its `OutputStream`. The current
@@ -409,6 +449,53 @@ mirroring the eSense Pulse recording flow.
 - Samsung developer mode (Health Platform) not enabled, or the `biometrix_phone` capability isn't
   declared/resolved (watch can't find the tablet node).
 
+**Tap Start on the watch and "nothing happens" — watch shows "Phone not found", phone gets nothing**
+- The watch resolves the tablet's `biometrix_phone` capability node *at the moment of Start*. The
+  tablet only advertises that capability **while its app process is alive**, and the capability can
+  take several seconds to propagate across the Data Layer — **noticeably longer on a cross-vendor
+  pairing** (Galaxy Watch ↔ non-Samsung phone, bridged by `com.samsung.wearable.watchuniteplugin`).
+  If the tablet app wasn't already open when you tapped Start, a single lookup lost the race and the
+  watch gave up.
+- **Fix in code:** `WatchDataSender.connect()` now **retries node resolution with backoff**
+  (`CONNECT_RETRIES`×`CONNECT_RETRY_DELAY_MS`) and **never caches a null** id — so the watch keeps
+  looking and links up on its own once the tablet app appears, instead of latching the failure.
+- **Operational rule:** open the **tablet app first**, then tap **Start** on the watch. With the
+  retry fix the order is forgiving, but opening the tablet first avoids the wait entirely.
+- Verify the capability is actually reachable from the watch:
+  ```bash
+  adb -s <watch> shell dumpsys activity service \
+    com.google.android.gms.wearable.service.WearableService | grep -E "biometrix_phone|Reachable|isNearby"
+  #   the tablet node should be listed under "Reachable Nodes" with isNearby=true,
+  #   and "+ biometrix_phone" should appear under that node.
+  ```
+- On a healthy link the watch logs `WatchDataSender: Resolved tablet node <id>`.
+
+**Messages arrive at the phone's GMS but `WatchListenerService` never fires (commonly right after a reinstall)**
+- Symptom that looks identical to "no data," but the transport is actually fine — GMS *received* the
+  messages, it just didn't dispatch them to the app. GMS caches which app components are bound to
+  which message path, and **reinstalling the tablet app leaves that dispatch table stale**: the bytes
+  are received and accounted to the package, but `WatchListenerService.onMessageReceived` is never
+  called.
+- **Tell-tale:** the per-package read counter climbs while no `rx` log appears. Check both:
+  ```bash
+  # GMS is receiving on our path (read count climbs ~1/s)?
+  adb -s <phone> shell dumpsys activity service \
+    com.google.android.gms.wearable.service.WearableService | grep "com.biometrix.operator: writes/reads"
+  # ...but the listener isn't logging the message?
+  adb -s <phone> logcat -s WatchListenerService    # expect "rx {...}" lines once healthy
+  ```
+  Read count rising + no `rx` lines = stale GMS binding.
+- **Fix:** `adb -s <phone> shell am force-stop com.biometrix.operator`, then relaunch the app. This
+  clears GMS's cached binding; data lands immediately. (`WatchListenerService` logs each accepted
+  message as `rx <body>` to make this unambiguous — previously it only logged on parse errors, so a
+  working-but-silent success path looked dead.)
+
+> **Note — the watch is almost never the culprit for "Start does nothing".** Verified on-device: the
+> watch can be sampling HR/IBI/EDA and `flush()`-ing at 1 Hz perfectly while the phone shows nothing.
+> Both failure modes above are **off-watch** (node resolution race, or stale GMS dispatch on the
+> phone). Confirm the watch side first with `adb -s <watch> logcat -s WatchSensorService` — if you see
+> `SHS#HeartRate… onDataReceived`, the watch is fine and the problem is downstream.
+
 **Useful adb diagnostics**
 ```bash
 # Is the watch dozing? Is our wake lock honored (it won't be — that's expected)?
@@ -417,9 +504,23 @@ adb -s <watch> shell dumpsys power | grep -E "mWakefulness=|BioMetrix"
 adb -s <watch> logcat -s SHS#EDAContinuousSensor WatchDataSender
 # Is the foreground service resident and typed HEALTH?
 adb -s <watch> shell dumpsys activity services com.biometrix.operator
-# Are messages arriving on the phone?
+# Did the watch resolve the tablet node? (healthy: "Resolved tablet node <id>")
+adb -s <watch> logcat -s WatchDataSender
+# Can the watch even see the tablet's capability? (expect the tablet under Reachable Nodes, isNearby=true)
+adb -s <watch> shell dumpsys activity service \
+  com.google.android.gms.wearable.service.WearableService | grep -E "biometrix_phone|Reachable|isNearby"
+# Are messages arriving on the phone? (healthy: "rx {...}" lines ~1/s)
 adb -s <phone> logcat -s WatchListenerService
+# Transport sanity: is GMS receiving on our path but NOT dispatching? (read count climbs, no rx lines = stale binding → force-stop the app)
+adb -s <phone> shell dumpsys activity service \
+  com.google.android.gms.wearable.service.WearableService | grep "com.biometrix.operator: writes/reads"
 ```
+
+> **Note (Windows / PowerShell):** `adb` may not be on `PATH` — it lives at
+> `%LOCALAPPDATA%\Android\Sdk\platform-tools\adb.exe`. To attach the watch over wireless adb you must
+> **pair first** (`adb pair <ip:pairingPort> <6-digit-code>` from the watch's *Wireless debugging →
+> Pair new device* dialog — the pairing port differs from the connect port) **before**
+> `adb connect <ip:connectPort>`. Use `findstr` in place of `grep` on PowerShell.
 
 ## References
 

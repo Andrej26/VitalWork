@@ -50,6 +50,16 @@ class WatchSensorService : Service() {
         /** Min interval between messages of the same type (guards high-rate trackers like PPG). */
         private const val MIN_SEND_INTERVAL_MS = 40L
 
+        /**
+         * How often the flush loop forces the SDK's buffered batch out *while the AP is awake*.
+         * 1 s = smoothest live feed when the screen is on; raising it loses no samples (each keeps
+         * its own timestamp, delivered in a batch ≤interval late; phone watchdog is 6 s).
+         * NOTE: screen-off in Doze the AP suspends and this loop's `delay()` freezes regardless —
+         * data is then delivered in bursts on the next maintenance wake, with timestamps intact.
+         * See doc/sensor_galaxy_watch.md (a wake lock cannot defeat Wear Doze — measured DISABLED).
+         */
+        private const val FLUSH_INTERVAL_MS = 1_000L
+
         /** Observable state for the watch UI. */
         val isTracking = MutableStateFlow(false)
         val connectionText = MutableStateFlow("Idle")
@@ -243,16 +253,22 @@ class WatchSensorService : Service() {
 
     /**
      * When the screen is off the Samsung SDK collects samples in batches and only delivers them
-     * when the AP next wakes — causing the multi-second gaps we measured. [HealthTracker.flush]
-     * forces the batched data to be delivered immediately, so driving it ~every second keeps the
-     * feed continuous (1 Hz) even while dozing. This is the SDK-sanctioned mechanism for screen-off
-     * continuity (a CPU wake lock alone is suppressed by the watch's OEM Doze).
+     * when the AP next wakes. [HealthTracker.flush] forces the batched data out immediately, so
+     * driving it on [FLUSH_INTERVAL_MS] keeps the feed continuous **while the screen is on**.
+     *
+     * Screen-off in Doze this loop's `delay()` freezes (the AP suspends) and data reverts to
+     * bursts on the next maintenance wake. That is an unavoidable Wear OS platform limit — a
+     * partial wake lock is forcibly DISABLED by Wear Doze (verified on-device; Google issue
+     * #228086086), so it cannot be defeated in app code. Crucially the sensors keep **sampling**
+     * at 1 Hz on the watch the whole time and every sample carries its own timestamp, so the
+     * burst-delivered data is complete and correctly ordered — only live latency suffers, not the
+     * recorded data. See doc/sensor_galaxy_watch.md.
      */
     private fun startFlushLoop() {
         if (flushJob?.isActive == true) return
         flushJob = scope.launch {
             while (isActive) {
-                delay(1_000)
+                delay(FLUSH_INTERVAL_MS)
                 activeTrackers.forEach { runCatching { it.flush() } }
             }
         }

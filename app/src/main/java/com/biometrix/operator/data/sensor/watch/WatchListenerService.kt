@@ -39,7 +39,9 @@ class WatchListenerService : WearableListenerService() {
     override fun onMessageReceived(event: MessageEvent) {
         if (event.path != MESSAGE_PATH) return
         // Runs on a binder thread; parse + StateFlow set is light and thread-safe.
-        parseLine(String(event.data, Charsets.UTF_8))
+        val line = String(event.data, Charsets.UTF_8)
+        Log.d(TAG, "rx ${line.take(120)}")
+        parseLine(line)
     }
 
     private fun parseLine(line: String) {

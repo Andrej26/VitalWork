@@ -31,10 +31,12 @@ import javax.inject.Singleton
 class WatchSensorReceiver @Inject constructor() {
 
     private companion object {
-        // Data arrives at a steady ~1 Hz (flush loop), so ~4 s of silence reliably means a real drop,
-        // not a hiccup. A normal Stop is signalled explicitly via onStop() for instant DISCONNECTED;
-        // this watchdog is the safety net for the watch dying / going out of range (no goodbye sent).
-        const val INACTIVITY_TIMEOUT_MS = 4_000L
+        // Data arrives ~1 Hz (flush loop). 6 s of silence reliably means a real drop, not a hiccup —
+        // the extra headroom over the bare 1 Hz cadence absorbs an occasional 1–2 s gap (e.g. a 2 s
+        // flush cadence, or a brief Doze stall) so the state doesn't flap CONNECTED↔DISCONNECTED.
+        // A normal Stop is signalled explicitly via onStop() for instant DISCONNECTED; this watchdog
+        // is the safety net for the watch dying / going out of range (no goodbye sent).
+        const val INACTIVITY_TIMEOUT_MS = 6_000L
         const val POLL_INTERVAL_MS = 1_000L
     }
 
