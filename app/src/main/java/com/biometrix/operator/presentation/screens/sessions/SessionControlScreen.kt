@@ -693,6 +693,35 @@ fun SessionControlScreen(
 
                     HorizontalDivider()
 
+                    // Manual test controls — start/stop recording from the phone before the VR
+                    // link drives it. TODO(remove once VR controls recording).
+                    val isIdle = recordingUiState.recordingState == DataRecordingState.IDLE
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Button(
+                            onClick = { viewModel.startManualRecording() },
+                            enabled = isIdle && isAnySensorConnected,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Start Recording")
+                        }
+                        OutlinedButton(
+                            onClick = { viewModel.stopManualRecording() },
+                            enabled = !isIdle,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Stop Recording")
+                        }
+                    }
+
                     if (vrTriggeredRecording) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),

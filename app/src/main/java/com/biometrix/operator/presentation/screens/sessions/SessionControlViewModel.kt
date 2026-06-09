@@ -373,6 +373,35 @@ class SessionControlViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Manual test start: spin up a scenario + recording exactly the way a VR `scenario_start` would,
+     * so the operator can exercise capture on the phone before the VR link is wired up. Uses a fixed
+     * test scenario code. Same gating as VR: ACTIVE session with at least one sensor connected.
+     *
+     * TODO(remove once VR drives recording): test-only manual control.
+     */
+    fun startManualRecording() {
+        viewModelScope.launch {
+            val session = _session.value ?: return@launch
+            if (sensorRecordingRepository.recordingState.value != DataRecordingState.IDLE) return@launch
+            if (session.status != com.biometrix.operator.data.db.SessionStatus.ACTIVE) return@launch
+            if (!anySensorConnected()) return@launch
+
+            val scenarioCode = com.biometrix.operator.data.db.ScenarioCode.FALLING_PALLET
+            val scenario = scenarioRepository.createScenario(
+                sessionId = session.id,
+                scenarioCode = scenarioCode
+            )
+            vrEventReceiver.setActiveScenario(session.id, scenario.id, scenarioCode)
+            val scenarioIdentifier = "${session.sessionCode}-${scenarioCode.officialCode}"
+            _vrTriggeredRecording.value = false
+            sensorRecordingRepository.startRecording(scenario.id, scenarioIdentifier)
+        }
+    }
+
+    /** Manual test stop: mirrors a VR `scenario_stop`. TODO(remove once VR drives recording). */
+    fun stopManualRecording() = handleVrScenarioStop()
+
     /** VR `scenario_stop`: stop sensor capture, finalize the scenario row, clear the active mirror. */
     private fun handleVrScenarioStop() {
         viewModelScope.launch {
