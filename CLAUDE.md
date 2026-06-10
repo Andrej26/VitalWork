@@ -117,17 +117,28 @@ Per-sensor references live in [doc/](doc/): [sensor_esense_pulse.md](doc/sensor_
 - Android 11 and below: `BLUETOOTH`, `BLUETOOTH_ADMIN`, `ACCESS_FINE_LOCATION` permissions
 - **Location Services must be enabled** on the device for BLE scanning to work
 
-**Galaxy Watch 8 (Phase 1 — live display only):** the Watch 8 has **no BLE Heart Rate Profile**;
-its sensors (especially EDA) are reachable only through Samsung's Health Sensor SDK running **on the
-watch**. The `:wear` companion reads them and streams JSON readings to the tablet via `MessageClient`
-over the Wearable Data Layer; the tablet receives them in `WatchListenerService` → `WatchSensorReceiver`
-(Hilt singleton) and shows them under **Sensors → Galaxy Watch**. **No DB/recording/export wiring
-yet.** Continuous screen-off delivery requires a foreground `health` service, `BODY_SENSORS_BACKGROUND`,
-and a 1 Hz `HealthTracker.flush()` loop. **The link must run over direct Bluetooth** — if the phone's
-Bluetooth is off the Data Layer silently falls back to the Google cloud relay, which can't deliver to
-a dozing phone (presents as "connection drops whenever the phone sleeps"); the Galaxy Watch screen
-shows a Bluetooth-off warning to prevent this. See [doc/sensor_galaxy_watch.md](doc/sensor_galaxy_watch.md)
-for the full rationale (incl. what does *not* work).
+**Galaxy Watch 8:** the Watch 8 has **no BLE Heart Rate Profile**; its sensors (especially EDA) are
+reachable only through Samsung's Health Sensor SDK running **on the watch**. The `:wear` companion
+reads them and streams JSON readings to the tablet via `MessageClient` over the Wearable Data Layer;
+the tablet receives them in `WatchListenerService` → `WatchSensorReceiver` (Hilt singleton) and shows
+them under **Sensors → Galaxy Watch**. Continuous screen-off delivery requires a foreground `health`
+service, `BODY_SENSORS_BACKGROUND`, and a 1 Hz `HealthTracker.flush()` loop. **The link must run over
+direct Bluetooth** — if the phone's Bluetooth is off the Data Layer silently falls back to the Google
+cloud relay, which can't deliver to a dozing phone (presents as "connection drops whenever the phone
+sleeps"); the Galaxy Watch screen shows a Bluetooth-off warning to prevent this.
+
+**Store-and-forward + remote flush (implemented 2026-06):** the watch **persists** every HR/IBI/EDA
+reading to a local append-only file (`WatchSampleStore`) as it samples, so a screen-off/Doze session
+loses nothing. At session end the phone sends a remote `FLUSH` command (`WatchCommandSender` →
+`WatchCommandListenerService`); the watch ships its stored rows back as **`DataClient` DataItems**
+(`WatchFlushWriter`), which the phone ingests (`WatchListenerService.onDataChanged`), acks (deletes the
+item + `FLUSH_ACK:<ts>`), and the watch then truncates its store. EDA + HR + IBI are recorded to the DB
+and appear in the export. The watch also beats a low-rate `HEARTBEAT` so the phone shows a calm "Watch
+dozing — buffering" state (`WatchSensorReceiver.linkStatus = LIVE/DOZING/DISCONNECTED`) instead of a
+false "Disconnected" during expected Doze gaps. Auto-wake is **best-effort** (a deeply-dozing watch may
+miss the command) with the manual tap as fallback — but data is never lost (the store is durable until
+acked). See [doc/sensor_galaxy_watch.md](doc/sensor_galaxy_watch.md) for the full rationale (incl. why
+FCM/Wi-Fi were rejected, and what does *not* work).
 
 ## Package Structure
 
@@ -147,7 +158,7 @@ com.biometrix.operator/
 │   │   ├── SessionDao.kt
 │   │   ├── ScenarioEntity.kt               # VR scenario run + ScenarioCode + ScenarioCategory enums
 │   │   ├── ScenarioDao.kt
-│   │   ├── SensorSampleEntity.kt           # Sensor samples + SensorType enum (HR/Resp/RR/GSR)
+│   │   ├── SensorSampleEntity.kt           # Sensor samples + SensorType enum (HR/Resp/eSenseRR/EDA/WatchIBI)
 │   │   └── SensorSampleDao.kt
 │   ├── export/                             # Session export (Section 7 shape; JSON + CSV)
 │   │   ├── SessionExportService.kt
@@ -184,8 +195,9 @@ com.biometrix.operator/
 │   │   │       ├── BleDevice.kt
 │   │   │       └── BleGattService.kt
 │   │   └── watch/                          # Galaxy Watch (Data Layer receiver side)
-│   │       ├── WatchListenerService.kt     # WearableListenerService; parses incoming messages
-│   │       ├── WatchSensorReceiver.kt      # Hilt singleton sink + inferred connection state
+│   │       ├── WatchListenerService.kt     # WearableListenerService; parses live messages + ingests flush DataItems (onDataChanged)
+│   │       ├── WatchSensorReceiver.kt      # Hilt singleton sink; linkStatus (LIVE/DOZING/DISCONNECTED) + flushed-reading ingest
+│   │       ├── WatchCommandSender.kt       # phone→watch commands (START/FLUSH/STOP/FLUSH_ACK); interface + impl
 │   │       └── model/
 │   │           └── WatchReading.kt
 │   └── vr/                                 # VR link (tablet = HTTP server; Quest = client)
@@ -272,9 +284,12 @@ com.biometrix.operator/
 ```
 com.biometrix.operator.wear/
 ├── MainActivity.kt           # Minimal Start/Stop watch UI + runtime permission requests
-├── WatchSensorService.kt     # Foreground health service; owns the Samsung SDK, flush() loop, sends STOP
-├── WatchDataSender.kt        # MessageClient sender; resolves/caches the biometrix_phone node
-└── WatchMessage.kt           # Builds JSON lines (reading, capabilities, batch, stop)
+├── WatchSensorService.kt          # Foreground health service; owns the Samsung SDK, flush() loop, heartbeat; emit() persists to store + streams
+├── WatchSampleStore.kt            # Append-only JSON-lines durable store; truncate-after-ack (store-and-forward)
+├── WatchCommandListenerService.kt # WearableListenerService; handles START/FLUSH/STOP/FLUSH_ACK from the phone
+├── WatchFlushWriter.kt            # Pushes stored rows to the phone as chunked DataClient DataItems
+├── WatchDataSender.kt             # MessageClient sender; resolves/caches the biometrix_phone node
+└── WatchMessage.kt                # Builds JSON lines (reading, capabilities, batch, stop, heartbeat)
 ```
 
 ## Navigation Routes
@@ -294,7 +309,9 @@ com.biometrix.operator.wear/
 
 ## Database Schema
 
-Room database (version 2) with 4 entities. Cascade-delete on all foreign keys.
+Room database (version 2) with 4 entities. Cascade-delete on all foreign keys. Uses
+`fallbackToDestructiveMigration` (enums are stored as strings), so adding a `SensorType` value is a
+version bump with no hand-written `Migration` (v2 added `WATCH_IBI`).
 
 | Entity | Table | Purpose |
 |--------|-------|---------|
@@ -310,7 +327,7 @@ Room database (version 2) with 4 entities. Cascade-delete on all foreign keys.
 | `SessionStatus` | `ACTIVE`, `COMPLETED`, `UPLOADED` |
 | `ScenarioCategory` | `A`, `B`, `C` |
 | `ScenarioCode` | `FALLING_PALLET`, `BLIND_CORNER`, `EQUIPMENT_COLLISION`, `FLOOR_OBSTACLE`, `MACHINE_JAM`, `CONVEYOR_ACCELERATION`, `MEDIUM_LEAKAGE`, `ELECTRICAL_SHORT`, `SLING_FAILURE` |
-| `SensorType` | `HEART_RATE`, `RESPIRATION`, `ESENSE_RR_INTERVAL`, `GSR` |
+| `SensorType` | `HEART_RATE`, `RESPIRATION`, `ESENSE_RR_INTERVAL`, `EDA`, `WATCH_IBI` |
 
 `ScenarioCode` carries the official short code (e.g. `A1`) and display label as enum properties — they're stored descriptively in the DB so renumbering doesn't break old rows.
 
@@ -384,5 +401,11 @@ Unit tests live under `app/src/test/` and run on the host JVM (no device/emulato
 | `presentation/screens/participants/ParticipantEntryViewModelTest.kt` | `ParticipantEntryViewModel.kt` | Form validation, duplicate-code rejection, success emission, active-session redirect |
 | `presentation/screens/sessions/SessionControlViewModelTest.kt` | `SessionControlViewModel.kt` | Session loading, scenario-driven recording, end-session flow |
 | `presentation/screens/sessions/SessionDetailViewModelTest.kt` | `SessionDetailViewModel.kt` | Session/scenario loading, export workflow with `markUploaded` transition |
+| `data/recording/WatchSessionDrainerTest.kt` | `WatchSessionDrainer.kt` | Per-(scenario,type) timestamp-window attribution + de-dup for EDA/HR/IBI; gap/boundary/back-to-back rules |
+| `data/sensor/watch/WatchLinkStatusTest.kt` | `WatchSensorReceiver.kt` | LIVE/DOZING/DISCONNECTED transitions (reading→LIVE, heartbeat→DOZING, STOP→DISCONNECTED) |
+| `data/sensor/watch/WatchSensorReceiverBatteryAlertTest.kt` | `WatchSensorReceiver.kt` | Low-battery alert tier snapshot (`currentBatteryAlert`) |
+
+**`:wear` module tests** (`wear/src/test/`): `WatchSampleStoreTest.kt` — append, truncate-after-ack
+(inclusive boundary, keep-unparseable, keep-un-acked-tail), clear, `shouldPersist` filtering.
 
 Tests mirror the production package structure (e.g., `GapDetectorTest.kt` is in the same package as `GapDetector.kt`). This enables Android Studio's **Ctrl+Shift+T** navigation between production code and its test.
