@@ -138,22 +138,34 @@ fun WatchSensorScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(type, style = MaterialTheme.typography.titleMedium)
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text(
-                                    text = r.value.toString(),
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontFamily = FontFamily.Monospace
-                                )
-                                r.accuracy?.let {
-                                    Text("acc=$it", style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                            }
+                            Text(watchSignalLabel(type), style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                text = watchValueText(type, r.value),
+                                style = MaterialTheme.typography.titleLarge,
+                                fontFamily = FontFamily.Monospace
+                            )
                         }
                     }
                 }
             }
         }
     }
+}
+
+/** Friendly display name for a watch signal type (the wire types are terse). */
+private fun watchSignalLabel(type: String): String = when (type) {
+    "HR" -> "Heart rate"
+    "IBI" -> "Inter-beat interval"
+    "EDA" -> "Skin conductance (EDA)"
+    "BATTERY" -> "Watch battery"
+    else -> type
+}
+
+/** Value text with the signal's unit so a bare number isn't ambiguous. */
+private fun watchValueText(type: String, value: Float): String = when (type) {
+    "HR" -> "${value.toInt()} bpm"
+    "IBI" -> "${value.toInt()} ms"
+    "EDA" -> "%.2f µS".format(value)
+    "BATTERY" -> "${value.toInt()} %"
+    else -> value.toString()
 }

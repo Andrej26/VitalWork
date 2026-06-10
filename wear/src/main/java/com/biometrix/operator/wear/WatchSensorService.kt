@@ -32,11 +32,12 @@ import kotlinx.coroutines.launch
 
 /**
  * Foreground service (type `health`) that owns the Samsung Health Sensor SDK on the watch,
- * registers trackers for the evaluation set, and forwards every reading to the paired tablet
- * as a JSON line via [WatchDataSender].
+ * registers the continuous trackers, and forwards every reading to the paired tablet as a JSON
+ * line via [WatchDataSender].
  *
- * Baseline trackers (always on): HEART_RATE_CONTINUOUS (HR + IBI), EDA_CONTINUOUS, + battery.
- * Optional/high-volume trackers (off by default) can be enabled later for evaluation.
+ * Trackers: HEART_RATE_CONTINUOUS (HR + IBI), EDA_CONTINUOUS, + battery. All continuous, streamed
+ * live at ~1 Hz. (On-demand sensors — SpO2/ECG/skin-temp — were evaluated and removed: they can't
+ * run alongside continuous without pausing it, which broke real-time tracking. Kept the set minimal.)
  */
 class WatchSensorService : Service() {
 
@@ -46,9 +47,6 @@ class WatchSensorService : Service() {
         private const val NOTIF_ID = 1
         const val ACTION_START = "com.biometrix.operator.wear.START"
         const val ACTION_STOP = "com.biometrix.operator.wear.STOP"
-
-        /** Min interval between messages of the same type (guards high-rate trackers like PPG). */
-        private const val MIN_SEND_INTERVAL_MS = 40L
 
         /**
          * How often the flush loop forces the SDK's buffered batch out *while the AP is awake*.
@@ -78,7 +76,6 @@ class WatchSensorService : Service() {
     private var flushJob: Job? = null
     private var capabilitiesCsv: String? = null
     private var capabilitiesResendJob: Job? = null
-    private val lastSentAtMs = mutableMapOf<String, Long>()
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -213,11 +210,15 @@ class WatchSensorService : Service() {
         }
     }
 
-    /** HR + IBI live in one HeartRateSet; IBI list is packed (status-gated). */
+    /** HR + IBI live in one HeartRateSet; both are status-gated (HR and IBI use DIFFERENT conventions). */
     private fun handleHeartRate(dp: DataPoint, out: MutableList<String>) {
         val hr = dp.getValue(ValueKey.HeartRateSet.HEART_RATE)
         val hrStatus = dp.getValue(ValueKey.HeartRateSet.HEART_RATE_STATUS)
-        emit("HR", hr.toFloat(), hrStatus, out)
+        // Samsung HR convention: status == 1 means a successful reading; anything else (warm-up,
+        // poor contact during doze, -3 not-worn) reports HR=0. Forwarding those 0s made the phone
+        // flash 0.0 at startup (~15 s warm-up) and flap 0→value→0 in sleep. Skip invalid samples so
+        // the phone keeps the last good value instead.
+        if (hrStatus == 1 && hr > 0) emit("HR", hr.toFloat(), hrStatus, out)
 
         val ibiList = dp.getValue(ValueKey.HeartRateSet.IBI_LIST)
         val ibiStatusList = dp.getValue(ValueKey.HeartRateSet.IBI_STATUS_LIST)
@@ -231,12 +232,6 @@ class WatchSensorService : Service() {
     /** Update the on-watch UI value and append the reading line to the current batch. */
     private fun emit(type: String, value: Float, accuracy: Int, out: MutableList<String>) {
         _lastValues.value = _lastValues.value.toMutableMap().apply { put(type, value) }
-        // Rate guard for high-rate trackers only (e.g. PPG @25 Hz if toggled on). HR/EDA are ~1 Hz
-        // and pass through untouched; this just prevents a message flood from optional trackers.
-        val now = System.currentTimeMillis()
-        val last = lastSentAtMs[type] ?: 0L
-        if (now - last < MIN_SEND_INTERVAL_MS) return
-        lastSentAtMs[type] = now
         out.add(WatchMessage.reading(type, value, accuracy))
     }
 
@@ -298,7 +293,6 @@ class WatchSensorService : Service() {
         flushJob?.cancel(); flushJob = null
         capabilitiesResendJob?.cancel(); capabilitiesResendJob = null
         capabilitiesCsv = null
-        lastSentAtMs.clear()
         activeTrackers.forEach { runCatching { it.unsetEventListener() } }
         activeTrackers.clear()
         runCatching { trackingService?.disconnectService() }

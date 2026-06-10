@@ -41,7 +41,7 @@ class MainActivity : ComponentActivity() {
             // Wear OS 6 / API 36 replaced BODY_SENSORS with health.* runtime permissions.
             if (Build.VERSION.SDK_INT >= 36) {
                 add("android.permission.health.READ_HEART_RATE")
-                add(PERMISSION_ADDITIONAL_HEALTH_DATA) // EDA / ECG / PPG / BIA (Samsung)
+                add(PERMISSION_ADDITIONAL_HEALTH_DATA) // EDA (Samsung)
             } else {
                 add(Manifest.permission.BODY_SENSORS)
             }

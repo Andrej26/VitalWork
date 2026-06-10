@@ -15,7 +15,7 @@
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
     <!-- Heart rate (HEART_RATE_CONTINUOUS) on API 36+ -->
     <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
-    <!-- EDA / ECG / PPG / BIA raw sensors (Samsung-specific) -->
+    <!-- EDA raw sensor (Samsung-specific) -->
     <uses-permission android:name="com.samsung.android.hardware.sensormanager.permission.READ_ADDITIONAL_HEALTH_DATA" />
 
     <!-- Foreground service (type health) required on API 34+ to keep tracking with screen off -->
