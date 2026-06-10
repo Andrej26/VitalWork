@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import androidx.lifecycle.ViewModel
 import com.biometrix.operator.data.model.ConnectionState
+import com.biometrix.operator.data.sensor.watch.WatchLinkStatus
 import com.biometrix.operator.data.sensor.watch.WatchSensorReceiver
 import com.biometrix.operator.data.sensor.watch.model.WatchReading
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -32,6 +33,8 @@ class WatchSensorViewModel @Inject constructor(
 ) : ViewModel() {
 
     val connectionState: StateFlow<ConnectionState> = receiver.connectionState
+    /** Finer link state so the UI can show "dozing — buffering" instead of a scary "Disconnected". */
+    val linkStatus: StateFlow<WatchLinkStatus> = receiver.linkStatus
     val latestByType: StateFlow<Map<String, WatchReading>> = receiver.latestByType
     val availableTrackers: StateFlow<List<String>> = receiver.availableTrackers
     val batteryLevel: StateFlow<Int?> = receiver.batteryLevel

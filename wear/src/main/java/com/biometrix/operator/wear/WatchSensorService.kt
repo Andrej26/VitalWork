@@ -58,6 +58,13 @@ class WatchSensorService : Service() {
          */
         private const val FLUSH_INTERVAL_MS = 1_000L
 
+        /**
+         * Heartbeat cadence. ~30 s is frequent enough to land inside a Doze maintenance window yet
+         * cheap on the radio/battery. The phone treats a heartbeat-within-window (but no readings) as
+         * "dozing/buffering" rather than DISCONNECTED.
+         */
+        private const val HEARTBEAT_INTERVAL_MS = 30_000L
+
         /** Observable state for the watch UI. */
         val isTracking = MutableStateFlow(false)
         val connectionText = MutableStateFlow("Idle")
@@ -70,10 +77,12 @@ class WatchSensorService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private lateinit var sender: WatchDataSender
+    private lateinit var store: WatchSampleStore
     private var trackingService: HealthTrackingService? = null
     private val activeTrackers = mutableListOf<HealthTracker>()
     private var batteryJob: Job? = null
     private var flushJob: Job? = null
+    private var heartbeatJob: Job? = null
     private var capabilitiesCsv: String? = null
     private var capabilitiesResendJob: Job? = null
 
@@ -82,6 +91,7 @@ class WatchSensorService : Service() {
     override fun onCreate() {
         super.onCreate()
         sender = WatchDataSender(this)
+        store = WatchSampleStore(this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -116,6 +126,9 @@ class WatchSensorService : Service() {
         // Idempotency guard on the REAL resource (instance), not the static UI flag — prevents
         // rebuilding the SDK connection on service re-entry/redelivery (the connect/unbind churn).
         if (trackingService != null) return
+        // Fresh tracking session: drop any rows left over from a prior session that was already
+        // flushed & acked (or abandoned). A new session starts with an empty durable store.
+        store.clear()
         isTracking.value = true
         connectionText.value = "Connecting…"
 
@@ -160,6 +173,23 @@ class WatchSensorService : Service() {
         }
 
         startBatteryReporting()
+        startHeartbeat()
+    }
+
+    /**
+     * Emit a low-rate "alive, just dozing" beacon so the phone can show "buffering" instead of
+     * "Disconnected" during expected screen-off/Doze gaps. Like the flush loop, the `delay()` freezes
+     * while the AP is suspended — but it fires at each Doze maintenance wake, which is exactly when the
+     * phone needs to hear "still here" to avoid flapping to DISCONNECTED.
+     */
+    private fun startHeartbeat() {
+        heartbeatJob?.cancel()
+        heartbeatJob = scope.launch {
+            while (isActive) {
+                delay(HEARTBEAT_INTERVAL_MS)
+                runCatching { sender.sendLine(WatchMessage.heartbeat()) }
+            }
+        }
     }
 
     private fun registerBaselineTrackers(
@@ -229,10 +259,17 @@ class WatchSensorService : Service() {
         }
     }
 
-    /** Update the on-watch UI value and append the reading line to the current batch. */
+    /**
+     * Update the on-watch UI value, persist the reading to the durable store, and append it to the
+     * current outgoing batch. The JSON line is built ONCE so the stored copy and the streamed copy
+     * carry the identical timestamp — the phone's timestamp-window attribution relies on that match.
+     */
     private fun emit(type: String, value: Float, accuracy: Int, out: MutableList<String>) {
         _lastValues.value = _lastValues.value.toMutableMap().apply { put(type, value) }
-        out.add(WatchMessage.reading(type, value, accuracy))
+        val line = WatchMessage.reading(type, value, accuracy)
+        // Durable record first (survives Doze / dropped messages); then stream live for the display.
+        if (store.shouldPersist(type)) store.append(line)
+        out.add(line)
     }
 
     private fun startCapabilitiesResend() {
@@ -291,6 +328,7 @@ class WatchSensorService : Service() {
         if (isTracking.value) runCatching { sender.sendLine(WatchMessage.stop()) }
         batteryJob?.cancel(); batteryJob = null
         flushJob?.cancel(); flushJob = null
+        heartbeatJob?.cancel(); heartbeatJob = null
         capabilitiesResendJob?.cancel(); capabilitiesResendJob = null
         capabilitiesCsv = null
         activeTrackers.forEach { runCatching { it.unsetEventListener() } }

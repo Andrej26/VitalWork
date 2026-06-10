@@ -51,21 +51,23 @@ class ScenarioRecordingRepositoryImpl(
     private var startTimeMs: Long = 0L
     private var currentScenarioId: Long = 0L
 
-    // --- Galaxy Watch EDA (session-scoped, independent of per-scenario recording) ---
+    // --- Galaxy Watch (EDA + HR + IBI; session-scoped, independent of per-scenario recording) ---
 
-    /** Continuous session-long EDA collector job; null when no watch session is active. */
+    /** Continuous session-long watch collector job; null when no watch session is active. */
     private var watchEdaJob: Job? = null
 
     /**
-     * Every EDA reading delivered during the session, corrected onto the phone clock, as
-     * (correctedTimestampMs, value). Retained so the End-Session drain can back-fill late/out-of-
-     * window deliveries. Cleared when the session is finalized. Concurrent: written from the watch
-     * collector coroutine, read on the End-Session path.
+     * Every watch reading delivered during the session (EDA + HR + IBI), corrected onto the phone
+     * clock and tagged with its [SensorType]. Retained so the End-Session drain can back-fill late/
+     * out-of-window deliveries (incl. the historical store flush). Cleared when the session is
+     * finalized. Concurrent: written from the watch collector coroutine and the flush-ingest path,
+     * read on the End-Session path.
      */
-    private val watchEdaSessionBuffer = java.util.Collections.synchronizedList(mutableListOf<Pair<Long, Float>>())
+    private val watchSessionBuffer =
+        java.util.Collections.synchronizedList(mutableListOf<WatchSessionDrainer.Reading>())
 
-    /** Per-scenario max corrected EDA timestamp written live (de-dup boundary for the drain). */
-    private val watchEdaHighWaterMarks = ConcurrentHashMap<Long, Long>()
+    /** Per-(scenario, type) max corrected timestamp written live (de-dup boundary for the drain). */
+    private val watchHighWaterMarks = ConcurrentHashMap<WatchSessionDrainer.HwmKey, Long>()
 
     /**
      * Snapshot of the actively-recording scenario for the session-long watch collector to read,
@@ -223,18 +225,27 @@ class ScenarioRecordingRepositoryImpl(
         writeChannel = Channel(Channel.BUFFERED)
     }
 
-    // --- Galaxy Watch EDA session capture ---
+    // --- Galaxy Watch session capture (EDA + HR + IBI) ---
+
+    /** Map a watch reading-type string to its DB [SensorType]; null = not a recordable sensor. */
+    private fun watchSensorType(type: String): SensorType? = when (type) {
+        "EDA" -> SensorType.EDA
+        "HR" -> SensorType.HEART_RATE
+        "IBI" -> SensorType.WATCH_IBI
+        else -> null
+    }
 
     override fun startWatchEdaSession() {
         if (watchEdaJob?.isActive == true) return
-        watchEdaSessionBuffer.clear()
-        watchEdaHighWaterMarks.clear()
+        watchSessionBuffer.clear()
+        watchHighWaterMarks.clear()
         watchEdaJob = scope.launch {
-            watchReceiver.edaSampleFlow.collect { reading ->
+            watchReceiver.watchSampleFlow.collect { reading ->
+                val sensorType = watchSensorType(reading.type) ?: return@collect
                 // Correct the watch-stamped time onto the phone clock once, here.
                 val tc = watchReceiver.correctedTimestamp(reading.timestampMs)
-                // Always retain for the End-Session drain (covers late/out-of-window deliveries).
-                watchEdaSessionBuffer.add(tc to reading.value)
+                // Always retain for the End-Session drain (covers late/out-of-window + flushed deliveries).
+                watchSessionBuffer.add(WatchSessionDrainer.Reading(tc, sensorType, reading.value))
 
                 // If a scenario is actively recording, write this sample live too.
                 val target = activeWatchTarget ?: return@collect
@@ -247,15 +258,18 @@ class ScenarioRecordingRepositoryImpl(
                             scenarioId = scenarioId,
                             timestampMs = tc,
                             elapsedMs = tc - scenarioStart,
-                            sensorType = SensorType.EDA,
+                            sensorType = sensorType,
                             value = reading.value
                         )
                     )
                 )
-                // Advance the per-scenario high-water mark (de-dup boundary for the drain).
-                watchEdaHighWaterMarks.merge(scenarioId, tc, ::maxOf)
-                _recordingMetadata.value = _recordingMetadata.value?.let {
-                    if (it.scenarioId == scenarioId) it.copy(edaSampleCount = it.edaSampleCount + 1) else it
+                // Advance the per-(scenario, type) high-water mark (de-dup boundary for the drain).
+                watchHighWaterMarks.merge(WatchSessionDrainer.HwmKey(scenarioId, sensorType), tc, ::maxOf)
+                // EDA sample count drives the existing live metadata badge; keep that behavior.
+                if (sensorType == SensorType.EDA) {
+                    _recordingMetadata.value = _recordingMetadata.value?.let {
+                        if (it.scenarioId == scenarioId) it.copy(edaSampleCount = it.edaSampleCount + 1) else it
+                    }
                 }
             }
         }
@@ -263,14 +277,14 @@ class ScenarioRecordingRepositoryImpl(
 
     override suspend fun drainAndFinalizeWatchEda(scenarios: List<ScenarioEntity>) {
         try {
-            val readings = synchronized(watchEdaSessionBuffer) { watchEdaSessionBuffer.toList() }
+            val readings = synchronized(watchSessionBuffer) { watchSessionBuffer.toList() }
             val windows = scenarios.map {
                 WatchSessionDrainer.ScenarioWindow(it.id, it.startedAt, it.endedAt)
             }
             val rows = WatchSessionDrainer.drain(
                 readings = readings,
                 windows = windows,
-                highWaterMarks = watchEdaHighWaterMarks.toMap()
+                highWaterMarks = watchHighWaterMarks.toMap()
             )
             if (rows.isNotEmpty()) {
                 scenarioRepository.addSamples(rows)
@@ -278,8 +292,8 @@ class ScenarioRecordingRepositoryImpl(
         } finally {
             // Stop the session collector and clear all session-scoped watch state.
             watchEdaJob?.cancel(); watchEdaJob = null
-            watchEdaSessionBuffer.clear()
-            watchEdaHighWaterMarks.clear()
+            watchSessionBuffer.clear()
+            watchHighWaterMarks.clear()
             activeWatchTarget = null
         }
     }

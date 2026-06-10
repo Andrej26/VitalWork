@@ -142,6 +142,7 @@ class SessionExportService @Inject constructor(
                     SensorType.ESENSE_RR_INTERVAL -> "rr_interval"
                     SensorType.RESPIRATION -> "respiration"
                     SensorType.EDA -> "eda"
+                    SensorType.WATCH_IBI -> "watch_ibi"
                 }
                 appendLine("${sample.timestampMs},${sample.elapsedMs},$sensorType,${sample.value}")
             }
