@@ -49,8 +49,31 @@ class VrHttpServer @Inject constructor(
 
     private var engine: EmbeddedServer<CIOApplicationEngine, CIOApplicationEngine.Configuration>? = null
 
+    /**
+     * How many holders currently need the server running. Both [com.biometrix.operator.service.SessionRecordingService]
+     * and the VR Control screen independently [acquire]/[release]; the server only actually starts on
+     * the first acquire and stops on the last release — so the Quest can POST events while the
+     * operator debugs from VR Control with no session, and a session's server isn't torn down when the
+     * operator leaves that screen. Guarded by `this`.
+     */
+    private var holderCount = 0
+
+    /** Register a holder; starts the server on the first one. Balanced by [release]. */
     @Synchronized
-    fun start() {
+    fun acquire() {
+        holderCount++
+        if (holderCount == 1) start()
+    }
+
+    /** Drop a holder; stops the server on the last one. Extra releases are a no-op (never < 0). */
+    @Synchronized
+    fun release() {
+        if (holderCount == 0) return
+        holderCount--
+        if (holderCount == 0) stop()
+    }
+
+    private fun start() {
         if (engine != null) return
         engine = embeddedServer(CIO, port = PORT, host = "0.0.0.0") {
             install(ContentNegotiation) { json(json) }
@@ -64,8 +87,7 @@ class VrHttpServer @Inject constructor(
         }.also { it.start(wait = false) }
     }
 
-    @Synchronized
-    fun stop() {
+    private fun stop() {
         engine?.stop(gracePeriodMillis = 0, timeoutMillis = 500)
         engine = null
     }

@@ -153,8 +153,17 @@ class VrEventReceiver(
                 _events.emit(event)
                 VrEventResult.Accepted()
             }
-            is VrEvent.StimulusEvent -> writeTimestamp(event.code, event.receivedAtMs, isReaction = false)
-            is VrEvent.Reaction -> writeTimestamp(event.code, event.receivedAtMs, isReaction = true)
+            is VrEvent.StimulusEvent -> {
+                // Surface to the log for live diagnostics (e.g. the VR Control screen) regardless of
+                // whether it's accepted/recorded. tryEmit (non-suspending) so the ack-after-write
+                // measurement path is never slowed; a dropped log line under burst is acceptable.
+                _events.tryEmit(event)
+                writeTimestamp(event.code, event.receivedAtMs, isReaction = false)
+            }
+            is VrEvent.Reaction -> {
+                _events.tryEmit(event)
+                writeTimestamp(event.code, event.receivedAtMs, isReaction = true)
+            }
         }
     }
 

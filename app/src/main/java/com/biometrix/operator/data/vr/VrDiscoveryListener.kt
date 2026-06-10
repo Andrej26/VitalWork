@@ -48,12 +48,17 @@ class VrDiscoveryListener @Inject constructor(
 ) {
     private companion object {
         const val DISCOVERY_PORT = 8889
+        // The Quest broadcasts from 8889 but listens for our pairing reply on a *separate* port so
+        // it doesn't capture its own broadcasts. Reply must go to this fixed port, not the source
+        // port of the received broadcast packet.
+        const val REPLY_PORT = 8890
         const val SERVICE_NAME = "biometrix-vr"
         const val REPLY_SERVICE_NAME = "biometrix-vr-tablet"
         const val HTTP_PORT = 8080
         const val PROTOCOL_VERSION = 1
         const val MULTICAST_LOCK_TAG = "BioMetrix:VrDiscovery"
         const val BUFFER_SIZE = 1024
+        const val TAG = "VrDiscovery"
     }
 
     /** What the Quest broadcasts to find tablets. [label] is an optional human-readable name. */
@@ -79,32 +84,87 @@ class VrDiscoveryListener @Inject constructor(
     private var loopJob: Job? = null
     private var multicastLock: WifiManager.MulticastLock? = null
 
+    /**
+     * The bound discovery socket, held so the teardown can close it synchronously and free port 8889
+     * immediately — cancelling [loopJob] alone closes the socket only when the coroutine's `use{}`
+     * unwinds, which races a subsequent start and is what caused the EADDRINUSE crash.
+     */
+    @Volatile private var socket: DatagramSocket? = null
+
+    /**
+     * How many holders currently need the listener running. Both [SessionRecordingService] and the
+     * VR Control screen independently [acquire]/[release]; the socket only actually starts on the
+     * first acquire and stops on the last release. This lets the screen run discovery for testing
+     * without a session, while a session holding its own reference can't have its listener torn down
+     * when the operator leaves the screen. Guarded by `this` (all mutators are `@Synchronized`).
+     */
+    private var holderCount = 0
+
     /** Address the bonded/candidate Quest broadcast from — where a pairing reply is sent. */
     @Volatile private var lastSender: InetSocketAddress? = null
 
+    /** Register a holder; starts the listener on the first one. Balanced by [release]. */
     @Synchronized
-    fun start() {
+    fun acquire() {
+        holderCount++
+        if (holderCount == 1) start()
+    }
+
+    /** Drop a holder; stops the listener on the last one. Extra releases are a no-op (never < 0). */
+    @Synchronized
+    fun release() {
+        if (holderCount == 0) return
+        holderCount--
+        if (holderCount == 0) stop()
+    }
+
+    private fun start() {
         if (loopJob?.isActive == true) return
         acquireMulticastLock()
         loopJob = scope.launch {
-            DatagramSocket(DISCOVERY_PORT).use { socket ->
-                socket.broadcast = true
+            // Binding 8889 can fail (EADDRINUSE) if a previous listener's socket is still closing
+            // after a stop()/start() churn or a service restart — the cancellation that closes the
+            // old socket is cooperative and races the rebind. SO_REUSEADDR lets the new socket bind
+            // through that window; if the bind still fails for any reason, degrade gracefully instead
+            // of crashing the app (an unbound discovery socket just means no pairing this attempt).
+            val boundSocket = runCatching {
+                DatagramSocket(null).apply {
+                    reuseAddress = true
+                    bind(InetSocketAddress(DISCOVERY_PORT))
+                }
+            }.onFailure { android.util.Log.e(TAG, "bind $DISCOVERY_PORT failed", it) }
+                .getOrNull() ?: return@launch
+            socket = boundSocket
+            android.util.Log.i(TAG, "listening on $DISCOVERY_PORT (multicastLock=${multicastLock?.isHeld})")
+
+            boundSocket.use {
+                boundSocket.broadcast = true
                 val buffer = ByteArray(BUFFER_SIZE)
                 while (isActive) {
                     val packet = DatagramPacket(buffer, buffer.size)
                     runCatching {
-                        socket.receive(packet)
+                        boundSocket.receive(packet)
                         val text = String(packet.data, packet.offset, packet.length)
+                        android.util.Log.d(TAG, "rx ${packet.length}B from ${packet.address.hostAddress}:${packet.port}: $text")
                         val claim = json.decodeFromString<ClaimPacket>(text)
                         val ip = packet.address.hostAddress
-                        if (claim.service == SERVICE_NAME && claim.questId.isNotBlank() && ip != null) {
-                            lastSender = InetSocketAddress(packet.address, packet.port)
-                            pairingManager.onClaim(claim.questId, ip, claim.label.ifBlank { null })
+                        android.util.Log.d(TAG, "parsed service='${claim.service}' questId='${claim.questId}' (expect service='$SERVICE_NAME')")
+                        if (claim.service == SERVICE_NAME && ip != null) {
+                            // The Quest doesn't generate a QuestID yet (coming in a later build), so
+                            // a blank id is expected for now — fall back to the source IP as the
+                            // pairing identity. Once real QuestIDs arrive this transparently switches
+                            // back to using them.
+                            val questId = claim.questId.ifBlank { ip }
+                            // Reply goes to the Quest's address but on its dedicated reply port, not
+                            // the source port of this broadcast.
+                            val replyTarget = InetSocketAddress(packet.address, REPLY_PORT)
+                            lastSender = replyTarget
+                            pairingManager.onClaim(questId, ip, claim.label.ifBlank { null })
                             // Self-heal: if we're already bonded to this Quest, re-send the reply
                             // (covers a lost first reply — the Quest keeps broadcasting until it
                             // receives one).
-                            if (pairingManager.isBondedTo(claim.questId)) {
-                                sendReply(InetSocketAddress(packet.address, packet.port))
+                            if (pairingManager.isBondedTo(questId)) {
+                                sendReply(replyTarget)
                             }
                         }
                     }
@@ -123,19 +183,30 @@ class VrDiscoveryListener @Inject constructor(
     }
 
     private fun sendReply(target: InetSocketAddress) {
-        val tabletIp = networkChecker.localIpv4() ?: return
+        val tabletIp = networkChecker.localIpv4()
+        if (tabletIp == null) {
+            android.util.Log.w(TAG, "sendReply skipped: localIpv4()=null")
+            return
+        }
+        val payload = json.encodeToString(ReplyPacket(tabletIp = tabletIp)).toByteArray()
         runCatching {
-            val payload = json.encodeToString(ReplyPacket(tabletIp = tabletIp)).toByteArray()
             DatagramSocket().use { sender ->
                 sender.send(DatagramPacket(payload, payload.size, target.address, target.port))
             }
+        }.onSuccess {
+            android.util.Log.d(TAG, "reply sent to ${target.address.hostAddress}:${target.port} -> $tabletIp:$HTTP_PORT")
+        }.onFailure {
+            android.util.Log.e(TAG, "reply send failed to ${target.address.hostAddress}:${target.port}", it)
         }
     }
 
-    @Synchronized
-    fun stop() {
+    private fun stop() {
         loopJob?.cancel()
         loopJob = null
+        // Close the socket synchronously so port 8889 is released immediately; otherwise it stays
+        // bound until the cancelled coroutine's use{} unwinds, which races a subsequent start().
+        socket?.close()
+        socket = null
         lastSender = null
         releaseMulticastLock()
     }

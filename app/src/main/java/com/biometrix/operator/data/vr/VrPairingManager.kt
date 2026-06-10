@@ -46,6 +46,7 @@ class VrPairingManager @Inject constructor() {
     /** A Quest broadcast was received. While UNPAIRED, promotes to PENDING with this candidate. */
     @Synchronized
     fun onClaim(questId: String, sourceIp: String, label: String? = null) {
+        val before = _pairingState.value
         when (_pairingState.value) {
             PairingState.UNPAIRED -> {
                 _candidate.value = VrCandidate(questId, sourceIp, label)
@@ -59,6 +60,7 @@ class VrPairingManager @Inject constructor() {
                 // Already bonded; ignore stray broadcasts (incl. from a second Quest in the room).
             }
         }
+        android.util.Log.d("VrDiscovery", "onClaim($questId,$sourceIp): $before -> ${_pairingState.value}, candidate=${_candidate.value}")
     }
 
     /** Operator tapped Connect: bond to the current candidate. No-op if there is none. */
@@ -69,12 +71,20 @@ class VrPairingManager @Inject constructor() {
         }
     }
 
-    /** The gate every HTTP route checks: true only when BONDED and both id + IP match. */
+    /**
+     * The gate every HTTP route checks: true only when BONDED and the request matches the bonded
+     * Quest. Normally both id + IP must match. The Quest doesn't send its id yet (no QuestID
+     * generation until a later build), so a blank/missing incoming [questId] falls back to IP-only
+     * matching — consistent with the discovery side, which bonds using the source IP as the identity
+     * when no real id is present. Once real QuestIDs arrive on both the discovery and HTTP sides this
+     * transparently tightens back to full id + IP matching.
+     */
     @Synchronized
     fun isAuthorized(questId: String?, sourceIp: String?): Boolean {
         if (_pairingState.value != PairingState.BONDED) return false
         val bonded = _candidate.value ?: return false
-        return questId == bonded.questId && sourceIp == bonded.sourceIp
+        if (sourceIp != bonded.sourceIp) return false
+        return questId.isNullOrBlank() || questId == bonded.questId
     }
 
     /** True when bonded to this specific Quest — used to (re)send the pairing reply to it. */

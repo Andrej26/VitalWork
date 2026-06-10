@@ -50,6 +50,18 @@ class VrPairingManagerTest {
     }
 
     @Test
+    fun isAuthorized_blankIncomingQuestId_fallsBackToIpOnly() {
+        // Interim Quest build sends no QuestID yet: bond on the source IP as the identity, then
+        // accept HTTP requests from that IP even though they carry no questId header.
+        manager.onClaim(questId = "192.168.1.50", sourceIp = "192.168.1.50")
+        manager.confirm()
+
+        assertTrue(manager.isAuthorized(null, "192.168.1.50"))   // no header
+        assertTrue(manager.isAuthorized("", "192.168.1.50"))     // blank header
+        assertFalse(manager.isAuthorized(null, "192.168.1.99"))  // right protocol, wrong IP
+    }
+
+    @Test
     fun isBondedTo_trueOnlyForBondedQuest() {
         manager.onClaim("quest-A", "192.168.1.50")
         assertFalse(manager.isBondedTo("quest-A")) // pending, not bonded yet

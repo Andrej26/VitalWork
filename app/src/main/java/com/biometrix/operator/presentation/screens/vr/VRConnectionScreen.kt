@@ -24,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
@@ -52,6 +53,14 @@ fun VRConnectionScreen(
     val uiState by viewModel.uiState.collectAsState()
 
     LaunchedEffect(Unit) { viewModel.refreshAddress() }
+
+    // Run the VR link (discovery + HTTP server) for as long as this screen is shown, so the operator
+    // can pair and watch live events with no session running. Reference-counted in the data layer, so
+    // an active session keeps the link alive if the operator navigates away.
+    DisposableEffect(Unit) {
+        viewModel.acquireVrLink()
+        onDispose { viewModel.releaseVrLink() }
+    }
 
     Scaffold(
         topBar = {
@@ -115,11 +124,12 @@ fun VRConnectionScreen(
                 }
             }
 
-            // Pairing: pending claim → Connect; bonded → bond info; lost heartbeat → warning.
+            // Pairing: pending claim → Connect; bonded → connecting/bonded; lost heartbeat → warning.
             PairingCard(
                 pairingState = uiState.pairingState,
                 candidate = uiState.candidate,
                 connectionState = uiState.connectionState,
+                everConnectedSinceBond = uiState.everConnectedSinceBond,
                 onConnect = viewModel::confirmPairing
             )
 
@@ -157,11 +167,15 @@ private fun PairingCard(
     pairingState: VrPairingManager.PairingState,
     candidate: VrPairingManager.VrCandidate?,
     connectionState: ConnectionState,
+    everConnectedSinceBond: Boolean,
     onConnect: () -> Unit
 ) {
-    // While bonded, surface a lost-connection warning if the heartbeat has gone silent.
-    val bondedButLost = pairingState == VrPairingManager.PairingState.BONDED &&
-        connectionState != ConnectionState.CONNECTED
+    val bonded = pairingState == VrPairingManager.PairingState.BONDED
+    val connected = connectionState == ConnectionState.CONNECTED
+    // Just bonded but no heartbeat yet — normal, show a neutral "connecting" state (NOT red).
+    val bondedConnecting = bonded && !connected && !everConnectedSinceBond
+    // Was connected, then heartbeat went silent — a genuine lost-connection warning (red).
+    val bondedButLost = bonded && !connected && everConnectedSinceBond
 
     val containerColor = when {
         bondedButLost -> MaterialTheme.colorScheme.errorContainer
@@ -206,8 +220,21 @@ private fun PairingCard(
                         Text("Connect")
                     }
                 }
-                VrPairingManager.PairingState.BONDED -> {
-                    if (bondedButLost) {
+                VrPairingManager.PairingState.BONDED -> when {
+                    bondedConnecting -> {
+                        Text(
+                            text = "Connecting to VR headset…",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = "Paired with ${candidate?.display() ?: "the headset"}. Waiting for " +
+                                "it to start sending — this is normal for the first few seconds.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    bondedButLost -> {
                         Text(
                             text = "VR connection lost",
                             style = MaterialTheme.typography.titleSmall,
@@ -220,7 +247,8 @@ private fun PairingCard(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
-                    } else {
+                    }
+                    else -> {
                         Text(
                             text = "Bonded to VR headset",
                             style = MaterialTheme.typography.titleSmall,

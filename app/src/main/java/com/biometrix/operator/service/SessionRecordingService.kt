@@ -65,6 +65,9 @@ class SessionRecordingService : Service() {
 
     private var hadActiveSession = false
 
+    /** True while this service holds its single reference to the VR link (HTTP server + listener). */
+    private var vrLinkHeld = false
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -77,13 +80,18 @@ class SessionRecordingService : Service() {
         // on an already-running service, e.g. after a START_STICKY null-intent restart.
         startForegroundWithType(buildNotification(isRecording = false, durationMs = 0L))
         startObserving()
-        // Start the VR HTTP server for the lifetime of this (ACTIVE) session. Idempotent: safe on a
-        // START_STICKY null-intent restart.
-        vrHttpServer.start()
-        // Begin VR pairing: reset any stale bond and start listening for a Quest's discovery
-        // broadcast. The listener is stopped once bonded and restarted on heartbeat-loss re-arm.
-        vrPairingManager.onSessionStart()
-        vrDiscoveryListener.start()
+        // Hold exactly one reference to the VR link (HTTP server + discovery listener) for the whole
+        // service lifetime. Guarded by vrLinkHeld so repeated onStartCommand calls (START_STICKY
+        // null-intent restarts) don't over-acquire and leak references that VR Control's own hold
+        // relies on being balanced.
+        if (!vrLinkHeld) {
+            vrLinkHeld = true
+            vrHttpServer.acquire()
+            // Begin VR pairing: reset any stale bond and start listening for a Quest's discovery
+            // broadcast. The listener is stopped once bonded and restarted on heartbeat-loss re-arm.
+            vrPairingManager.onSessionStart()
+            vrDiscoveryListener.acquire()
+        }
         return START_STICKY
     }
 
@@ -197,11 +205,22 @@ class SessionRecordingService : Service() {
     }
 
     private fun stopForegroundAndSelf() {
-        vrDiscoveryListener.stop()
-        vrPairingManager.onSessionEnd()
-        vrHttpServer.stop()
+        releaseVrLink()
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    /**
+     * Release this service's single VR-link reference exactly once. Both teardown paths
+     * ([stopForegroundAndSelf] and [onDestroy]) call this — `stopSelf()` triggers `onDestroy`, so
+     * without the latch the second call would over-release and could steal VR Control's own hold.
+     */
+    private fun releaseVrLink() {
+        if (!vrLinkHeld) return
+        vrLinkHeld = false
+        vrDiscoveryListener.release()
+        vrPairingManager.onSessionEnd()
+        vrHttpServer.release()
     }
 
     private fun acquireWifiLock() {
@@ -242,9 +261,7 @@ class SessionRecordingService : Service() {
         observerJob?.cancel()
         observerJob = null
         scope.cancel()
-        vrDiscoveryListener.stop()
-        vrPairingManager.onSessionEnd()
-        vrHttpServer.stop()
+        releaseVrLink()
         releaseWifiLock()
         super.onDestroy()
     }
