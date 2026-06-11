@@ -81,8 +81,9 @@
             android:exported="false"
             android:foregroundServiceType="microphone|connectedDevice|dataSync" />
 
-        <!-- Receives the Galaxy Watch sensor readings as Data Layer messages.
-             MESSAGE_RECEIVED auto-starts the app on a matching message even if not running. -->
+        <!-- Receives the Galaxy Watch sensor readings as Data Layer messages, AND the historical
+             store flush as DataItems (DATA_CHANGED). Both auto-start the app on a matching event even
+             if not running — the mechanism behind end-of-session pull from a backgrounded app. -->
         <service
             android:name=".data.sensor.watch.WatchListenerService"
             android:exported="true">
@@ -92,6 +93,13 @@
                     android:scheme="wear"
                     android:host="*"
                     android:pathPrefix="/biometrix/sensors" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
+                <data
+                    android:scheme="wear"
+                    android:host="*"
+                    android:pathPrefix="/biometrix/flush" />
             </intent-filter>
         </service>
     </application>

@@ -11,7 +11,6 @@ import com.biometrix.operator.data.sensor.ble.BleManager
 import com.biometrix.operator.data.sensor.ble.model.BleDevice
 import com.biometrix.operator.data.sensor.watch.WatchBatteryAlert
 import com.biometrix.operator.data.sensor.watch.WatchSensorReceiver
-import com.biometrix.operator.data.sensor.watch.model.WatchReading
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -55,11 +54,12 @@ class ConnectionRepository @Inject constructor(
     /** Audio sensor (eSense Respiration) connection state */
     val respirationState: StateFlow<DeviceState> = respirationDevice.state
 
-    /** Galaxy Watch (Data Layer channel) connection state */
+    /** Galaxy Watch (Data Layer channel) connection state — coarse CONNECTED/DISCONNECTED. */
     val watchConnectionState: StateFlow<ConnectionState> = watchReceiver.connectionState
 
-    /** Per-sample EDA stream from the Galaxy Watch (µS); carries the watch-stamped timestamp. */
-    val watchEdaSampleFlow: SharedFlow<WatchReading> = watchReceiver.edaSampleFlow
+    /** Galaxy Watch finer link state: LIVE / DOZING (buffering) / DISCONNECTED. */
+    val watchLinkStatus: StateFlow<com.biometrix.operator.data.sensor.watch.WatchLinkStatus> =
+        watchReceiver.linkStatus
 
     /** Latest EDA value (µS) from the Galaxy Watch for live display, null until first reading. */
     val watchEda: StateFlow<Float?> = watchReceiver.latestByType

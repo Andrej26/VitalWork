@@ -115,8 +115,18 @@ class SessionControlViewModelTest {
             vrEventReceiver = vrEventReceiver,
             locationChecker = fakeLocationChecker,
             readinessChecker = FakeSystemReadinessChecker(),
+            watchCommandSender = FakeWatchCommandSender(),
             savedStateHandle = savedState
         )
+    }
+
+    /** No-op watch command sender — the watch link isn't exercised in these host tests. */
+    private class FakeWatchCommandSender :
+        com.biometrix.operator.data.sensor.watch.WatchCommandSender {
+        override suspend fun sendStart(): Boolean = true
+        override suspend fun sendFlush(): Boolean = true
+        override suspend fun sendStop(): Boolean = true
+        override suspend fun sendFlushAck(throughTimestampMs: Long): Boolean = true
     }
 
     private suspend fun emitScenarioStart(code: ScenarioCode = ScenarioCode.FALLING_PALLET) {

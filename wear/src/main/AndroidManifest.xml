@@ -22,6 +22,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Lets the phone remotely START the foreground health service (begin tracking) from the
+         Data-Layer command listener, which runs in the background. Receiving a Data Layer message is
+         NOT itself an FGS-from-background exemption (API 31+), so this Companion exemption is required
+         or remote START throws ForegroundServiceStartNotAllowedException. -->
+    <uses-permission android:name="android.permission.REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND" />
 
     <application
         android:allowBackup="true"
@@ -53,6 +58,21 @@
             android:name=".WatchSensorService"
             android:exported="false"
             android:foregroundServiceType="health" />
+
+        <!-- Receives phone → watch commands (START / FLUSH / STOP / FLUSH_ACK) over the Data Layer.
+             Exported + MESSAGE_RECEIVED filter so the system can deliver (and launch the app if not
+             running) even when the watch app is backgrounded — the mechanism behind remote wake. -->
+        <service
+            android:name=".WatchCommandListenerService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data
+                    android:scheme="wear"
+                    android:host="*"
+                    android:pathPrefix="/biometrix/command" />
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>

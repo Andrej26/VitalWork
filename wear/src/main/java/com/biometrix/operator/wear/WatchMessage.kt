@@ -19,6 +19,14 @@ object WatchMessage {
     fun stop(): String =
         """{"t":${System.currentTimeMillis()},"type":"STOP"}"""
 
+    /**
+     * Low-rate "I'm alive, just dozing" beacon. Lets the phone distinguish a watch that is buffering
+     * through Doze (heartbeat still lands at maintenance windows) from one that is truly gone, so the
+     * UI can show "dozing/buffering" instead of a scary "Disconnected". Carries no sample data.
+     */
+    fun heartbeat(): String =
+        """{"t":${System.currentTimeMillis()},"type":"HEARTBEAT"}"""
+
     /** Wrap several already-encoded reading lines into one message (screen-off bundles). */
     fun batch(items: List<String>): String =
         """{"type":"BATCH","items":[${items.joinToString(",")}]}"""

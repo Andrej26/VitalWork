@@ -11,7 +11,10 @@ import androidx.room.TypeConverters
         ScenarioEntity::class,
         SensorSampleEntity::class
     ],
-    version = 1,
+    // v2: added SensorType.WATCH_IBI for Galaxy Watch store-and-forward (HR reuses HEART_RATE).
+    // The DB uses fallbackToDestructiveMigration (see AppModule), so a new enum value needs no
+    // hand-written Migration — the value is stored as a string by Converters.
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
