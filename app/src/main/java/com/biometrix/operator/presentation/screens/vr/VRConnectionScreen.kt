@@ -287,14 +287,15 @@ private fun PairingCard(
                     }
                     bondedButLost -> {
                         Text(
-                            text = "VR connection lost",
+                            text = "Headset paused — reconnecting",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
                         Text(
-                            text = "No heartbeat from the headset. Recording continues; the tablet " +
-                                "will reconnect automatically when the headset comes back.",
+                            text = "No heartbeat right now — the headset is likely asleep. The pairing " +
+                                "is kept and recording continues; it reconnects automatically the moment " +
+                                "the headset wakes (no need to pair again).",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )

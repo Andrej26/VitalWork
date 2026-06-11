@@ -80,7 +80,9 @@ class VrEventReceiver(
     private val _heartbeatState = MutableStateFlow(ConnectionState.DISCONNECTED)
     /**
      * Heartbeat-driven liveness of the bonded Quest — the signal the app-wide VR indicator should
-     * use. CONNECTED while heartbeats arrive; DISCONNECTED after [HEARTBEAT_TIMEOUT_MS] of silence.
+     * use. CONNECTED while heartbeats arrive; RECONNECTING (amber) after [HEARTBEAT_TIMEOUT_MS] of
+     * silence — the bond is kept and the Quest auto-reconnects when it wakes, so this is a pause, not
+     * a loss. Only a deliberate Stop ([onLinkStopped]) drops it to DISCONNECTED (gray).
      */
     val heartbeatState: StateFlow<ConnectionState> = _heartbeatState.asStateFlow()
 
@@ -248,11 +250,17 @@ class VrEventReceiver(
                 if (_heartbeatState.value == ConnectionState.CONNECTED &&
                     clock() - lastHeartbeatMs > HEARTBEAT_TIMEOUT_MS
                 ) {
-                    // Was alive, now silent → mark lost once and signal the service to re-arm.
-                    _heartbeatState.value = ConnectionState.DISCONNECTED
+                    // Was alive, now silent → flip the UI to RECONNECTING (amber), not DISCONNECTED
+                    // (gray). The bond is deliberately KEPT (a quiet headset is usually just asleep),
+                    // so this is a pause, not a loss — the Quest auto-reconnects when heartbeats
+                    // resume (markHeartbeat → CONNECTED). Only the operator's Stop drops it to gray
+                    // DISCONNECTED ([onLinkStopped]). heartbeatLost is still emitted for any
+                    // interested observer; nothing currently drops the bond on it.
+                    _heartbeatState.value = ConnectionState.RECONNECTING
                     linkLog.add(
-                        VrLinkLog.Level.ERROR,
-                        "VR connection lost — no heartbeat for >${HEARTBEAT_TIMEOUT_MS / 1000}s"
+                        VrLinkLog.Level.WARNING,
+                        "No heartbeat for >${HEARTBEAT_TIMEOUT_MS / 1000}s — headset asleep? " +
+                            "Bond kept; will auto-reconnect when it wakes."
                     )
                     _heartbeatLost.tryEmit(Unit)
                 }

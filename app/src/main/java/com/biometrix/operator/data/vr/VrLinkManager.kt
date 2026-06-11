@@ -31,10 +31,13 @@ import javax.inject.Singleton
  * is the only thing that tears the link down — it clears the bond and resets liveness via
  * [VrEventReceiver.onLinkStopped] so heartbeats ceasing afterwards don't trip a false "lost" warning.
  *
- * While active it owns two observers that used to live in the session service, so they now run
- * whenever the link is up (including VR Control with no session):
- *  - on [VrPairingManager.PairingState.BONDED] → reply to the Quest with this tablet's address.
- *  - on [VrEventReceiver.heartbeatLost] → [VrPairingManager.reArm] so a restarted Quest can rebond.
+ * While active it owns a pairing observer that used to live in the session service, so it now runs
+ * whenever the link is up (including VR Control with no session): on
+ * [VrPairingManager.PairingState.BONDED] it replies to the Quest with this tablet's address.
+ *
+ * Heartbeat loss deliberately does **not** drop the bond — a sleeping headset is just temporarily
+ * quiet, so the bond is kept and the Quest auto-reconnects when its heartbeats resume (see
+ * [startObservers]). Only [stop] clears the bond.
  */
 @Singleton
 class VrLinkManager @Inject constructor(
@@ -98,13 +101,13 @@ class VrLinkManager @Inject constructor(
                     }
                 }
             }
-            // Heartbeat loss → re-arm pairing so a restarted Quest can rebond without operator action
-            // beyond tapping Connect again. Recording (if any) keeps running.
-            launch {
-                eventReceiver.heartbeatLost.collect {
-                    pairingManager.reArm()
-                }
-            }
+            // NOTE: heartbeat loss intentionally does NOT drop the bond. A sleeping/dozing headset
+            // just goes quiet for a while; tearing the bond down would make the tablet reject the
+            // Quest's POSTs (403 not_paired) when it wakes and force a manual re-pair. Keeping the
+            // bond lets the same Quest (same IP) auto-reconnect the moment its heartbeats resume —
+            // the watchdog only flips the UI to "reconnecting" in the meantime. The bond is cleared
+            // solely by the operator's Stop ([clearBond]). The discovery listener stays running, so
+            // if the Quest re-broadcasts on wake the self-heal reply re-sends our address.
         }
     }
 }

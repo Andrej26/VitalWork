@@ -18,11 +18,12 @@ import javax.inject.Singleton
  *
  * Lifecycle (owned by [com.biometrix.operator.data.vr.VrLinkManager]):
  *  - [confirm] bonds (operator tapped Connect) → the link replies to the Quest.
- *  - [reArm] (on heartbeat loss) drops the bond so a restarted Quest can rebond.
  *  - [clearBond] clears any bond when the operator stops the link.
  *
- * Note: the bond deliberately **persists across sessions** now — starting a session reuses whatever
- * is already connected rather than re-pairing (see [VrLinkManager]).
+ * Note: the bond deliberately **persists across sessions and across heartbeat loss** now — a
+ * sleeping headset is just temporarily quiet, so the same Quest auto-reconnects when its heartbeats
+ * resume rather than being forced to re-pair. Starting a session reuses whatever is already
+ * connected (see [VrLinkManager]).
  *
  * State is a [StateFlow] with `@Synchronized` mutators: the listener emits claims from
  * `Dispatchers.IO`, [confirm] is called from the UI thread, and the service collects on `Main`.
@@ -106,19 +107,6 @@ class VrPairingManager @Inject constructor(
     @Synchronized
     fun isBondedTo(questId: String): Boolean =
         _pairingState.value == PairingState.BONDED && _candidate.value?.questId == questId
-
-    /** Drop the bond (e.g. heartbeat loss) and return to listening. */
-    @Synchronized
-    fun reArm() {
-        if (_pairingState.value == PairingState.BONDED) {
-            linkLog.add(
-                VrLinkLog.Level.WARNING,
-                "Bond dropped (heartbeat lost) — listening for the headset again"
-            )
-        }
-        _candidate.value = null
-        _pairingState.value = PairingState.UNPAIRED
-    }
 
     /** Operator stopped the link: clear the bond and return to the unpaired/idle state. */
     @Synchronized

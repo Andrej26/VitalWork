@@ -661,6 +661,8 @@ fun SessionControlScreen(
                         text = when (vrConnectionState) {
                             ConnectionState.CONNECTED ->
                                 "VR headset connected — scenarios are driven by the Quest."
+                            ConnectionState.RECONNECTING ->
+                                "VR headset paused — reconnecting… The pairing is kept and recording continues; it reconnects automatically when the headset wakes."
                             else ->
                                 "Waiting for the VR headset to connect. Open VR Control for the tablet address and event log."
                         },

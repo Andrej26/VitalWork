@@ -78,18 +78,6 @@ class VrPairingManagerTest {
     }
 
     @Test
-    fun reArm_dropsBondAndClearsCandidate() {
-        manager.onClaim("quest-A", "192.168.1.50")
-        manager.confirm()
-        assertTrue(manager.isAuthorized("quest-A", "192.168.1.50"))
-
-        manager.reArm()
-        assertEquals(PairingState.UNPAIRED, manager.pairingState.value)
-        assertNull(manager.candidate.value)
-        assertFalse(manager.isAuthorized("quest-A", "192.168.1.50"))
-    }
-
-    @Test
     fun clearBond_clearsBond() {
         manager.onClaim("quest-A", "192.168.1.50")
         manager.confirm()

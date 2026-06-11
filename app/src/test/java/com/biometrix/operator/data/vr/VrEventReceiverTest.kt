@@ -252,7 +252,7 @@ class VrEventReceiverTest {
     }
 
     @Test
-    fun heartbeat_survivesLongEventQuietGap_thenLostWhenHeartbeatsStop() = runTest {
+    fun heartbeat_survivesLongEventQuietGap_thenReconnectingWhenHeartbeatsStop() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         val receiver = VrEventReceiver(
             scenarioRepository = scenarioRepository,
@@ -272,11 +272,17 @@ class VrEventReceiverTest {
         runCurrent()
         assertEquals(ConnectionState.CONNECTED, receiver.heartbeatState.value)
 
-        // Now stop heartbeats: after the ~10 s heartbeat timeout it goes lost (state flips).
+        // Now stop heartbeats: after the ~10 s heartbeat timeout it flips to RECONNECTING (amber) —
+        // NOT DISCONNECTED (gray). The bond is kept; only a deliberate Stop drops it to disconnected.
         now += 11_000L
         advanceTimeBy(2_000L)
         runCurrent()
-        assertEquals(ConnectionState.DISCONNECTED, receiver.heartbeatState.value)
+        assertEquals(ConnectionState.RECONNECTING, receiver.heartbeatState.value)
+
+        // Heartbeats resume → it auto-reconnects back to CONNECTED (no re-pair needed).
+        receiver.markHeartbeat()
+        runCurrent()
+        assertEquals(ConnectionState.CONNECTED, receiver.heartbeatState.value)
 
         // Cancel the watchdog poll loop so runTest's end-of-body advanceUntilIdle() can drain the
         // shared test scheduler — an uncancelled `while(isActive){ delay() }` loop spins it forever.
