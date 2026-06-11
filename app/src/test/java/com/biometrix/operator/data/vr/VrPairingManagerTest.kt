@@ -14,7 +14,7 @@ class VrPairingManagerTest {
 
     @Before
     fun setUp() {
-        manager = VrPairingManager()
+        manager = VrPairingManager(VrLinkLog())
     }
 
     @Test
@@ -90,11 +90,11 @@ class VrPairingManagerTest {
     }
 
     @Test
-    fun onSessionEnd_clearsBond() {
+    fun clearBond_clearsBond() {
         manager.onClaim("quest-A", "192.168.1.50")
         manager.confirm()
 
-        manager.onSessionEnd()
+        manager.clearBond()
         assertEquals(PairingState.UNPAIRED, manager.pairingState.value)
         assertNull(manager.candidate.value)
     }

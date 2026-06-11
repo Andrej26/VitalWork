@@ -20,10 +20,7 @@ import com.biometrix.operator.R
 import com.biometrix.operator.data.recording.ScenarioRecordingRepository
 import com.biometrix.operator.data.recording.model.DataRecordingState
 import com.biometrix.operator.data.repository.SessionRepository
-import com.biometrix.operator.data.vr.VrDiscoveryListener
-import com.biometrix.operator.data.vr.VrEventReceiver
-import com.biometrix.operator.data.vr.VrHttpServer
-import com.biometrix.operator.data.vr.VrPairingManager
+import com.biometrix.operator.data.vr.VrLinkManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -46,16 +43,18 @@ import javax.inject.Inject
  * Lifecycle is self-managed: the UI starts the service when entering an ACTIVE session, and the
  * service stops itself once [SessionRepository.activeSession] emits null (which happens when the
  * session is ended → COMPLETED, or discarded → deleted). No explicit stop call is needed.
+ *
+ * VR: the service does **not** own the VR link or pairing — [VrLinkManager] does. The service just
+ * calls [VrLinkManager.start] (idempotent), which keeps an already-connected headset bonded instead
+ * of re-pairing, and provides the foreground status + Wi-Fi lock that keep that link alive while the
+ * screen is off. The link is left running after the session (the operator stops it from VR Control).
  */
 @AndroidEntryPoint
 class SessionRecordingService : Service() {
 
     @Inject lateinit var sessionRepository: SessionRepository
     @Inject lateinit var recordingRepository: ScenarioRecordingRepository
-    @Inject lateinit var vrHttpServer: VrHttpServer
-    @Inject lateinit var vrDiscoveryListener: VrDiscoveryListener
-    @Inject lateinit var vrPairingManager: VrPairingManager
-    @Inject lateinit var vrEventReceiver: VrEventReceiver
+    @Inject lateinit var vrLinkManager: VrLinkManager
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var observerJob: Job? = null
@@ -64,9 +63,6 @@ class SessionRecordingService : Service() {
     private var wifiLock: WifiManager.WifiLock? = null
 
     private var hadActiveSession = false
-
-    /** True while this service holds its single reference to the VR link (HTTP server + listener). */
-    private var vrLinkHeld = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -80,18 +76,11 @@ class SessionRecordingService : Service() {
         // on an already-running service, e.g. after a START_STICKY null-intent restart.
         startForegroundWithType(buildNotification(isRecording = false, durationMs = 0L))
         startObserving()
-        // Hold exactly one reference to the VR link (HTTP server + discovery listener) for the whole
-        // service lifetime. Guarded by vrLinkHeld so repeated onStartCommand calls (START_STICKY
-        // null-intent restarts) don't over-acquire and leak references that VR Control's own hold
-        // relies on being balanced.
-        if (!vrLinkHeld) {
-            vrLinkHeld = true
-            vrHttpServer.acquire()
-            // Begin VR pairing: reset any stale bond and start listening for a Quest's discovery
-            // broadcast. The listener is stopped once bonded and restarted on heartbeat-loss re-arm.
-            vrPairingManager.onSessionStart()
-            vrDiscoveryListener.acquire()
-        }
+        // Ensure the VR link is running, reusing whatever is already connected. Idempotent: if VR
+        // Control (or an earlier session) already started it and bonded a headset, this is a no-op
+        // and the bond is preserved — no re-pairing. If nothing started it yet, this starts it so the
+        // operator can pair. The foreground status + Wi-Fi lock below keep it alive screen-off.
+        vrLinkManager.start()
         return START_STICKY
     }
 
@@ -103,26 +92,8 @@ class SessionRecordingService : Service() {
     private fun startObserving() {
         if (observerJob != null) return
 
-        // When the operator bonds, reply to the Quest with this tablet's address so it learns where
-        // to POST (fully automatic — no manual IP entry). The listener keeps running for the whole
-        // session: while bonded it only replies to the bonded Quest (re-sending if the first reply
-        // was lost) and ignores everyone else; after a re-arm it resumes normal pairing.
-        scope.launch {
-            vrPairingManager.pairingState.collect { state ->
-                if (state == VrPairingManager.PairingState.BONDED) {
-                    vrDiscoveryListener.sendBondReply()
-                }
-            }
-        }
-
-        // Heartbeat loss from the bonded Quest → re-arm pairing so a restarted Quest can rebond to
-        // this same active session. Recording keeps running (no teardown here).
-        scope.launch {
-            vrEventReceiver.heartbeatLost.collect {
-                vrPairingManager.reArm()
-            }
-        }
-
+        // VR pairing/heartbeat handling lives in VrLinkManager (it runs whenever the link is up,
+        // session or not), so the service no longer observes it here — it only tracks session state.
         observerJob = scope.launch {
             combine(
                 sessionRepository.activeSession,
@@ -205,22 +176,10 @@ class SessionRecordingService : Service() {
     }
 
     private fun stopForegroundAndSelf() {
-        releaseVrLink()
+        // The VR link is intentionally left running (owned by VrLinkManager) so the connection
+        // survives the session ending; the operator stops it from VR Control when finished.
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
-    }
-
-    /**
-     * Release this service's single VR-link reference exactly once. Both teardown paths
-     * ([stopForegroundAndSelf] and [onDestroy]) call this — `stopSelf()` triggers `onDestroy`, so
-     * without the latch the second call would over-release and could steal VR Control's own hold.
-     */
-    private fun releaseVrLink() {
-        if (!vrLinkHeld) return
-        vrLinkHeld = false
-        vrDiscoveryListener.release()
-        vrPairingManager.onSessionEnd()
-        vrHttpServer.release()
     }
 
     private fun acquireWifiLock() {
@@ -261,7 +220,6 @@ class SessionRecordingService : Service() {
         observerJob?.cancel()
         observerJob = null
         scope.cancel()
-        releaseVrLink()
         releaseWifiLock()
         super.onDestroy()
     }

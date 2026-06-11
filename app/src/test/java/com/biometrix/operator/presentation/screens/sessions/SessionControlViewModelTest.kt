@@ -14,6 +14,7 @@ import com.biometrix.operator.data.repository.ConnectionRepository
 import com.biometrix.operator.data.sensor.watch.WatchSensorReceiver
 import com.biometrix.operator.data.repository.ScenarioRepository
 import com.biometrix.operator.data.repository.SessionRepository
+import com.biometrix.operator.data.time.TimeProvider
 import com.biometrix.operator.data.sensor.FakeSensorDevice
 import com.biometrix.operator.data.sensor.ble.FakeBleManager
 import com.biometrix.operator.data.db.ScenarioCode
@@ -21,6 +22,7 @@ import com.biometrix.operator.data.system.FakeLocationChecker
 import com.biometrix.operator.data.system.FakeSystemReadinessChecker
 import com.biometrix.operator.data.vr.VrEvent
 import com.biometrix.operator.data.vr.VrEventReceiver
+import com.biometrix.operator.data.vr.VrLinkLog
 import com.biometrix.operator.presentation.components.BleDialogState
 import com.biometrix.operator.presentation.screens.sessions.components.NotesSaveStatus
 import kotlinx.coroutines.Dispatchers
@@ -70,21 +72,22 @@ class SessionControlViewModelTest {
         fakeScenarioRecordingRepo = FakeScenarioRecordingRepository()
         fakeLocationChecker = FakeLocationChecker(locationEnabled = true)
         lanAvailableFlow = MutableStateFlow(true)
-        scenarioRepository = ScenarioRepository(fakeScenarioDao, fakeSensorSampleDao)
-        vrEventReceiver = VrEventReceiver(scenarioRepository)
+        scenarioRepository = ScenarioRepository(fakeScenarioDao, fakeSensorSampleDao, TimeProvider.system())
+        vrEventReceiver = VrEventReceiver(scenarioRepository, VrLinkLog())
 
         connectionRepository = ConnectionRepository(
             vrEventReceiver = vrEventReceiver,
             bleManager = fakeBleManager,
             respirationDevice = fakeRespiration,
-            watchReceiver = WatchSensorReceiver(),
+            watchReceiver = WatchSensorReceiver(TimeProvider.system()),
             lanAvailableFlow = lanAvailableFlow
         )
         sessionRepository = SessionRepository(
             fakeSessionDao,
             fakeScenarioDao,
             fakeSensorSampleDao,
-            FakeSettingsRepository("A")
+            FakeSettingsRepository("A"),
+            TimeProvider.system()
         )
     }
 
@@ -120,11 +123,11 @@ class SessionControlViewModelTest {
     }
 
     private suspend fun emitScenarioStart(code: ScenarioCode = ScenarioCode.FALLING_PALLET) {
-        vrEventReceiver.submit(VrEvent.ScenarioStart(sessionId, code, System.currentTimeMillis()))
+        vrEventReceiver.submit(VrEvent.ScenarioStart(code, System.currentTimeMillis()))
     }
 
     private suspend fun emitScenarioStop(code: ScenarioCode = ScenarioCode.FALLING_PALLET) {
-        vrEventReceiver.submit(VrEvent.ScenarioStop(sessionId, code, System.currentTimeMillis()))
+        vrEventReceiver.submit(VrEvent.ScenarioStop(code, System.currentTimeMillis()))
     }
 
     @Test

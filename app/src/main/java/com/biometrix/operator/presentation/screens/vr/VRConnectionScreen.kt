@@ -13,18 +13,19 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
@@ -38,6 +39,7 @@ import com.biometrix.operator.data.model.ConnectionState
 import com.biometrix.operator.data.vr.VrPairingManager
 import com.biometrix.operator.presentation.components.ConnectionStatusBadge
 import com.biometrix.operator.presentation.log.LogEntry
+import com.biometrix.operator.presentation.log.LogType
 
 /**
  * Read-only VR link diagnostics: the tablet's address (to read to the VR colleague), the inferred
@@ -52,14 +54,12 @@ fun VRConnectionScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    LaunchedEffect(Unit) { viewModel.refreshAddress() }
-
-    // Run the VR link (discovery + HTTP server) for as long as this screen is shown, so the operator
-    // can pair and watch live events with no session running. Reference-counted in the data layer, so
-    // an active session keeps the link alive if the operator navigates away.
-    DisposableEffect(Unit) {
-        viewModel.acquireVrLink()
-        onDispose { viewModel.releaseVrLink() }
+    // Refresh the tablet address and make sure the VR link is running. The link is app-scoped and
+    // deliberately NOT torn down when this screen closes (see VrLinkManager), so the headset stays
+    // connected wherever the operator navigates — only the Stop button below disconnects it.
+    LaunchedEffect(Unit) {
+        viewModel.refreshAddress()
+        viewModel.startVrLink()
     }
 
     Scaffold(
@@ -121,11 +121,46 @@ fun VRConnectionScreen(
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
+                    // Start/Stop the app-wide VR link. Stop is the clean way to end VR comms before
+                    // quitting the headset app — it disconnects without tripping a "lost" warning.
+                    if (uiState.linkActive) {
+                        OutlinedButton(
+                            onClick = viewModel::stopVrLink,
+                            modifier = Modifier.fillMaxWidth(),
+                            // Disabled during a session — stopping then would clear the bond the
+                            // recording depends on. End the session first.
+                            enabled = !uiState.sessionActive,
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Text("Stop VR link")
+                        }
+                        Text(
+                            text = if (uiState.sessionActive) {
+                                "A session is running — end it before stopping the VR link, so the " +
+                                    "recording's connection isn't cut."
+                            } else {
+                                "Tap Stop before quitting the VR app to disconnect cleanly and " +
+                                    "avoid a false \"connection lost\" warning."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        Button(
+                            onClick = viewModel::startVrLink,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Start VR link")
+                        }
+                    }
                 }
             }
 
             // Pairing: pending claim → Connect; bonded → connecting/bonded; lost heartbeat → warning.
             PairingCard(
+                linkActive = uiState.linkActive,
                 pairingState = uiState.pairingState,
                 candidate = uiState.candidate,
                 connectionState = uiState.connectionState,
@@ -164,6 +199,7 @@ private fun VrPairingManager.VrCandidate.display(): String {
 
 @Composable
 private fun PairingCard(
+    linkActive: Boolean,
     pairingState: VrPairingManager.PairingState,
     candidate: VrPairingManager.VrCandidate?,
     connectionState: ConnectionState,
@@ -192,6 +228,21 @@ private fun PairingCard(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            // When the link is stopped the tablet isn't listening at all — say so plainly instead of
+            // the "waiting for a headset" copy, which would imply discovery is running.
+            if (!linkActive) {
+                Text(
+                    text = "VR link stopped",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = "The tablet isn't listening for a headset. Tap Start VR link above to begin.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                return@Column
+            }
             when (pairingState) {
                 VrPairingManager.PairingState.UNPAIRED -> {
                     Text(
@@ -268,6 +319,12 @@ private fun PairingCard(
 
 @Composable
 private fun LogRow(entry: LogEntry) {
+    // Tone errors/successes so the operator can scan the log for trouble at a glance.
+    val messageColor = when (entry.type) {
+        LogType.ERROR -> MaterialTheme.colorScheme.error
+        LogType.SUCCESS -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.onSurface
+    }
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -284,7 +341,8 @@ private fun LogRow(entry: LogEntry) {
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = entry.message,
-                style = MaterialTheme.typography.bodySmall
+                style = MaterialTheme.typography.bodySmall,
+                color = messageColor
             )
         }
     }

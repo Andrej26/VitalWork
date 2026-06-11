@@ -7,6 +7,7 @@ import com.biometrix.operator.data.db.SessionDao
 import com.biometrix.operator.data.db.SessionEntity
 import com.biometrix.operator.data.db.SessionStatus
 import com.biometrix.operator.data.prefs.SettingsRepository
+import com.biometrix.operator.data.time.TimeProvider
 import kotlinx.coroutines.flow.Flow
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -19,7 +20,8 @@ class SessionRepository @Inject constructor(
     private val sessionDao: SessionDao,
     private val scenarioDao: ScenarioDao,
     private val sensorSampleDao: SensorSampleDao,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val timeProvider: TimeProvider
 ) {
     val allSessions: Flow<List<SessionEntity>> = sessionDao.getAllSessions()
     val activeSession: Flow<SessionEntity?> = sessionDao.getActiveSession()
@@ -56,7 +58,7 @@ class SessionRepository @Inject constructor(
         return SessionEntity(
             participantId = participantId,
             sessionCode = sessionCode,
-            startedAt = System.currentTimeMillis(),
+            startedAt = timeProvider.nowMs(),
             status = SessionStatus.ACTIVE
         )
     }
@@ -79,7 +81,7 @@ class SessionRepository @Inject constructor(
 
         sessionDao.update(
             session.copy(
-                endedAt = System.currentTimeMillis(),
+                endedAt = timeProvider.nowMs(),
                 status = SessionStatus.COMPLETED,
                 scenarioCount = completedScenarios.size,
                 hrSampleCount = hrCount,

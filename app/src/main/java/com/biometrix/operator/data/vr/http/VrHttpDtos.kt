@@ -8,14 +8,23 @@ import kotlinx.serialization.Serializable
  */
 
 /**
- * Body of all four POSTs (`start`/`event`/`reaction`/`stop`). The Quest sends only these two fields:
- *  - [sessionId]: read from the tablet's UDP beacon and echoed back (the Quest never invents it).
+ * Body of all scenario POSTs (`start`/`stop`). The Quest sends:
  *  - [scenarioId]: a `ScenarioCode` enum **name** (e.g. `"FALLING_PALLET"`), parsed on the tablet.
+ *  - [eventTimestampMs] / [reactionTimestampMs]: only sent with `stop`, as Unix epoch milliseconds in
+ *    true UTC stamped on the Quest's own NTP-synced clock. Both apps sync to NTP at startup, so these
+ *    align with the tablet's NTP-corrected sample timestamps without any clock handshake. `null` for
+ *    `start`, and `reactionTimestampMs` stays `null` if no reaction was recorded.
+ *
+ * The Quest does **not** send a session id: scenarios are attached to the tablet's own active
+ * session, and identity is established by the pairing bond (`X-Vr-Quest-Id` header + source IP),
+ * not by anything in this body. `ignoreUnknownKeys = true` means an extra `sessionId` field from an
+ * older Quest build is simply ignored rather than rejected.
  */
 @Serializable
 data class ScenarioRequest(
-    val sessionId: Long,
-    val scenarioId: String
+    val scenarioId: String,
+    val eventTimestampMs: Long? = null,
+    val reactionTimestampMs: Long? = null
 )
 
 /**
@@ -25,14 +34,6 @@ data class ScenarioRequest(
  */
 @Serializable
 data class StartResponse(val status: String = "started")
-
-/** `200` response to `event`: the arrival timestamp the tablet stored. */
-@Serializable
-data class EventResponse(val eventTimestampMs: Long)
-
-/** `200` response to `reaction`: the arrival timestamp the tablet stored. */
-@Serializable
-data class ReactionResponse(val reactionTimestampMs: Long)
 
 /** `200` response to `stop`. */
 @Serializable
