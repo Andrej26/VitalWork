@@ -20,6 +20,15 @@
 > reads the sensors on the watch and forwards each reading to the tablet over the Wearable Data
 > Layer. This lives in the same Gradle project as a second module, `:wear`.
 
+> **Status: store-and-forward implemented (2026-06).** The watch no longer only *streams* — it also
+> **persists every HR/IBI/EDA reading to its own durable file store** as it samples, so a screen-off/
+> Doze session loses nothing. At session end the phone sends a **remote FLUSH command** and the watch
+> ships its stored rows back as `DataClient` DataItems (which buffer and auto-sync across a brief
+> disconnect). EDA/HR/IBI are recorded into the DB and appear in the session export. See
+> **Store-and-Forward + Remote Flush** below. The original live-only path still runs for the
+> diagnostic display; the rest of this doc's platform rationale (transport, Doze, cloud relay) is
+> unchanged and still load-bearing.
+
 ## Architecture
 
 ```
@@ -30,24 +39,34 @@
 │         │                                                                     │
 │  WatchSensorService (foreground service, type=health)                        │
 │    • owns the SDK lifecycle, registers trackers                               │
+│    • emit(): persists HR/IBI/EDA to WatchSampleStore AND streams live          │
 │    • flush() loop @1 Hz forces screen-off batches out immediately             │
-│    └─► WatchDataSender (MessageClient)                                        │
-└──────────────────────────────────┬──────────────────────────────────────────┘
-                                    │  Wearable Data Layer
-                                    │  MessageClient.sendMessage(node, "/biometrix/sensors", json)
-                                    │  Bluetooth-direct *if phone BT is on* — else cloud relay (dies in Doze!)
-                                    ▼
+│    • HEARTBEAT @~30 s ("alive, just dozing")                                  │
+│    └─► WatchDataSender (MessageClient, live readings)                         │
+│  WatchSampleStore (append-only JSON-lines file; truncate-after-ack)           │
+│  WatchCommandListenerService (receives START/FLUSH/STOP/FLUSH_ACK)            │
+│    └─► WatchFlushWriter (DataClient DataItems = reliable bulk transfer)       │
+└──────────────┬───────────────────────────────────────────┬──────────────────┘
+       live ▲  │ readings/heartbeat (MessageClient)          │ flush (DataClient DataItems)
+            │  ▼  "/biometrix/sensors"                        ▼  "/biometrix/flush"
+        commands ▲ "/biometrix/command" (MessageClient: START/FLUSH/STOP/FLUSH_ACK)
+                 │  Wearable Data Layer — Bluetooth-direct *if phone BT is on* (else cloud relay, dies in Doze!)
+                 ▼
 ┌─────────────────────────── Android Tablet (:app module) ─────────────────────┐
-│  WatchListenerService : WearableListenerService (auto-started on message)     │
-│    • onMessageReceived → parse JSON line(s)                                   │
+│  WatchListenerService : WearableListenerService (auto-started on event)       │
+│    • onMessageReceived → parse JSON line(s) (live + HEARTBEAT)                │
+│    • onDataChanged    → ingest flushed DataItems, delete (=ack), FLUSH_ACK    │
 │    └─► WatchSensorReceiver (Hilt @Singleton)                                  │
-│          • latestByType / availableTrackers / batteryLevel / connectionState  │
-│          • connection state INFERRED from message arrival (watchdog)          │
+│          • latestByType / availableTrackers / batteryLevel                   │
+│          • connectionState (coarse) + linkStatus (LIVE/DOZING/DISCONNECTED)   │
+│          • watchSampleFlow (EDA+HR+IBI) + onFlushedReadings (historical)      │
+│  WatchCommandSender (MessageClient → watch: START/FLUSH/STOP/FLUSH_ACK)       │
 │                │                                                               │
-│          ┌─────┴───────────────┐                                              │
-│          ▼                     ▼                                              │
-│  ConnectionRepository    WatchSensorViewModel ──► WatchSensorScreen           │
-│  (.watchConnectionState) (live readings)         (Sensors → Galaxy Watch)     │
+│   ┌────────────┼─────────────────────┬──────────────────────┐                │
+│   ▼            ▼                     ▼                      ▼                │
+│ Connection  WatchSensorViewModel  ScenarioRecording   SessionControlVM        │
+│ Repository  ──► WatchSensorScreen  RepositoryImpl      (end: FLUSH + drain)   │
+│             ("dozing — buffering") (buffer→drainer→DB)                        │
 └───────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -149,10 +168,66 @@ parses the same shape.
 
 // Explicit "tracking stopped" notice (instant DISCONNECT on the phone):
 {"t":1717245600000,"type":"STOP"}
+
+// Low-rate "alive, just dozing" beacon (~30 s) → phone shows DOZING, not DISCONNECTED:
+{"t":1717245600000,"type":"HEARTBEAT"}
 ```
 
 `t` is stamped on the watch with `System.currentTimeMillis()` — same clock convention as the rest of
 the app, so watch samples align to VR events with no clock-sync step.
+
+**Phone → watch commands** ride a separate `MessageClient` path `/biometrix/command` as plain strings:
+`START`, `STOP`, `FLUSH`, and `FLUSH_ACK:<maxTimestampMs>`. **Bulk flush data does NOT use
+`MessageClient`** — it uses `DataClient` DataItems on `/biometrix/flush/<batchId>/<chunk>` (see below).
+
+## Store-and-Forward + Remote Flush (2026-06)
+
+**Problem it solves.** Live streaming alone is fragile across screen-off/Doze: the `MessageClient`
+feed stalls (cloud relay) or delivers in late bursts (Doze), and a dropped message loses that sample
+outright. For a research dataset that is unacceptable. So the watch now **persists every reading
+locally** and the phone **pulls the complete history** at session end.
+
+**Watch side:**
+- `WatchSampleStore` — an **append-only JSON-lines file** in the watch app's `filesDir` (same line
+  format as the live messages). Every HR/IBI/EDA reading is appended in `WatchSensorService.emit()`
+  (the single chokepoint that already status-gates HR/IBI), *in addition* to streaming live. Battery
+  and heartbeat are **not** persisted. The write is inside the SDK `onDataReceived` callback, so it
+  does **not** depend on the 1 Hz flush loop staying scheduled — it survives Doze. The store is
+  cleared on a fresh `START`.
+- `WatchCommandListenerService : WearableListenerService` (path `/biometrix/command`) handles phone
+  commands. **`FLUSH` does its work inline (no foreground service)** — the listener is already alive
+  for the callback. **Remote `START` does need the FGS**, which is only legal from this
+  background-delivered callback via the **Companion exemption**
+  `REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND` (declared in the `:wear` manifest);
+  without it, `startForegroundService` throws `ForegroundServiceStartNotAllowedException`.
+- `WatchFlushWriter` — writes the store's rows to the phone as **`DataClient` DataItems**, chunked
+  (~300 rows/item, each well under the ~100 KB DataItem cap) on `/biometrix/flush/<batchId>/<chunk>`.
+  `DataClient` (not `MessageClient`) is used for bulk because it **buffers while disconnected and
+  auto-syncs on reconnect**, and starts the phone's listener even if the app wasn't running.
+
+**Phone side:**
+- `WatchCommandSender` (interface + `…Impl`, bound in `AppBindsModule`) resolves the watch node via
+  the `biometrix_watch` capability (advertised in `wear/src/main/res/values/wear.xml`) and sends the
+  command strings.
+- `WatchListenerService.onDataChanged` ingests flushed DataItems → `WatchSensorReceiver.onFlushedReadings`
+  (fed into the same `watchSampleFlow` the live path uses), then **deletes each DataItem (the Data
+  Layer ack)** and sends `FLUSH_ACK:<maxTs>` back so the watch **truncates** its store through that
+  timestamp. Un-acked rows survive for the next flush; the per-(scenario,type) high-water-mark de-dup
+  makes any re-delivery idempotent. **Lossless by construction.**
+
+**Session end** (`SessionControlViewModel.endSessionAndSave`): if the watch was in use, send `FLUSH`,
+wait a bounded grace (`WATCH_FLUSH_GRACE_MS`) for the DataItems to sync + ingest, then drain the
+session buffer into per-scenario rows. The advisory "wake the watch" dialog (`requestEndSession`) now
+fires **only on a true `DISCONNECTED`** link status (not `DOZING`) — a reachable/dozing watch goes
+straight to the FLUSH path. **Auto-wake is best-effort** (a deeply-Doze/unreachable watch may not get
+the command); the manual tap is the fallback and **no data is lost** because the store is durable.
+
+**Reliability ceiling (verified research, recorded so it isn't re-litigated):** there is **no
+documented guarantee** the Data Layer wakes a *deeply* dozing watch. Google's own deep-Doze wake is
+high-priority FCM — rejected here because it (a) only escapes throttling with a *user-visible*
+notification (a silent flush is exactly what FCM deprioritizes) and (b) needs an internet/Firebase
+path, contradicting this app's no-internet Bluetooth-direct design. Wi-Fi as the link was also
+rejected (Doze turns the Wi-Fi radio off — worse, not better).
 
 ## Sensor Data Specifics
 
@@ -253,11 +328,13 @@ data, lagged live preview.
 > HR screen-off without a wake lock but exposes **no EDA**, so it cannot carry this study's full signal
 > set. Not implemented; recorded-data completeness (above) was deemed sufficient for Phase 1.
 
-> **Future recording phase — edge-safety requirement.** When DB recording is wired up, screen-off
-> bursts mean a batch may land *after* the operator hits Stop, or a gap may straddle Start. The
-> recorder must therefore: (a) trigger a `flush()` (or accept a short grace window) at record
-> **start/stop** so window edges aren't truncated, and (b) bound the saved window by each sample's own
-> `t`, not by arrival time. Otherwise the unpredictable record windows can lose their edge samples.
+> **Recording phase — edge-safety (now implemented, see Store-and-Forward).** Screen-off bursts mean a
+> batch may land *after* the operator hits Stop, or a gap may straddle Start. Both are handled: (a)
+> readings are **persisted on the watch** and pulled at session end via remote FLUSH, so nothing is
+> lost to an unlucky record-window edge; and (b) `WatchSessionDrainer` attributes every reading to a
+> scenario by **its own corrected `t`** (timestamp-window), never by arrival order — with per-(scenario,
+> type) high-water marks so live-written and flushed rows never double up. Verified on-device 2026-06: a
+> ~38 s recording with the screen off after ~10 s produced a **gapless 1 Hz EDA + HR + IBI** timeline.
 
 > Open item: **battery cost** of the screen-on (no-Doze) mode for live sessions is unmeasured; quantify
 > with `dumpsys batterystats` over a ~15 min mock session before relying on long untethered sessions.
@@ -279,13 +356,24 @@ dropped. State is **inferred** in `WatchSensorReceiver`:
 
 ```
 DISCONNECTED
-  │ first /biometrix/sensors message arrives
+  │ first reading arrives
   ▼
-CONNECTED ──(STOP message)──────────────► DISCONNECTED   (instant, normal Stop)
-  │                                   ▲
-  │ messages keep arriving (~1 Hz)    │
-  └──(no message for > 6 s)───────────┘   (watchdog, abnormal drop)
+LIVE ◄─── reading within 6 s ───┐
+  │                              │
+  │ no reading > 6 s, but a      │ reading arrives again
+  │ HEARTBEAT within ~95 s       │
+  ▼                              │
+DOZING (buffering) ─────────────┘
+  │ no reading AND no heartbeat > ~95 s   │  (STOP message)
+  ▼                                       ▼
+DISCONNECTED  ◄───────────────────────────  (instant, normal Stop)
 ```
+
+`WatchSensorReceiver` exposes both a coarse `connectionState` (CONNECTED while LIVE *or* DOZING;
+DISCONNECTED only when truly gone — so existing consumers treat a dozing watch as present) and the
+finer `linkStatus { LIVE, DOZING, DISCONNECTED }`. The UI renders DOZING as **"Watch dozing —
+buffering"** so an expected screen-off gap doesn't look like a fault. `lastReadingMs` drives LIVE;
+`lastMessageMs` (any message, incl. HEARTBEAT) drives DOZING-vs-gone.
 
 ## Watch-Side Service Lifecycle (gotchas)
 
@@ -317,13 +405,30 @@ connection. The fixes, all in `WatchSensorService`:
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
 <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+<!-- Lets the phone remotely START the foreground health service from the (background-delivered)
+     command listener. Receiving a Data Layer message is NOT itself an FGS-from-background exemption
+     (API 31+), so this Companion exemption is required or remote START throws
+     ForegroundServiceStartNotAllowedException. -->
+<uses-permission android:name="android.permission.REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND" />
 ```
 
-Service declaration:
+Service declarations:
 ```xml
 <service android:name=".WatchSensorService" android:exported="false"
          android:foregroundServiceType="health" />
+
+<!-- Receives phone → watch commands; exported + MESSAGE_RECEIVED so the system can deliver (and
+     launch the app) even when the watch app is backgrounded — the mechanism behind remote wake. -->
+<service android:name=".WatchCommandListenerService" android:exported="true">
+  <intent-filter>
+    <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+    <data android:scheme="wear" android:host="*" android:pathPrefix="/biometrix/command" />
+  </intent-filter>
+</service>
 ```
+The watch also advertises a `biometrix_watch` capability (`wear/src/main/res/values/wear.xml`) so the
+phone's `WatchCommandSender` can resolve its node.
 
 > **Runtime grants on API 36+:** HR/EDA require `android.permission.health.READ_HEART_RATE` **and**
 > the Samsung `READ_ADDITIONAL_HEALTH_DATA` — `BODY_SENSORS` alone returns PERMISSION_ERROR.
@@ -335,14 +440,18 @@ Service declaration:
 
 ```xml
 <service android:name=".data.sensor.watch.WatchListenerService" android:exported="true">
-  <intent-filter>
+  <intent-filter>   <!-- live readings + heartbeat -->
     <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
     <data android:scheme="wear" android:host="*" android:pathPrefix="/biometrix/sensors" />
+  </intent-filter>
+  <intent-filter>   <!-- historical store flush (DataItems) -->
+    <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
+    <data android:scheme="wear" android:host="*" android:pathPrefix="/biometrix/flush" />
   </intent-filter>
 </service>
 ```
 Plus `app/src/main/res/values/wear.xml` declaring the `biometrix_phone` capability. No body-sensor
-permissions on the tablet — it only receives messages.
+permissions on the tablet — it only receives messages and DataItems.
 
 ## Project / Build Setup
 
@@ -395,13 +504,16 @@ on the watch by `WatchDataSender` (see *Transport*).
 | `availableTrackers` | `StateFlow<List<String>>` | trackers the watch reports as supported |
 | `batteryLevel` | `StateFlow<Int?>` | watch battery % |
 
-### Recording / Database Integration
+### Recording / Database Integration (implemented 2026-06)
 
-**Currently out of scope (Phase 1 = live display only).** No Room changes, no new `SensorType`
-values, no export wiring. The watch is a live data source for evaluating signal availability and
-accuracy against the MindField sensor. A future phase would map HR→`HEART_RATE`,
-IBI→`ESENSE_RR_INTERVAL`, EDA→`GSR` (or new `SensorType` values), bump the DB, and extend export —
-mirroring the eSense Pulse recording flow.
+Watch readings are recorded to the DB and export. Type mapping: **HR → `SensorType.HEART_RATE`**,
+**IBI → `SensorType.WATCH_IBI`** (a distinct value so watch HRV is attributable vs. eSense RR),
+**EDA → `SensorType.EDA`**. The DB is at version 2 (`WATCH_IBI` added); enums store as strings under
+`fallbackToDestructiveMigration`, so no hand-written `Migration` was needed. Export maps `WATCH_IBI`
+to `"watch_ibi"` in both JSON (`SessionExportMapper`) and CSV (`SessionExportService`). The
+session-long buffer + `WatchSessionDrainer` (per-(scenario,type) timestamp-window attribution, with
+high-water-mark de-dup against live-written rows) handle live readings and flushed history identically.
+See **Store-and-Forward + Remote Flush**.
 
 ## Troubleshooting and Edge Cases
 

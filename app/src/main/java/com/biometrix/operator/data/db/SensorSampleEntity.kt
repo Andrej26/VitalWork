@@ -9,7 +9,14 @@ enum class SensorType {
     HEART_RATE,
     RESPIRATION,
     ESENSE_RR_INTERVAL,
-    EDA
+    EDA,
+
+    /**
+     * Galaxy Watch inter-beat interval (ms). Kept distinct from [ESENSE_RR_INTERVAL] so watch HRV
+     * data is attributable to its source in export/analysis (eSense RR comes from a different sensor
+     * with different validity conventions). Galaxy Watch HR reuses [HEART_RATE].
+     */
+    WATCH_IBI
 }
 
 @Entity(

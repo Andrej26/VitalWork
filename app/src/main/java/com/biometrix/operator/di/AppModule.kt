@@ -61,6 +61,12 @@ abstract class AppBindsModule {
     @Binds
     @Singleton
     abstract fun bindSettingsRepository(impl: SharedPrefsSettingsRepository): SettingsRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindWatchCommandSender(
+        impl: com.biometrix.operator.data.sensor.watch.WatchCommandSenderImpl
+    ): com.biometrix.operator.data.sensor.watch.WatchCommandSender
 }
 
 @Module

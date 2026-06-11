@@ -52,6 +52,7 @@ class SessionControlViewModel @Inject constructor(
     private val vrEventReceiver: VrEventReceiver,
     private val locationChecker: LocationChecker,
     private val readinessChecker: com.biometrix.operator.data.system.SystemReadinessChecker,
+    private val watchCommandSender: com.biometrix.operator.data.sensor.watch.WatchCommandSender,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -485,13 +486,15 @@ class SessionControlViewModel @Inject constructor(
 
     /**
      * Entry point for the End-Session button. If a Galaxy Watch was in use this session but its link
-     * is currently down, show the recovery dialog first (the watch may hold undelivered sleep-buffered
-     * EDA). Otherwise finalize immediately.
+     * is **truly DISCONNECTED** (not merely dozing/buffering), show the recovery dialog first — the
+     * watch may hold undelivered stored readings the remote flush can't reach. A *dozing* watch is
+     * fine: it's reachable, so we go straight to [endSessionAndSave], which sends FLUSH and waits.
      */
     fun requestEndSession() {
         val watchWasInUse = connectionRepository.watchBatteryLevel.value != null
-        val watchDown = watchConnectionState.value != ConnectionState.CONNECTED
-        if (watchWasInUse && watchDown) {
+        val watchGone = connectionRepository.watchLinkStatus.value ==
+            com.biometrix.operator.data.sensor.watch.WatchLinkStatus.DISCONNECTED
+        if (watchWasInUse && watchGone) {
             _showWatchRecoveryDialog.value = true
         } else {
             endSessionAndSave()
@@ -518,14 +521,21 @@ class SessionControlViewModel @Inject constructor(
                     sensorRecordingRepository.stopRecording()
                 }
 
-                // If the watch reconnected, give its sleep-buffered EDA a brief moment to flush in
-                // before we slice — bounded so a dead/absent watch never hangs End Session.
-                if (watchConnectionState.value == ConnectionState.CONNECTED) {
+                // Remote wake/flush: ask the watch to push its durable store (EDA + HR + IBI) so the
+                // dataset is complete even after a screen-off/Doze session. Best-effort — if the watch
+                // is unreachable the command simply doesn't land; the operator's manual tap (recovery
+                // dialog) is the fallback, and no data is lost (the watch keeps it until acked).
+                val watchWasInUse = connectionRepository.watchBatteryLevel.value != null
+                if (watchWasInUse) {
+                    runCatching { watchCommandSender.sendFlush() }
+                    // Bounded wait for the flushed DataItem(s) to sync + ingest before we slice.
+                    // Bounded so an unreachable watch never hangs End Session.
                     delay(WATCH_FLUSH_GRACE_MS)
                 }
 
-                // Drain the session-long watch EDA buffer into scenarios BY TIMESTAMP WINDOW, before
-                // endSession rolls up the per-type sample counts. Scenarios now all have endedAt set.
+                // Drain the session-long watch buffer (EDA/HR/IBI, incl. flushed history) into scenarios
+                // BY TIMESTAMP WINDOW, before endSession rolls up the per-type sample counts. Scenarios
+                // now all have endedAt set.
                 val scenarios = scenarioRepository.getScenariosForSessionOnce(sessionId)
                 sensorRecordingRepository.drainAndFinalizeWatchEda(scenarios)
 

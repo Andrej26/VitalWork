@@ -45,6 +45,7 @@ fun WatchSensorScreen(
     viewModel: WatchSensorViewModel = hiltViewModel()
 ) {
     val connection by viewModel.connectionState.collectAsState()
+    val linkStatus by viewModel.linkStatus.collectAsState()
     val readings by viewModel.latestByType.collectAsState()
     val trackers by viewModel.availableTrackers.collectAsState()
     val battery by viewModel.batteryLevel.collectAsState()
@@ -94,12 +95,18 @@ fun WatchSensorScreen(
                 Column(Modifier.padding(16.dp)) {
                     Text("Channel", style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    // Prefer the finer link status so an expected screen-off/Doze gap reads as
+                    // "buffering", not a scary "Disconnected". Fall back to the coarse state only for
+                    // CONNECTING/ERROR, which the link status doesn't model.
                     Text(
                         text = when (connection) {
-                            ConnectionState.CONNECTED -> "Connected"
                             ConnectionState.CONNECTING -> "Connecting…"
                             ConnectionState.ERROR -> "Error"
-                            ConnectionState.DISCONNECTED -> "Disconnected"
+                            else -> when (linkStatus) {
+                                com.biometrix.operator.data.sensor.watch.WatchLinkStatus.LIVE -> "Connected"
+                                com.biometrix.operator.data.sensor.watch.WatchLinkStatus.DOZING -> "Watch dozing — buffering"
+                                com.biometrix.operator.data.sensor.watch.WatchLinkStatus.DISCONNECTED -> "Disconnected"
+                            }
                         },
                         style = MaterialTheme.typography.titleMedium
                     )

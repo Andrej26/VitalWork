@@ -50,16 +50,36 @@ class WatchSensorReceiver @Inject constructor(
         // so its (arrival − t) is a trustworthy phone↔watch clock offset. Burst-delivered samples
         // have a much larger (arrival − t) and must NOT set the offset.
         const val LIVE_READING_WINDOW_MS = 2_000L
+
+        // The watch beats a HEARTBEAT every ~30 s. If no readings arrive but a heartbeat lands within
+        // this window, the watch is alive-but-dozing (buffering), NOT gone — so we show DOZING instead
+        // of DISCONNECTED. ~95 s ≈ 3 missed beats of headroom so a single dropped beat doesn't flap.
+        // Only after this longer silence (no readings AND no heartbeat) do we declare DISCONNECTED.
+        const val HEARTBEAT_TIMEOUT_MS = 95_000L
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    /** Last time ANY message arrived (reading, heartbeat, capabilities) — drives "truly gone". */
     @Volatile
     private var lastMessageMs: Long = 0L
+    /** Last time an actual sensor READING arrived — drives LIVE vs DOZING. */
+    @Volatile
+    private var lastReadingMs: Long = 0L
     private var watchdogJob: Job? = null
 
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
+
+    /**
+     * Finer-grained watch link state for the UI and session-end logic. Distinguishes a watch that is
+     * **dozing/buffering** (still alive, just delivering in bursts during Doze) from one that is truly
+     * **disconnected** — so the operator isn't alarmed by an *expected* screen-off gap. [connectionState]
+     * stays the coarse CONNECTED/DISCONNECTED that the rest of the app consumes (DOZING maps to CONNECTED
+     * there, since a dozing watch is not "gone").
+     */
+    private val _linkStatus = MutableStateFlow(WatchLinkStatus.DISCONNECTED)
+    val linkStatus: StateFlow<WatchLinkStatus> = _linkStatus.asStateFlow()
 
     private val _latestByType = MutableStateFlow<Map<String, WatchReading>>(emptyMap())
     /** Most recent reading per sensor type (HR, IBI, EDA, BATTERY, …). */
@@ -73,15 +93,17 @@ class WatchSensorReceiver @Inject constructor(
     val batteryLevel: StateFlow<Int?> = _batteryLevel.asStateFlow()
 
     /**
-     * Per-sample EDA stream (carries the watch-stamped timestamp + µS value), used by the recording
-     * layer. Hot, no replay; DROP_OLDEST so a slow collector can never block the binder thread that
-     * calls [onReading]. Apply [correctedTimestamp] to each reading's timestamp before storage.
+     * Per-sample stream of the recordable watch sensors — EDA, HR, and IBI — each carrying its
+     * watch-stamped timestamp, type, and value. Used by the recording layer. Hot, no replay;
+     * DROP_OLDEST so a slow collector can never block the binder thread that calls [onReading].
+     * Apply [correctedTimestamp] to each reading's timestamp before storage. Larger buffer than the
+     * old EDA-only flow because a screen-off burst can carry HR+IBI+EDA together.
      */
-    private val _edaSampleFlow = MutableSharedFlow<WatchReading>(
-        extraBufferCapacity = 64,
+    private val _watchSampleFlow = MutableSharedFlow<WatchReading>(
+        extraBufferCapacity = 256,
         onBufferOverflow = BufferOverflow.DROP_OLDEST
     )
-    val edaSampleFlow: SharedFlow<WatchReading> = _edaSampleFlow.asSharedFlow()
+    val watchSampleFlow: SharedFlow<WatchReading> = _watchSampleFlow.asSharedFlow()
 
     /**
      * Phone↔watch clock offset in ms: `phoneClock ≈ watchClock + offsetMs`. Captured once from the
@@ -130,12 +152,35 @@ class WatchSensorReceiver @Inject constructor(
 
     fun onReading(reading: WatchReading) {
         val arrivalMs = System.currentTimeMillis()
+        lastReadingMs = arrivalMs // an actual reading → eligible for LIVE
         markActivity(arrivalMs)
         maybeCaptureClockOffset(reading, arrivalMs)
         _latestByType.value = _latestByType.value.toMutableMap().apply { put(reading.type, reading) }
         when (reading.type) {
             "BATTERY" -> _batteryLevel.value = reading.value.toInt()
-            "EDA" -> _edaSampleFlow.tryEmit(reading)
+            "EDA", "HR", "IBI" -> _watchSampleFlow.tryEmit(reading)
+        }
+    }
+
+    /**
+     * A heartbeat arrived: the watch is alive but may be dozing (no readings flowing). Counts as
+     * activity (keeps us off DISCONNECTED) but NOT as a reading (so the status can be DOZING, not LIVE).
+     */
+    fun onHeartbeat() {
+        markActivity(System.currentTimeMillis())
+    }
+
+    /**
+     * Feed historical readings flushed from the watch's durable store (DataItems) into the same
+     * sample stream the live path uses, so the recording layer's session buffer + End-Session drain
+     * handle them identically. These are NOT "live" (their watch-stamp is old), so they must not move
+     * the connection state or the clock offset — hence this bypasses [markActivity]/offset capture.
+     */
+    fun onFlushedReadings(readings: List<WatchReading>) {
+        readings.forEach { reading ->
+            if (reading.type == "EDA" || reading.type == "HR" || reading.type == "IBI") {
+                _watchSampleFlow.tryEmit(reading)
+            }
         }
     }
 
@@ -158,15 +203,38 @@ class WatchSensorReceiver @Inject constructor(
     fun onStop() {
         watchdogJob?.cancel(); watchdogJob = null
         _connectionState.value = ConnectionState.DISCONNECTED
+        _linkStatus.value = WatchLinkStatus.DISCONNECTED
+        lastReadingMs = 0L
         // Force a fresh clock offset on the next connection.
         offsetCaptured = false
     }
 
-    /** Record a message arrival and ensure the inactivity watchdog is running. */
+    /** Record a message arrival, recompute the link status, and ensure the watchdog is running. */
     private fun markActivity(arrivalMs: Long) {
         lastMessageMs = arrivalMs
-        _connectionState.value = ConnectionState.CONNECTED
+        recomputeStatus(arrivalMs)
         ensureWatchdog()
+    }
+
+    /**
+     * Derive the three-way link status from the two timestamps:
+     *  - a recent **reading** → LIVE,
+     *  - else a recent **message** (heartbeat) → DOZING (alive, buffering),
+     *  - else → DISCONNECTED (truly gone).
+     * [connectionState] mirrors this coarsely: LIVE/DOZING → CONNECTED, DISCONNECTED → DISCONNECTED,
+     * so existing consumers treat a dozing watch as still present.
+     */
+    private fun recomputeStatus(now: Long) {
+        val status = when {
+            now - lastReadingMs <= INACTIVITY_TIMEOUT_MS -> WatchLinkStatus.LIVE
+            now - lastMessageMs <= HEARTBEAT_TIMEOUT_MS -> WatchLinkStatus.DOZING
+            else -> WatchLinkStatus.DISCONNECTED
+        }
+        _linkStatus.value = status
+        _connectionState.value =
+            if (status == WatchLinkStatus.DISCONNECTED) ConnectionState.DISCONNECTED
+            else ConnectionState.CONNECTED
+        if (status == WatchLinkStatus.DISCONNECTED) offsetCaptured = false
     }
 
     @Synchronized
@@ -175,12 +243,11 @@ class WatchSensorReceiver @Inject constructor(
         watchdogJob = scope.launch {
             while (isActive) {
                 delay(POLL_INTERVAL_MS)
-                if (System.currentTimeMillis() - lastMessageMs > INACTIVITY_TIMEOUT_MS) {
-                    _connectionState.value = ConnectionState.DISCONNECTED
-                    // A real drop (6 s silence) — recompute the offset on the next reconnect.
-                    offsetCaptured = false
-                }
+                recomputeStatus(System.currentTimeMillis())
             }
         }
     }
 }
+
+/** Three-way Galaxy Watch link state for UI + session-end logic. See [WatchSensorReceiver.linkStatus]. */
+enum class WatchLinkStatus { LIVE, DOZING, DISCONNECTED }

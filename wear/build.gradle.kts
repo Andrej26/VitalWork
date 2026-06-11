@@ -61,4 +61,7 @@ dependencies {
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar"))))
 
     debugImplementation(libs.androidx.compose.ui.tooling)
+
+    // Host unit tests (WatchSampleStore truncate-after-ack logic)
+    testImplementation(libs.junit)
 }
