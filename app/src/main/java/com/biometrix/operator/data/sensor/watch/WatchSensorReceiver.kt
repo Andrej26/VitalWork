@@ -128,11 +128,9 @@ class WatchSensorReceiver @Inject constructor(
 
     /**
      * Snapshot of the low-battery alert tier from the **last-known** battery level, read on demand
-     * (e.g. when the Home screen resumes between sessions). Deliberately ignores the current
-     * connection state: the check happens right at the start-a-new-session decision point, so the
-     * last value the watch reported is the truth we care about even if the watch was just set down.
-     * `_batteryLevel` is never cleared on disconnect, so this stays meaningful until a fresh reading
-     * arrives (or the process is recreated). CRITICAL is checked first so it always wins.
+     * (e.g. when the Home screen resumes between sessions). Reflects the last value the watch reported
+     * while connected; a disconnect clears `_batteryLevel` (see [clearLiveData]) so a watch that is no
+     * longer connected leaves no stale warning. CRITICAL is checked first so it always wins.
      *
      * Boundary semantics: `<=`, matching the eSense Pulse low-battery check.
      */
@@ -207,6 +205,19 @@ class WatchSensorReceiver @Inject constructor(
         lastReadingMs = 0L
         // Force a fresh clock offset on the next connection.
         offsetCaptured = false
+        clearLiveData()
+    }
+
+    /**
+     * Drop the last-seen live values so a disconnected watch doesn't leave stale data on screen: the
+     * Sensors screen's "Live readings" return to "Waiting for data…", and the Home low-battery banner
+     * clears (no more warning for a watch that is no longer connected). Called on any transition to
+     * DISCONNECTED — explicit Stop ([onStop]) or the watchdog declaring the link gone ([recomputeStatus]).
+     */
+    private fun clearLiveData() {
+        _latestByType.value = emptyMap()
+        _batteryLevel.value = null
+        _availableTrackers.value = emptyList()
     }
 
     /** Record a message arrival, recompute the link status, and ensure the watchdog is running. */
@@ -225,6 +236,7 @@ class WatchSensorReceiver @Inject constructor(
      * so existing consumers treat a dozing watch as still present.
      */
     private fun recomputeStatus(now: Long) {
+        val previous = _linkStatus.value
         val status = when {
             now - lastReadingMs <= INACTIVITY_TIMEOUT_MS -> WatchLinkStatus.LIVE
             now - lastMessageMs <= HEARTBEAT_TIMEOUT_MS -> WatchLinkStatus.DOZING
@@ -234,7 +246,12 @@ class WatchSensorReceiver @Inject constructor(
         _connectionState.value =
             if (status == WatchLinkStatus.DISCONNECTED) ConnectionState.DISCONNECTED
             else ConnectionState.CONNECTED
-        if (status == WatchLinkStatus.DISCONNECTED) offsetCaptured = false
+        if (status == WatchLinkStatus.DISCONNECTED) {
+            offsetCaptured = false
+            // Clear stale live values only on the edge into DISCONNECTED (the watchdog polls ~1 Hz,
+            // so guard against re-clearing every tick while the watch stays gone).
+            if (previous != WatchLinkStatus.DISCONNECTED) clearLiveData()
+        }
     }
 
     @Synchronized

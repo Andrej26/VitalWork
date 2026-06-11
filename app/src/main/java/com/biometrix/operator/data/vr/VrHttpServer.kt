@@ -136,10 +136,22 @@ class VrHttpServer @Inject constructor(
     private suspend fun RoutingContext.authorized(): Boolean {
         val questId = call.request.headers[QUEST_ID_HEADER]
         val sourceIp = call.request.origin.remoteAddress
+        // DIAGNOSTIC (2026-06-11): surface the header the Quest actually sends vs the bonded id, so we
+        // can confirm whether a questId mismatch (real HTTP header vs IP-fallback from the blank UDP
+        // broadcast) is what was rejecting a correctly-bonded headset. Remove once verified.
+        val bondedId = pairingManager.bondedQuestId()
+        if (!questId.isNullOrBlank() && questId != bondedId) {
+            linkLog.add(
+                VrLinkLog.Level.WARNING,
+                "Quest-Id mismatch on ${call.request.path()}: header='$questId' vs bonded='$bondedId' " +
+                    "(allowed by IP-only test gate)"
+            )
+        }
         if (!pairingManager.isAuthorized(questId, sourceIp)) {
             linkLog.add(
                 VrLinkLog.Level.WARNING,
-                "Rejected unpaired request from $sourceIp ${call.request.path()}"
+                "Rejected unpaired request from $sourceIp ${call.request.path()} " +
+                    "(header questId='$questId', bonded='$bondedId')"
             )
             call.respond(HttpStatusCode.Forbidden, ErrorResponse(reason = "not_paired"))
             return false

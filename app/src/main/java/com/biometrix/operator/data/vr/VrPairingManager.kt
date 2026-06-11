@@ -100,8 +100,13 @@ class VrPairingManager @Inject constructor(
         if (_pairingState.value != PairingState.BONDED) return false
         val bonded = _candidate.value ?: return false
         if (sourceIp != bonded.sourceIp) return false
+        
         return questId.isNullOrBlank() || questId == bonded.questId
     }
+
+    /** The bonded Quest's id (or null when unpaired) — exposed for diagnostic logging of rejections. */
+    @Synchronized
+    fun bondedQuestId(): String? = _candidate.value?.questId
 
     /** True when bonded to this specific Quest — used to (re)send the pairing reply to it. */
     @Synchronized
