@@ -98,7 +98,7 @@ class SessionExportService @Inject constructor(
         val hrCount = samples.count { it.sensorType == SensorType.HEART_RATE }
         val rrCount = samples.count { it.sensorType == SensorType.ESENSE_RR_INTERVAL }
         val respCount = samples.count { it.sensorType == SensorType.RESPIRATION }
-        val gsrCount = samples.count { it.sensorType == SensorType.GSR }
+        val edaCount = samples.count { it.sensorType == SensorType.EDA }
 
         val csvContent = buildString {
             appendLine("# session_code,$sessionCode")
@@ -120,7 +120,7 @@ class SessionExportService @Inject constructor(
             appendLine("# hr_samples,$hrCount")
             if (rrCount > 0) appendLine("# rr_interval_samples,$rrCount")
             appendLine("# respiration_samples,$respCount")
-            if (gsrCount > 0) appendLine("# gsr_samples,$gsrCount")
+            if (edaCount > 0) appendLine("# eda_samples,$edaCount")
             if (hrGaps.isNotEmpty()) {
                 appendLine("# hr_gaps,${hrGaps.size}")
                 appendLine("# hr_gap_total_ms,${hrGaps.sumOf { it.gapMs }}")
@@ -141,7 +141,7 @@ class SessionExportService @Inject constructor(
                     SensorType.HEART_RATE -> "heart_rate"
                     SensorType.ESENSE_RR_INTERVAL -> "rr_interval"
                     SensorType.RESPIRATION -> "respiration"
-                    SensorType.GSR -> "gsr"
+                    SensorType.EDA -> "eda"
                 }
                 appendLine("${sample.timestampMs},${sample.elapsedMs},$sensorType,${sample.value}")
             }

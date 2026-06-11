@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.BluetoothDisabled
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Watch
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Sensors
@@ -82,6 +83,7 @@ import com.biometrix.operator.data.db.SessionStatus
 import com.biometrix.operator.data.model.ConnectionState
 import com.biometrix.operator.data.recording.model.DataRecordingState
 import com.biometrix.operator.data.sensor.ble.model.BleDevice
+import com.biometrix.operator.data.sensor.watch.WatchBatteryAlert
 import com.biometrix.operator.data.system.SessionPrerequisite
 import com.biometrix.operator.presentation.components.ReadinessWarningCard
 import com.biometrix.operator.presentation.components.onPermissionDenied
@@ -118,12 +120,17 @@ fun SessionControlScreen(
     val vrConnectionState by viewModel.vrConnectionState.collectAsState()
     val pulseSensorState by viewModel.bleConnectionState.collectAsState()
     val respirationSensorState by viewModel.respirationState.collectAsState()
+    val watchConnectionState by viewModel.watchConnectionState.collectAsState()
 
     // Live sensor values
     val heartRate by viewModel.heartRate.collectAsState()
     val bleBatteryLevel by viewModel.bleBatteryLevel.collectAsState()
     val respirationRate by viewModel.respirationRate.collectAsState()
     val pulseLatestRr by viewModel.pulseLatestRr.collectAsState()
+    val watchEda by viewModel.watchEda.collectAsState()
+    val watchBatteryLevel by viewModel.watchBatteryLevel.collectAsState()
+    val watchBatteryAlert by viewModel.watchBatteryAlert.collectAsState()
+    val showWatchRecoveryDialog by viewModel.showWatchRecoveryDialog.collectAsState()
 
     // Recording state
     val recordingUiState by viewModel.recordingUiState.collectAsState()
@@ -170,20 +177,8 @@ fun SessionControlScreen(
         viewModel.setBlePermissionsGranted(permissions.values.all { it })
     }
 
-    val wifiSettingsLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { /* NetworkCallback in MdnsDiscoveryService handles auto-restart */ }
-
-    @Suppress("DEPRECATION")
-    val wifiSettingsIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        Intent(Settings.Panel.ACTION_WIFI)
-    } else {
-        Intent(Settings.ACTION_WIFI_SETTINGS)
-    }
-
-    // VR biofeedback state
+    // VR auto-recording cue (set when the Quest's scenario_start triggers recording)
     val vrTriggeredRecording by viewModel.vrTriggeredRecording.collectAsState()
-    val lastVrBiofeedbackEvent by viewModel.lastVrBiofeedbackEvent.collectAsState()
 
     // Low signal warning
     val respirationLowSignalWarning by viewModel.respirationLowSignalWarning.collectAsState()
@@ -191,19 +186,12 @@ fun SessionControlScreen(
     // Respiration disconnect reason (for error dialog)
     val respirationDisconnectReason by viewModel.respirationDisconnectReason.collectAsState()
 
-    // VR mDNS discovery state
-    val discoveredVrDevices by viewModel.discoveredVrDevices.collectAsState()
-    val isVrDiscovering by viewModel.isVrDiscovering.collectAsState()
-    val selectedVrDevice by viewModel.selectedVrDevice.collectAsState()
-    val vrIsReconnecting by viewModel.vrIsReconnecting.collectAsState()
-    val isVrWifiAvailable by viewModel.isVrWifiAvailable.collectAsState()
-    val isStressChamberSceneActive by viewModel.isStressChamberSceneActive.collectAsState()
-
     // Convert DeviceState to ConnectionState for UI consistency
     val respirationConnectionState = respirationSensorState.toConnectionState()
 
     val isAnySensorConnected = pulseSensorState == ConnectionState.CONNECTED ||
-            respirationConnectionState == ConnectionState.CONNECTED
+            respirationConnectionState == ConnectionState.CONNECTED ||
+            watchConnectionState == ConnectionState.CONNECTED
 
     val context = LocalContext.current
 
@@ -304,7 +292,7 @@ fun SessionControlScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showBackDialog = false
-                    viewModel.endSessionAndSave()
+                    viewModel.requestEndSession()
                 }) {
                     Text("Save & Exit")
                 }
@@ -357,7 +345,7 @@ fun SessionControlScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showEndSessionConfirmation = false
-                    viewModel.endSessionAndSave()
+                    viewModel.requestEndSession()
                 }) {
                     Text("End Session")
                 }
@@ -365,6 +353,36 @@ fun SessionControlScreen(
             dismissButton = {
                 TextButton(onClick = { showEndSessionConfirmation = false }) {
                     Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Watch EDA recovery — the watch link is down at End Session, so it may still hold sleep-buffered
+    // EDA it never delivered. Prompt the operator to wake it before finalizing (data isn't lost; the
+    // watch buffers locally and flushes on wake). "End anyway" finalizes with whatever has arrived.
+    if (showWatchRecoveryDialog) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissWatchRecoveryDialog() },
+            icon = {
+                Icon(Icons.Default.Watch, contentDescription = null)
+            },
+            title = { Text("Galaxy Watch not reachable") },
+            text = {
+                Text(
+                    "The watch link is down. It may still hold EDA recorded while it was asleep. " +
+                        "Wake the watch (tap its screen) and make sure Bluetooth is on to recover it, " +
+                        "then end the session. You can also end now and finalize with the data already received."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.dismissWatchRecoveryDialog() }) {
+                    Text("Wait & recover")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.confirmEndSessionAnyway() }) {
+                    Text("End anyway", color = MaterialTheme.colorScheme.error)
                 }
             }
         )
@@ -515,6 +533,21 @@ fun SessionControlScreen(
                 }
             }
 
+            // Galaxy Watch low-battery warning — surfaced before/while a session runs so the operator
+            // doesn't start a long session on a dying watch (and risk losing the End-Session flush).
+            if (watchBatteryAlert != WatchBatteryAlert.NONE && watchBatteryLevel != null) {
+                WatchBatteryWarningBanner(
+                    level = watchBatteryLevel!!,
+                    critical = watchBatteryAlert == WatchBatteryAlert.CRITICAL
+                )
+            }
+
+            // Galaxy Watch link-lost warning — the watch buffers EDA locally, so data isn't lost on a
+            // brief drop; warn so the operator restores Bluetooth (don't pause the session).
+            if (watchBatteryLevel != null && watchConnectionState != ConnectionState.CONNECTED) {
+                WatchLinkLostBanner()
+            }
+
             // Mindfield eSense device group
             val eSenseConnectionState = when {
                 pulseSensorState == ConnectionState.CONNECTED ||
@@ -568,6 +601,27 @@ fun SessionControlScreen(
                 )
             }
 
+            // Galaxy Watch 8 device group — live EDA (µS). Phone-side recording wiring; the watch
+            // streams EDA over the Data Layer and is captured/sliced into scenarios on the tablet.
+            DeviceSensorGroup(
+                deviceName = "Galaxy Watch 8",
+                connectionState = watchConnectionState,
+                batteryLevel = watchBatteryLevel
+            ) {
+                LiveSensorCard(
+                    icon = Icons.Default.Watch,
+                    label = "EDA",
+                    value = if (watchConnectionState == ConnectionState.CONNECTED && watchEda != null)
+                        String.format(java.util.Locale.US, "%.2f", watchEda)
+                    else "--",
+                    unit = "µS",
+                    connectionState = watchConnectionState,
+                    sampleCount = recordingUiState.edaSampleCount,
+                    batteryLevel = watchBatteryLevel,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
             // VR Controls Section
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -599,109 +653,20 @@ fun SessionControlScreen(
                         ConnectionStatusBadge(state = vrConnectionState)
                     }
 
-                    val isVrConnectedOrConnecting = vrConnectionState == ConnectionState.CONNECTED ||
-                            vrConnectionState == ConnectionState.CONNECTING
-                    if (!isVrWifiAvailable && !isVrConnectedOrConnecting) {
-                        Card(
-                            onClick = { wifiSettingsLauncher.launch(wifiSettingsIntent) },
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.errorContainer
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.WifiOff,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(24.dp),
-                                    tint = MaterialTheme.colorScheme.onErrorContainer
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "Wi-Fi Disabled",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Medium,
-                                        color = MaterialTheme.colorScheme.onErrorContainer
-                                    )
-                                    Text(
-                                        text = "Tap here to enable Wi-Fi.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onErrorContainer
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp),
-                                    tint = MaterialTheme.colorScheme.onErrorContainer
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
-                    if (isVrConnectedOrConnecting) {
-                        VrConnectedState(
-                            device = selectedVrDevice,
-                            connectionState = vrConnectionState,
-                            onDisconnect = { viewModel.disconnectVr() }
-                        )
-                    } else {
-                        VrScanningState(
-                            discoveredDevices = discoveredVrDevices,
-                            isDiscovering = isVrDiscovering,
-                            onSelectDevice = { viewModel.selectAndConnectVrDevice(it) },
-                            onRescan = { viewModel.rescanVrDevices() }
-                        )
-                    }
-
-                    if (vrConnectionState == ConnectionState.CONNECTED) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            FilledTonalButton(
-                                onClick = { viewModel.sendTutorialCommand() },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.PlayArrow,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Tutorial")
-                            }
-
-                            FilledTonalButton(
-                                onClick = {
-                                    viewModel.sendStartSceneCommand()
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                enabled = isAnySensorConnected
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.SkipNext,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Start StressChamber")
-                            }
-
-                            if (!isAnySensorConnected) {
-                                Text(
-                                    text = "Connect a sensor to enable scene start",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.error
-                                )
-                            }
-                        }
-                    }
+                    // The tablet is now an HTTP server: the Quest connects to us and drives
+                    // scenarios via POSTs. There is nothing to dial out to or command from here.
+                    // Connection is inferred from recent VR events; setup diagnostics (tablet
+                    // IP/port, event log) live on the dedicated VR screen.
+                    Text(
+                        text = when (vrConnectionState) {
+                            ConnectionState.CONNECTED ->
+                                "VR headset connected — scenarios are driven by the Quest."
+                            else ->
+                                "Waiting for the VR headset to connect. Open VR Control for the tablet address and event log."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 
@@ -800,7 +765,61 @@ fun SessionControlScreen(
                         )
                     }
 
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Watch,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Galaxy Watch EDA",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            text = if (watchConnectionState == ConnectionState.CONNECTED)
+                                "${recordingUiState.edaSampleCount} samples"
+                            else "Not connected",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
                     HorizontalDivider()
+
+                    // Manual test controls — start/stop recording from the phone before the VR
+                    // link drives it. TODO(remove once VR controls recording).
+                    val isIdle = recordingUiState.recordingState == DataRecordingState.IDLE
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Button(
+                            onClick = { viewModel.startManualRecording() },
+                            enabled = isIdle && isAnySensorConnected,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Start Recording")
+                        }
+                        OutlinedButton(
+                            onClick = { viewModel.stopManualRecording() },
+                            enabled = !isIdle,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Stop Recording")
+                        }
+                    }
 
                     if (vrTriggeredRecording) {
                         Row(
@@ -1206,119 +1225,6 @@ private fun respirationErrorMessage(reason: String): String = when {
 }
 
 @Composable
-private fun VrScanningState(
-    discoveredDevices: List<com.biometrix.operator.data.vr.model.DiscoveredVrDevice>,
-    isDiscovering: Boolean,
-    onSelectDevice: (com.biometrix.operator.data.vr.model.DiscoveredVrDevice) -> Unit,
-    onRescan: () -> Unit
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.weight(1f)
-        ) {
-            if (isDiscovering) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.dp
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Scanning for VR devices...",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                Text(
-                    text = "No devices found",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-        FilledTonalButton(
-            onClick = onRescan
-        ) {
-            Text(text = "Rescan")
-        }
-    }
-
-    if (discoveredDevices.isNotEmpty()) {
-        HorizontalDivider()
-        discoveredDevices.forEach { device ->
-            VrDiscoveredDeviceItem(device = device, onClick = { onSelectDevice(device) })
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun VrDiscoveredDeviceItem(
-    device: com.biometrix.operator.data.vr.model.DiscoveredVrDevice,
-    onClick: () -> Unit
-) {
-    Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = device.name,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = "${device.host}:${device.port}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun VrConnectedState(
-    device: com.biometrix.operator.data.vr.model.DiscoveredVrDevice?,
-    connectionState: ConnectionState,
-    onDisconnect: () -> Unit
-) {
-    if (device != null) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Text(
-                text = device.name,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = "${device.host}:${device.port}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-    OutlinedButton(
-        onClick = onDisconnect,
-        modifier = Modifier.fillMaxWidth(),
-        enabled = connectionState != ConnectionState.CONNECTING
-    ) {
-        Text(text = "Disconnect")
-    }
-}
-
-@Composable
 private fun SensorLostDuringRecordingBanner(sensorNames: List<String>) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1347,6 +1253,81 @@ private fun SensorLostDuringRecordingBanner(sensorNames: List<String>) {
                 Text(
                     text = "Recording continues — reconnect to resume data capture",
                     color = MaterialTheme.colorScheme.onErrorContainer,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WatchLinkLostBanner() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Watch,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onErrorContainer,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+                Text(
+                    text = "Galaxy Watch link lost",
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "EDA keeps buffering on the watch — turn its Bluetooth back on to recover it",
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WatchBatteryWarningBanner(level: Int, critical: Boolean) {
+    val container = if (critical) MaterialTheme.colorScheme.errorContainer
+                    else MaterialTheme.colorScheme.tertiaryContainer
+    val onContainer = if (critical) MaterialTheme.colorScheme.onErrorContainer
+                      else MaterialTheme.colorScheme.onTertiaryContainer
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = container)
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Warning,
+                contentDescription = null,
+                tint = onContainer,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+                Text(
+                    text = if (critical) "Galaxy Watch battery critical ($level%)"
+                           else "Galaxy Watch battery low ($level%)",
+                    color = onContainer,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Charge it before a long session — a dead watch can't deliver its buffered EDA",
+                    color = onContainer,
                     style = MaterialTheme.typography.bodySmall
                 )
             }

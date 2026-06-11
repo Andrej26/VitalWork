@@ -7,6 +7,8 @@ import com.biometrix.operator.data.model.ConnectionState
 import com.biometrix.operator.data.prefs.TutorialPreferencesRepository
 import com.biometrix.operator.data.repository.ConnectionRepository
 import com.biometrix.operator.data.repository.SessionRepository
+import com.biometrix.operator.data.sensor.watch.WatchBatteryAlert
+import com.biometrix.operator.data.sensor.watch.WatchSensorReceiver
 import com.biometrix.operator.data.system.SessionPrerequisite
 import com.biometrix.operator.data.system.SystemReadinessChecker
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -26,7 +28,8 @@ class HomeViewModel @Inject constructor(
     connectionRepository: ConnectionRepository,
     private val sessionRepository: SessionRepository,
     private val tutorialPreferences: TutorialPreferencesRepository,
-    private val readinessChecker: SystemReadinessChecker
+    private val readinessChecker: SystemReadinessChecker,
+    private val watchReceiver: WatchSensorReceiver
 ) : ViewModel() {
 
     val vrConnectionState: StateFlow<ConnectionState> = connectionRepository.vrConnectionState
@@ -40,6 +43,16 @@ class HomeViewModel @Inject constructor(
     val missingPrerequisites: StateFlow<Set<SessionPrerequisite>> =
         _missingPrerequisites.asStateFlow()
 
+    /**
+     * Galaxy Watch low-battery banner, snapshotted on each [refresh] (i.e. when Home resumes between
+     * sessions). Not a live passthrough — the banner only reflects the watch battery at the moment
+     * Home is shown, never while the operator is on other pages.
+     */
+    private val _watchBatteryAlert = MutableStateFlow(WatchBatteryAlert.NONE)
+    val watchBatteryAlert: StateFlow<WatchBatteryAlert> = _watchBatteryAlert.asStateFlow()
+    private val _watchBatteryLevel = MutableStateFlow<Int?>(null)
+    val watchBatteryLevel: StateFlow<Int?> = _watchBatteryLevel.asStateFlow()
+
     private var refreshJob: Job? = null
 
     /**
@@ -50,6 +63,10 @@ class HomeViewModel @Inject constructor(
      */
     fun refresh() {
         _missingPrerequisites.value = readinessChecker.missingPrerequisites()
+        // Watch battery is a live push value (no settings-lag like OS permissions), so read it once
+        // here and leave it out of the delayed re-check loop below.
+        _watchBatteryAlert.value = watchReceiver.currentBatteryAlert()
+        _watchBatteryLevel.value = watchReceiver.batteryLevel.value
         refreshJob?.cancel()
         refreshJob = viewModelScope.launch {
             for (delayMs in longArrayOf(350L, 800L)) {

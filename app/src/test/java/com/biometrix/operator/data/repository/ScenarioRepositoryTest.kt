@@ -89,7 +89,7 @@ class ScenarioRepositoryTest {
             ),
             SensorSampleEntity(
                 scenarioId = 1L, timestampMs = 2000L, elapsedMs = 1000L,
-                sensorType = SensorType.GSR, value = 1.2f
+                sensorType = SensorType.EDA, value = 1.2f
             )
         )
 
@@ -98,6 +98,6 @@ class ScenarioRepositoryTest {
         val retrieved = repository.getSamplesForScenario(1L)
         assertEquals(2, retrieved.size)
         assertEquals(1, repository.getSampleCountBySensorType(1L, SensorType.HEART_RATE))
-        assertEquals(1, repository.getSampleCountBySensorType(1L, SensorType.GSR))
+        assertEquals(1, repository.getSampleCountBySensorType(1L, SensorType.EDA))
     }
 }

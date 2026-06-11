@@ -10,6 +10,7 @@ import com.biometrix.operator.data.db.SessionDao
 import com.biometrix.operator.data.export.SessionExportService
 import com.biometrix.operator.data.export.SessionExporter
 import com.biometrix.operator.data.export.SessionUploader
+import com.biometrix.operator.data.export.upload.SessionHttpUploader
 import com.biometrix.operator.data.recording.ScenarioRecordingRepository
 import com.biometrix.operator.data.recording.ScenarioRecordingRepositoryImpl
 import com.biometrix.operator.data.repository.ScenarioRepository
@@ -17,15 +18,14 @@ import com.biometrix.operator.data.sensor.SensorDevice
 import com.biometrix.operator.data.sensor.audio.MindfieldRespiration
 import com.biometrix.operator.data.sensor.ble.BleManager
 import com.biometrix.operator.data.sensor.ble.BleManagerImpl
+import com.biometrix.operator.data.sensor.watch.WatchSensorReceiver
 import com.biometrix.operator.data.network.NetworkChecker
+import com.biometrix.operator.data.prefs.SettingsRepository
+import com.biometrix.operator.data.prefs.SharedPrefsSettingsRepository
 import com.biometrix.operator.data.system.LocationChecker
 import com.biometrix.operator.data.system.LocationCheckerImpl
 import com.biometrix.operator.data.system.SystemReadinessChecker
 import com.biometrix.operator.data.system.SystemReadinessCheckerImpl
-import com.biometrix.operator.data.vr.MdnsDiscoveryService
-import com.biometrix.operator.data.vr.VRConnectionManager
-import com.biometrix.operator.data.vr.VRWebSocketClient
-import com.biometrix.operator.data.vr.VrDeviceDiscovery
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -53,7 +53,11 @@ abstract class AppBindsModule {
 
     @Binds
     @Singleton
-    abstract fun bindSessionUploader(impl: SessionExportService): SessionUploader
+    abstract fun bindSessionUploader(impl: SessionHttpUploader): SessionUploader
+
+    @Binds
+    @Singleton
+    abstract fun bindSettingsRepository(impl: SharedPrefsSettingsRepository): SettingsRepository
 }
 
 @Module
@@ -100,18 +104,6 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideVRConnectionManager(networkChecker: NetworkChecker): VRConnectionManager {
-        return VRWebSocketClient(networkChecker)
-    }
-
-    @Provides
-    @Singleton
-    fun provideVrDeviceDiscovery(mdnsDiscoveryService: MdnsDiscoveryService): VrDeviceDiscovery {
-        return mdnsDiscoveryService
-    }
-
-    @Provides
-    @Singleton
     fun provideBleManager(
         @ApplicationContext context: Context
     ): BleManager {
@@ -130,8 +122,11 @@ object AppModule {
     fun provideScenarioRecordingRepository(
         bleManager: BleManager,
         @Named("respiration") respirationDevice: SensorDevice,
-        scenarioRepository: ScenarioRepository
+        scenarioRepository: ScenarioRepository,
+        watchReceiver: WatchSensorReceiver
     ): ScenarioRecordingRepository {
-        return ScenarioRecordingRepositoryImpl(bleManager, respirationDevice, scenarioRepository)
+        return ScenarioRecordingRepositoryImpl(
+            bleManager, respirationDevice, scenarioRepository, watchReceiver
+        )
     }
 }

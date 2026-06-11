@@ -25,6 +25,13 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // BioMetrix server upload config (read from local.properties; never committed).
+        // Null-safe so a machine without these keys still builds (falls back to empty string).
+        val biometrixBaseUrl = (localProps["BIOMETRIX_BASE_URL"] as String?).orEmpty()
+        val biometrixApiKey = (localProps["BIOMETRIX_API_KEY"] as String?).orEmpty()
+        buildConfigField("String", "BIOMETRIX_BASE_URL", "\"$biometrixBaseUrl\"")
+        buildConfigField("String", "BIOMETRIX_API_KEY", "\"$biometrixApiKey\"")
     }
 
     val keystorePath = localProps["KEYSTORE_PATH"] as String?
@@ -57,6 +64,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     testOptions {
         unitTests.isReturnDefaultValues = true
@@ -80,9 +88,23 @@ dependencies {
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
-    implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)
+
+    // VR link: embedded HTTP server (tablet receives the Quest's scenario-event POSTs)
+    implementation(libs.ktor.server.core)
+    implementation(libs.ktor.server.cio)
+    implementation(libs.ktor.server.content.negotiation)
+    implementation(libs.ktor.serialization.kotlinx.json)
     implementation(files("libs/eSense_sdk_2_lib.jar"))
+
+    // Session upload: HTTP client (tablet POSTs completed sessions to the BioMetrix server)
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.cio)
+    implementation(libs.ktor.client.content.negotiation)
+
+    // Wearable Data Layer (receive Galaxy Watch sensor stream over ChannelClient)
+    implementation(libs.play.services.wearable)
+    implementation(libs.kotlinx.coroutines.play.services)
 
     // Hilt Dependency Injection
     implementation(libs.hilt.android)
@@ -100,6 +122,9 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation("org.json:json:20240303")
+    testImplementation(libs.ktor.client.mock)
+    testImplementation(libs.ktor.client.content.negotiation)
+    testImplementation(libs.ktor.serialization.kotlinx.json)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))

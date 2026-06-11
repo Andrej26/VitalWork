@@ -2,6 +2,7 @@ package com.biometrix.operator.data.repository
 
 import com.biometrix.operator.data.db.ParticipantDao
 import com.biometrix.operator.data.db.ParticipantEntity
+import com.biometrix.operator.data.prefs.SettingsRepository
 import kotlinx.coroutines.flow.Flow
 import java.util.Locale
 import javax.inject.Inject
@@ -9,7 +10,8 @@ import javax.inject.Singleton
 
 @Singleton
 class ParticipantRepository @Inject constructor(
-    private val participantDao: ParticipantDao
+    private val participantDao: ParticipantDao,
+    private val settingsRepository: SettingsRepository
 ) {
     val allParticipants: Flow<List<ParticipantEntity>> = participantDao.getAllParticipants()
 
@@ -20,11 +22,14 @@ class ParticipantRepository @Inject constructor(
         participantDao.getParticipantByCode(code)
 
     /**
-     * Generates the next participant code in `P-NNN` format based on the current row count.
+     * Generates the next participant code in `<prefix>-NNN` format (e.g. `A-001`). The prefix is the
+     * per-device setting; the count is scoped to that prefix so each device numbers independently and
+     * codes never collide when several tablets test in parallel.
      */
     suspend fun generateNextParticipantCode(): String {
-        val nextIndex = participantDao.getParticipantCount() + 1
-        return String.format(Locale.US, "P-%03d", nextIndex)
+        val prefix = settingsRepository.getDevicePrefix()
+        val nextIndex = participantDao.getParticipantCountByPrefix(prefix) + 1
+        return String.format(Locale.US, "%s-%03d", prefix, nextIndex)
     }
 
     /**

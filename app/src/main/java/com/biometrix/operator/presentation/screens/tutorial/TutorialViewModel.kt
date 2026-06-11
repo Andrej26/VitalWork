@@ -14,9 +14,6 @@ import com.biometrix.operator.data.sensor.DeviceState
 import com.biometrix.operator.data.sensor.SensorDevice
 import com.biometrix.operator.data.sensor.ble.BleManager
 import com.biometrix.operator.data.sensor.ble.model.BleDevice
-import com.biometrix.operator.data.vr.VRConnectionManager
-import com.biometrix.operator.data.vr.VrDeviceDiscovery
-import com.biometrix.operator.data.vr.model.DiscoveredVrDevice
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,27 +35,22 @@ data class TutorialUiState(
     val locationEnabled: Boolean = true,
     // Respiration
     val respirationState: DeviceState = DeviceState.Disconnected,
-    val audioPermissionGranted: Boolean = false,
-    // VR
-    val vrConnectionState: ConnectionState = ConnectionState.DISCONNECTED,
-    val discoveredVrDevices: List<DiscoveredVrDevice> = emptyList(),
-    val isVrDiscovering: Boolean = false,
-    val selectedVrDevice: DiscoveredVrDevice? = null,
-    val isWifiAvailable: Boolean = true
+    val audioPermissionGranted: Boolean = false
 )
 
 @HiltViewModel
 class TutorialViewModel @Inject constructor(
     private val bleManager: BleManager,
     @Named("respiration") private val respirationSensor: SensorDevice,
-    private val vrWebSocketClient: VRConnectionManager,
-    private val mdnsDiscovery: VrDeviceDiscovery,
     private val tutorialPreferences: TutorialPreferencesRepository,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
-    /** Total number of tutorial steps */
-    val totalSteps: Int = 12
+    /**
+     * Total tutorial slides — must match the slide list in TutorialScreen (1 welcome + 3 heart-rate
+     * + 4 respiration + 1 complete = 9). Used to bound step navigation. The VR phase was removed.
+     */
+    val totalSteps: Int = 9
 
     private val _uiState = MutableStateFlow(TutorialUiState())
     val uiState: StateFlow<TutorialUiState> = _uiState.asStateFlow()
@@ -79,8 +71,6 @@ class TutorialViewModel @Inject constructor(
         )
         observeBleState()
         observeRespirationState()
-        observeVrState()
-        mdnsDiscovery.startDiscovery()
     }
 
     private fun observeBleState() {
@@ -110,37 +100,6 @@ class TutorialViewModel @Inject constructor(
         viewModelScope.launch {
             respirationSensor.state.collect { state ->
                 _uiState.update { it.copy(respirationState = state) }
-            }
-        }
-    }
-
-    private fun observeVrState() {
-        viewModelScope.launch {
-            vrWebSocketClient.connectionState.collect { state ->
-                _uiState.update { it.copy(vrConnectionState = state) }
-            }
-        }
-        viewModelScope.launch {
-            mdnsDiscovery.discoveredDevices.collect { devices ->
-                _uiState.update { it.copy(discoveredVrDevices = devices) }
-            }
-        }
-        viewModelScope.launch {
-            mdnsDiscovery.isDiscovering.collect { discovering ->
-                _uiState.update { it.copy(isVrDiscovering = discovering) }
-            }
-        }
-        viewModelScope.launch {
-            var wasUnavailable = false
-            mdnsDiscovery.isWifiAvailable.collect { available ->
-                _uiState.update { it.copy(isWifiAvailable = available) }
-                if (available && wasUnavailable &&
-                    !mdnsDiscovery.isDiscovering.value &&
-                    _uiState.value.vrConnectionState != ConnectionState.CONNECTED
-                ) {
-                    mdnsDiscovery.startDiscovery()
-                }
-                wasUnavailable = !available
             }
         }
     }
@@ -204,26 +163,6 @@ class TutorialViewModel @Inject constructor(
         }
     }
 
-    // ── VR ───────────────────────────────────────────────────────────────────
-
-    fun selectAndConnectVrDevice(device: DiscoveredVrDevice) {
-        _uiState.update { it.copy(selectedVrDevice = device) }
-        mdnsDiscovery.stopDiscovery()
-        vrWebSocketClient.connect(device.host)
-    }
-
-    fun rescanVrDevices() {
-        vrWebSocketClient.disconnect()
-        _uiState.update { it.copy(selectedVrDevice = null) }
-        mdnsDiscovery.startDiscovery()
-    }
-
-    fun disconnectVr() {
-        vrWebSocketClient.disconnect()
-        _uiState.update { it.copy(selectedVrDevice = null) }
-        mdnsDiscovery.startDiscovery()
-    }
-
     fun recheckLocationEnabled() {
         _uiState.update { it.copy(locationEnabled = isLocationEnabled()) }
     }
@@ -239,7 +178,6 @@ class TutorialViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         context.unregisterReceiver(locationReceiver)
-        mdnsDiscovery.stopDiscovery()
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────

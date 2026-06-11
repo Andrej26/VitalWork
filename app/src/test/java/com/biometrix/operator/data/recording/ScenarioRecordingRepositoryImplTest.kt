@@ -12,6 +12,7 @@ import com.biometrix.operator.data.repository.ScenarioRepository
 import com.biometrix.operator.data.sensor.DeviceState
 import com.biometrix.operator.data.sensor.FakeSensorDevice
 import com.biometrix.operator.data.sensor.ble.FakeBleManager
+import com.biometrix.operator.data.sensor.watch.WatchSensorReceiver
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -48,6 +49,7 @@ class ScenarioRecordingRepositoryImplTest {
         bleManager = bleManager,
         respirationDevice = respirationDevice,
         scenarioRepository = scenarioRepository,
+        watchReceiver = WatchSensorReceiver(),
         scope = backgroundScope
     )
 

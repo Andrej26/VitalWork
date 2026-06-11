@@ -34,7 +34,7 @@ data class SessionStatistics(
     val hrSampleCount: Int,
     val respirationSampleCount: Int,
     val rrIntervalSampleCount: Int,
-    val gsrSampleCount: Int
+    val edaSampleCount: Int
 )
 
 @Serializable

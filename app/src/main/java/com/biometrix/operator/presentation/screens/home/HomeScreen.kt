@@ -42,6 +42,7 @@ import com.biometrix.operator.data.system.SessionPrerequisite
 import com.biometrix.operator.data.system.SystemReadinessChecker
 import com.biometrix.operator.presentation.components.ConnectionStatusBadge
 import com.biometrix.operator.presentation.components.ReadinessWarningCard
+import com.biometrix.operator.presentation.components.WatchBatteryWarningCard
 import com.biometrix.operator.presentation.components.onPermissionDenied
 import com.biometrix.operator.service.BatteryOptimizationHelper
 import com.biometrix.operator.presentation.screens.home.components.PrimaryActionButton
@@ -53,6 +54,7 @@ fun HomeScreen(
     onNavigateToTutorial: () -> Unit,
     onNavigateToSensors: () -> Unit,
     onNavigateToVrControl: () -> Unit,
+    onNavigateToSettings: () -> Unit,
     onNavigateToSessions: () -> Unit,
     onNavigateToParticipantEntry: () -> Unit,
     onNavigateToSessionActive: (Long) -> Unit,
@@ -64,6 +66,8 @@ fun HomeScreen(
     val isStarting by viewModel.isStarting.collectAsState()
     val shouldAutoShowTutorial by viewModel.shouldAutoShowTutorial.collectAsState()
     val missingPrerequisites by viewModel.missingPrerequisites.collectAsState()
+    val watchBatteryAlert by viewModel.watchBatteryAlert.collectAsState()
+    val watchBatteryLevel by viewModel.watchBatteryLevel.collectAsState()
 
     val context = LocalContext.current
 
@@ -170,6 +174,11 @@ fun HomeScreen(
                     onFix = onFix
                 )
 
+                WatchBatteryWarningCard(
+                    alert = watchBatteryAlert,
+                    level = watchBatteryLevel
+                )
+
                 PrimaryActionButton(
                     title = if (currentActive != null) "Resume Active Session" else "Start New Session",
                     subtitle = elapsedLabel,
@@ -204,7 +213,8 @@ fun HomeScreen(
                 SecondaryNavRow(
                     onSensors = onNavigateToSensors,
                     onVrControl = onNavigateToVrControl,
-                    onTutorial = onNavigateToTutorial
+                    onTutorial = onNavigateToTutorial,
+                    onSettings = onNavigateToSettings
                 )
             }
         }

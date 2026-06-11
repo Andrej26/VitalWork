@@ -105,7 +105,6 @@ import com.biometrix.operator.R
 import com.biometrix.operator.data.model.ConnectionState
 import com.biometrix.operator.data.sensor.DeviceState
 import com.biometrix.operator.data.sensor.ble.model.BleDevice
-import com.biometrix.operator.data.vr.model.DiscoveredVrDevice
 import com.biometrix.operator.presentation.screens.sensors.components.BleDeviceItem
 import android.media.MediaPlayer
 import android.view.SurfaceHolder
@@ -117,11 +116,11 @@ import androidx.compose.ui.viewinterop.AndroidView
 // ─────────────────────────────────────────────────────────────────────────────
 
 private enum class SlideType {
-    WELCOME, INFO, INTERACTIVE_BLE, INTERACTIVE_RESP, INTERACTIVE_VR, COMPLETE
+    WELCOME, INFO, INTERACTIVE_BLE, INTERACTIVE_RESP, COMPLETE
 }
 
 private enum class SlidePhase {
-    WELCOME, HEART_RATE, RESPIRATION, VR, COMPLETE
+    WELCOME, HEART_RATE, RESPIRATION, COMPLETE
 }
 
 private data class TutorialSlide(
@@ -198,38 +197,6 @@ private val TUTORIAL_SLIDES = listOf(
         body = "Connect to the eSense Respiration sensor via the audio jack."
     ),
 
-    // ── VR Headset — 4 slides ───────────────────────────────────────────────
-    TutorialSlide(
-        type = SlideType.INFO,
-        phase = SlidePhase.VR,
-        title = "Launch the StressChamber App",
-        body = "Make sure both this mobile device and the VR headset are connected to the same Wi-Fi network. Then put the VR headset on your head and find the StressChamber application in the headset app library. Launch it and wait for it to fully load before proceeding.",
-        videoRawRes = R.raw.tutorial_vr_launch_app,
-        imageCaption = "StressChamber in app launcher, or app loading screen"
-    ),
-    TutorialSlide(
-        type = SlideType.INFO,
-        phase = SlidePhase.VR,
-        title = "Patient Fits the Headset",
-        body = "Take off the headset and hand it to the patient. The patient puts it on and adjusts the head strap for a comfortable, stable fit.",
-        imageRes = R.drawable.tutorial_vr_patient_headset,
-        imageCaption = "Patient putting on Meta Quest, adjusting the head strap"
-    ),
-    TutorialSlide(
-        type = SlideType.INFO,
-        phase = SlidePhase.VR,
-        title = "Recenter the View",
-        body = "Ask the patient to press and hold the Meta button on the right controller until the view resets to the forward-facing position.",
-        imageRes = R.drawable.tutorial_vr_recenter,
-        imageCaption = "Right controller with Meta (Oculus) button highlighted"
-    ),
-    TutorialSlide(
-        type = SlideType.INTERACTIVE_VR,
-        phase = SlidePhase.VR,
-        title = "Connect to VR Headset",
-        body = "The app will automatically scan for VR headsets on the network. Select your headset from the list to connect."
-    ),
-
     // ── Complete ──────────────────────────────────────────────────────────────
     TutorialSlide(
         type = SlideType.COMPLETE,
@@ -245,13 +212,11 @@ private val TUTORIAL_SLIDES = listOf(
 
 private val PhaseColorHR      = Color(0xFFE57373)   // Red 300        — Heart Rate
 private val PhaseColorResp    = Color(0xFF4DB6AC)   // Teal 300       — Respiration
-private val PhaseColorVR      = Color(0xFFFFB74D)   // Orange 300     — VR
 private val PhaseColorDefault = Color(0xFF9575CD)   // Deep Purple 300 — Welcome / Complete
 
 private fun phaseAccentColor(phase: SlidePhase): Color = when (phase) {
     SlidePhase.HEART_RATE      -> PhaseColorHR
     SlidePhase.RESPIRATION     -> PhaseColorResp
-    SlidePhase.VR              -> PhaseColorVR
     SlidePhase.WELCOME, SlidePhase.COMPLETE -> PhaseColorDefault
 }
 
@@ -331,17 +296,6 @@ fun TutorialScreen(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { viewModel.recheckLocationEnabled() }
 
-    // WiFi settings launcher — NetworkCallback in MdnsDiscoveryService handles auto-restart
-    val wifiSettingsLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { /* NetworkCallback handles auto-restart */ }
-
-    @Suppress("DEPRECATION")
-    val wifiSettingsIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        Intent(Settings.Panel.ACTION_WIFI)
-    } else {
-        Intent(Settings.ACTION_WIFI_SETTINGS)
-    }
 
     Scaffold(
         topBar = {
@@ -407,17 +361,6 @@ fun TutorialScreen(
                         },
                         onToggle = viewModel::toggleRespirationConnection
                     )
-                    SlideType.INTERACTIVE_VR -> TutorialVrConnectStep(
-                        connectionState = uiState.vrConnectionState,
-                        discoveredDevices = uiState.discoveredVrDevices,
-                        isDiscovering = uiState.isVrDiscovering,
-                        selectedDevice = uiState.selectedVrDevice,
-                        isWifiAvailable = uiState.isWifiAvailable,
-                        onSelectDevice = viewModel::selectAndConnectVrDevice,
-                        onRescan = viewModel::rescanVrDevices,
-                        onDisconnect = viewModel::disconnectVr,
-                        onOpenWifiSettings = { wifiSettingsLauncher.launch(wifiSettingsIntent) }
-                    )
                     SlideType.COMPLETE -> TutorialCompleteStep(onGoToTests = onNavigateToSessions)
                 }
             }
@@ -425,8 +368,7 @@ fun TutorialScreen(
             // Bottom navigation bar
             val currentSlide = slides.getOrNull(uiState.currentStep)
             val isConnectionStep = currentSlide?.type in setOf(
-                SlideType.INTERACTIVE_BLE, SlideType.INTERACTIVE_RESP,
-                SlideType.INTERACTIVE_VR
+                SlideType.INTERACTIVE_BLE, SlideType.INTERACTIVE_RESP
             )
             TutorialNavigationBar(
                 currentStep = uiState.currentStep,
@@ -464,11 +406,9 @@ private fun PhaseProgressHeader(
         SlidePhase.WELCOME         -> "Overview"
         SlidePhase.HEART_RATE      -> "Heart Rate Sensor"
         SlidePhase.RESPIRATION     -> "Breathing Sensor"
-        SlidePhase.VR              -> "VR Headset"
         SlidePhase.COMPLETE        -> "Complete"
     }
     val phaseIcon = when (currentPhase) {
-        SlidePhase.VR       -> Icons.Default.Vrpano
         SlidePhase.COMPLETE -> Icons.Default.CheckCircle
         SlidePhase.WELCOME  -> Icons.Default.School
         else                -> Icons.Default.Sensors
@@ -479,8 +419,7 @@ private fun PhaseProgressHeader(
     val positionInPhase = phaseSlidesIndices.indexOf(currentStep)
     val phaseSize = phaseSlidesIndices.size
     val isInteractive = currentSlide?.type in setOf(
-        SlideType.INTERACTIVE_BLE, SlideType.INTERACTIVE_RESP,
-        SlideType.INTERACTIVE_VR
+        SlideType.INTERACTIVE_BLE, SlideType.INTERACTIVE_RESP
     )
     val phaseStepLabel = when {
         currentPhase == SlidePhase.WELCOME || currentPhase == SlidePhase.COMPLETE -> ""
@@ -1277,227 +1216,6 @@ private fun TutorialRespirationConnectStep(
             if (isConnected) {
                 Text(
                     text = "Breathing sensor connected. You can proceed to the next step.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Step 6 – Connect VR Headset
-// ─────────────────────────────────────────────────────────────────────────────
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun TutorialVrConnectStep(
-    connectionState: ConnectionState,
-    discoveredDevices: List<DiscoveredVrDevice>,
-    isDiscovering: Boolean,
-    selectedDevice: DiscoveredVrDevice?,
-    isWifiAvailable: Boolean,
-    onSelectDevice: (DiscoveredVrDevice) -> Unit,
-    onRescan: () -> Unit,
-    onDisconnect: () -> Unit,
-    onOpenWifiSettings: () -> Unit
-) {
-    val isConnectedOrConnecting = connectionState == ConnectionState.CONNECTED ||
-            connectionState == ConnectionState.CONNECTING
-
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val pad = if (maxWidth < 600.dp) 16.dp else 24.dp
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(pad),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(
-                text = "Connect to VR Headset",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
-
-            if (!isWifiAvailable && !isConnectedOrConnecting) {
-                Card(
-                    onClick = onOpenWifiSettings,
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.WifiOff,
-                            contentDescription = null,
-                            modifier = Modifier.size(32.dp),
-                            tint = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Wi-Fi Disabled",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                            Text(
-                                text = "Tap here to enable Wi-Fi.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
-                }
-            }
-
-            DeviceStatusCard(
-                label = "Meta Quest (StressChamber)",
-                connectionState = connectionState,
-                deviceState = null
-            )
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    if (isConnectedOrConnecting) {
-                        if (selectedDevice != null) {
-                            Text(
-                                text = selectedDevice.name,
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                text = "${selectedDevice.host}:${selectedDevice.port}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                        }
-                        Button(
-                            onClick = onDisconnect,
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = connectionState != ConnectionState.CONNECTING,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.error
-                            )
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.LinkOff,
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(text = "DISCONNECT", fontWeight = FontWeight.SemiBold)
-                        }
-                    } else {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                if (isDiscovering) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(16.dp),
-                                        strokeWidth = 2.dp
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "Scanning for VR devices...",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                } else {
-                                    Text(
-                                        text = "No devices found",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                            FilledTonalButton(
-                                onClick = onRescan,
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Refresh,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(text = "Rescan")
-                            }
-                        }
-                        if (discoveredDevices.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            HorizontalDivider()
-                            Spacer(modifier = Modifier.height(8.dp))
-                            discoveredDevices.forEachIndexed { index, device ->
-                                Card(
-                                    onClick = { onSelectDevice(device) },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.surface
-                                    ),
-                                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(12.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = device.name,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                fontWeight = FontWeight.SemiBold
-                                            )
-                                            Text(
-                                                text = "${device.host}:${device.port}",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                        Icon(
-                                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                            contentDescription = "Connect",
-                                            modifier = Modifier.size(20.dp),
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                                if (index < discoveredDevices.lastIndex) {
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (connectionState == ConnectionState.CONNECTED) {
-                Text(
-                    text = "VR headset connected. You can proceed to the final step.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

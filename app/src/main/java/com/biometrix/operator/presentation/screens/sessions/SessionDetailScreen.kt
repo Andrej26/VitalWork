@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
@@ -49,6 +50,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.biometrix.operator.data.db.SessionStatus
+import com.biometrix.operator.presentation.screens.sessions.components.UploadProgressDialog
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -144,6 +146,12 @@ fun SessionDetailScreen(
             }
         )
     }
+
+    UploadProgressDialog(
+        state = uiState.uploadState,
+        onRetry = { viewModel.uploadSession() },
+        onContinue = { viewModel.dismissUploadDialog() }
+    )
 
     Scaffold(
         topBar = {
@@ -262,7 +270,27 @@ fun SessionDetailScreen(
                         fontWeight = FontWeight.Medium
                     )
 
+                    // Upload to the BioMetrix server. Primary action; sets status UPLOADED on success.
                     Button(
+                        onClick = { viewModel.uploadSession() },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = uiState.uploadState != UploadState.Uploading &&
+                            uiState.scenarios.isNotEmpty()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CloudUpload,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            if (session.status == SessionStatus.UPLOADED) "Re-upload to server"
+                            else "Upload to server"
+                        )
+                    }
+
+                    // Local offline copy to Documents. Does NOT change upload status.
+                    OutlinedButton(
                         onClick = {
                             if (session.status == SessionStatus.UPLOADED) {
                                 showReExportConfirmation = true
@@ -286,10 +314,7 @@ fun SessionDetailScreen(
                             )
                         }
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            if (session.status == SessionStatus.UPLOADED) "Re-export"
-                            else "Export to Documents"
-                        )
+                        Text("Export to Documents")
                     }
 
                     OutlinedButton(

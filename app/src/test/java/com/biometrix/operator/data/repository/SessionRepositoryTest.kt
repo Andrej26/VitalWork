@@ -9,6 +9,7 @@ import com.biometrix.operator.data.db.ScenarioEntity
 import com.biometrix.operator.data.db.SensorSampleEntity
 import com.biometrix.operator.data.db.SensorType
 import com.biometrix.operator.data.db.SessionStatus
+import com.biometrix.operator.data.prefs.FakeSettingsRepository
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -29,15 +30,21 @@ class SessionRepositoryTest {
         fakeSessionDao = FakeSessionDao()
         fakeScenarioDao = FakeScenarioDao()
         fakeSensorSampleDao = FakeSensorSampleDao()
-        repository = SessionRepository(fakeSessionDao, fakeScenarioDao, fakeSensorSampleDao)
+        repository = SessionRepository(
+            fakeSessionDao,
+            fakeScenarioDao,
+            fakeSensorSampleDao,
+            FakeSettingsRepository("A")
+        )
     }
 
     @Test
     fun createSession_formatsCodeCorrectly() = runTest {
         val session = repository.createSession(participantId = 1L)
 
-        assertTrue(session.sessionCode.startsWith("BMX-"))
-        assertTrue(session.sessionCode.substring(4).matches(Regex("\\d{6}-\\d{6}")))
+        assertTrue(session.sessionCode.startsWith("BMX-A-"))
+        // Tail after "BMX-A-" is the yyMMdd-HHmmss timestamp token.
+        assertTrue(session.sessionCode.removePrefix("BMX-A-").matches(Regex("\\d{6}-\\d{6}")))
         assertEquals(SessionStatus.ACTIVE, session.status)
         assertEquals(1L, session.participantId)
     }
@@ -61,7 +68,7 @@ class SessionRepositoryTest {
         fakeSensorSampleDao.samples.addAll(samples(s1.id, SensorType.HEART_RATE, count = 10))
         fakeSensorSampleDao.samples.addAll(samples(s2.id, SensorType.HEART_RATE, count = 5))
         fakeSensorSampleDao.samples.addAll(samples(s1.id, SensorType.RESPIRATION, count = 3))
-        fakeSensorSampleDao.samples.addAll(samples(s2.id, SensorType.GSR, count = 7))
+        fakeSensorSampleDao.samples.addAll(samples(s2.id, SensorType.EDA, count = 7))
         // Samples on the unfinished scenario should not be counted.
         fakeSensorSampleDao.samples.addAll(samples(unfinished.id, SensorType.HEART_RATE, count = 999))
 
@@ -72,7 +79,7 @@ class SessionRepositoryTest {
         assertEquals(2, updated.scenarioCount)
         assertEquals(15, updated.hrSampleCount)
         assertEquals(3, updated.respirationSampleCount)
-        assertEquals(7, updated.gsrSampleCount)
+        assertEquals(7, updated.edaSampleCount)
         assertNotNull(updated.endedAt)
     }
 

@@ -1,5 +1,6 @@
 package com.biometrix.operator.data.recording
 
+import com.biometrix.operator.data.db.ScenarioEntity
 import com.biometrix.operator.data.recording.model.DataRecordingState
 import com.biometrix.operator.data.recording.model.ScenarioMetadata
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,5 +36,21 @@ class FakeScenarioRecordingRepository : ScenarioRecordingRepository {
         stopRecordingCallCount++
         recordingState.value = DataRecordingState.IDLE
         recordingMetadata.value = null
+    }
+
+    var startWatchEdaSessionCallCount = 0
+        private set
+    var drainWatchEdaCallCount = 0
+        private set
+    var lastDrainScenarios: List<ScenarioEntity>? = null
+        private set
+
+    override fun startWatchEdaSession() {
+        startWatchEdaSessionCallCount++
+    }
+
+    override suspend fun drainAndFinalizeWatchEda(scenarios: List<ScenarioEntity>) {
+        drainWatchEdaCallCount++
+        lastDrainScenarios = scenarios
     }
 }

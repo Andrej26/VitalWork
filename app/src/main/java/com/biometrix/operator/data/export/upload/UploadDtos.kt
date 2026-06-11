@@ -1,0 +1,63 @@
+package com.biometrix.operator.data.export.upload
+
+import kotlinx.serialization.Serializable
+
+/**
+ * Wire DTOs for the BioMetrix server's full-session upload endpoint
+ * (`POST /api/uploads/session`, see `test/BioMetrix_API_Documentation.docx` §4).
+ *
+ * These are deliberately **separate** from the local-export models in
+ * `data.export.model.SessionExportModel`: the server requires epoch-millisecond timestamps in `*Ms`
+ * fields and enum-NAME sensor types (e.g. `ESENSE_RR_INTERVAL`), whereas the local export uses ISO date
+ * strings and lowercase labels (e.g. `rr_interval`). Reusing the export model here would be rejected (422).
+ *
+ * The server accepts camelCase keys (it normalizes to snake_case internally).
+ */
+@Serializable
+data class SessionUploadRequest(
+    val participant: ParticipantUpload,
+    val session: SessionUpload,
+    val scenarios: List<ScenarioUpload>
+)
+
+@Serializable
+data class ParticipantUpload(
+    val participantCode: String,
+    val age: Int? = null,
+    val gender: String? = null
+)
+
+@Serializable
+data class SessionUpload(
+    val sessionCode: String,
+    val startedAtMs: Long,
+    val endedAtMs: Long? = null,
+    val status: String,
+    val notes: String = ""
+)
+
+@Serializable
+data class ScenarioUpload(
+    val scenarioCode: String,
+    val startedAtMs: Long,
+    val endedAtMs: Long? = null,
+    val eventTimestampMs: Long? = null,
+    val reactionTimestampMs: Long? = null,
+    val samples: List<SampleUpload>
+)
+
+@Serializable
+data class SampleUpload(
+    val sensorType: String,
+    val timestampMs: Long,
+    val value: Float
+)
+
+/**
+ * Minimal parse of the 201 response body (doc §4). Only the human-readable [message] is surfaced;
+ * `ignoreUnknownKeys` lets the rest of the `data` block be ignored.
+ */
+@Serializable
+data class SessionUploadResponse(
+    val message: String = ""
+)

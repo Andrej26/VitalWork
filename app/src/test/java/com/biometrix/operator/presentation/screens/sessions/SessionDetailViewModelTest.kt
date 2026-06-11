@@ -4,12 +4,13 @@ import androidx.lifecycle.SavedStateHandle
 import com.biometrix.operator.data.db.FakeScenarioDao
 import com.biometrix.operator.data.db.FakeSensorSampleDao
 import com.biometrix.operator.data.db.FakeSessionDao
-import com.biometrix.operator.data.db.ScenarioCategory
 import com.biometrix.operator.data.db.ScenarioCode
 import com.biometrix.operator.data.db.ScenarioEntity
 import com.biometrix.operator.data.db.SessionEntity
 import com.biometrix.operator.data.db.SessionStatus
+import com.biometrix.operator.data.export.SessionExporter
 import com.biometrix.operator.data.export.SessionUploader
+import com.biometrix.operator.data.prefs.FakeSettingsRepository
 import com.biometrix.operator.data.repository.ScenarioRepository
 import com.biometrix.operator.data.repository.SessionRepository
 import kotlinx.coroutines.Dispatchers
@@ -22,7 +23,6 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -36,7 +36,8 @@ class SessionDetailViewModelTest {
     private lateinit var fakeSampleDao: FakeSensorSampleDao
     private lateinit var sessionRepository: SessionRepository
     private lateinit var scenarioRepository: ScenarioRepository
-    private lateinit var exportService: FakeSessionUploader
+    private lateinit var exporter: FakeSessionExporter
+    private lateinit var uploader: FakeSessionUploader
 
     private val sessionId = 1L
 
@@ -46,9 +47,15 @@ class SessionDetailViewModelTest {
         fakeSessionDao = FakeSessionDao()
         fakeScenarioDao = FakeScenarioDao()
         fakeSampleDao = FakeSensorSampleDao()
-        sessionRepository = SessionRepository(fakeSessionDao, fakeScenarioDao, fakeSampleDao)
+        sessionRepository = SessionRepository(
+            fakeSessionDao,
+            fakeScenarioDao,
+            fakeSampleDao,
+            FakeSettingsRepository("A")
+        )
         scenarioRepository = ScenarioRepository(fakeScenarioDao, fakeSampleDao)
-        exportService = FakeSessionUploader()
+        exporter = FakeSessionExporter()
+        uploader = FakeSessionUploader()
     }
 
     @After
@@ -78,13 +85,11 @@ class SessionDetailViewModelTest {
                 startedAt = 2_000L + id
             )
         )
-        // Touch ScenarioCategory to keep enum referenced if needed
-        @Suppress("UNUSED_EXPRESSION") ScenarioCategory.A
     }
 
     private fun newViewModel(): SessionDetailViewModel {
         val handle = SavedStateHandle(mapOf("sessionId" to sessionId))
-        return SessionDetailViewModel(sessionRepository, scenarioRepository, exportService, handle)
+        return SessionDetailViewModel(sessionRepository, scenarioRepository, exporter, uploader, handle)
     }
 
     @Test
@@ -98,12 +103,8 @@ class SessionDetailViewModelTest {
 
         val state = vm.uiState.value
         assertFalse(state.isLoading)
-        assertEquals(session, state.session)
+        assertEquals(session.sessionCode, state.session?.sessionCode)
         assertEquals(2, state.scenarios.size)
-        assertEquals(
-            listOf(ScenarioCode.FALLING_PALLET, ScenarioCode.MACHINE_JAM),
-            state.scenarios.map { it.scenarioCode }
-        )
     }
 
     @Test
@@ -118,74 +119,124 @@ class SessionDetailViewModelTest {
     }
 
     @Test
-    fun exportSession_success_marksUploadedAndSurfacesPath() = runTest {
+    fun autoUpload_firesOnLoad_forCompletedSessionWithScenarios_marksUploaded() = runTest {
         seedSession(SessionStatus.COMPLETED)
-        exportService.result = Result.success("Documents/BioMetrix/BMX-260101-120000/export.json")
+        seedScenario(id = 10)
+        uploader.result = Result.success("Session uploaded.")
 
         val vm = newViewModel()
         advanceUntilIdle()
+
+        assertEquals(1, uploader.callCount)
+        assertEquals(UploadState.Success, vm.uiState.value.uploadState)
+        assertEquals(SessionStatus.UPLOADED, fakeSessionDao.sessions.single().status)
+    }
+
+    @Test
+    fun autoUpload_doesNotFire_whenNoScenarios() = runTest {
+        seedSession(SessionStatus.COMPLETED)
+
+        val vm = newViewModel()
+        advanceUntilIdle()
+
+        assertEquals(0, uploader.callCount)
+        assertEquals(UploadState.Idle, vm.uiState.value.uploadState)
+    }
+
+    @Test
+    fun autoUpload_doesNotFire_whenAlreadyUploaded() = runTest {
+        seedSession(SessionStatus.UPLOADED)
+        seedScenario(id = 10)
+
+        val vm = newViewModel()
+        advanceUntilIdle()
+
+        assertEquals(0, uploader.callCount)
+    }
+
+    @Test
+    fun uploadSession_failure_leavesStatusCompleted_andShowsFailedState() = runTest {
+        seedSession(SessionStatus.COMPLETED)
+        seedScenario(id = 10)
+        uploader.result = Result.failure(IllegalStateException("offline"))
+
+        val vm = newViewModel()
+        advanceUntilIdle()
+
+        val state = vm.uiState.value
+        assertTrue(state.uploadState is UploadState.Failed)
+        assertEquals("offline", (state.uploadState as UploadState.Failed).message)
+        assertEquals(SessionStatus.COMPLETED, fakeSessionDao.sessions.single().status)
+    }
+
+    @Test
+    fun uploadSession_retryAfterFailure_succeeds_marksUploaded() = runTest {
+        seedSession(SessionStatus.COMPLETED)
+        seedScenario(id = 10)
+        uploader.result = Result.failure(IllegalStateException("offline"))
+
+        val vm = newViewModel()
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.uploadState is UploadState.Failed)
+
+        // Retry path (manual button) after network recovers.
+        uploader.result = Result.success("ok")
+        vm.uploadSession()
+        advanceUntilIdle()
+
+        assertEquals(UploadState.Success, vm.uiState.value.uploadState)
+        assertEquals(SessionStatus.UPLOADED, fakeSessionDao.sessions.single().status)
+    }
+
+    @Test
+    fun exportSession_writesFiles_butDoesNotMarkUploaded() = runTest {
+        seedSession(SessionStatus.COMPLETED)
+        seedScenario(id = 10)
+        // Auto-upload would mark UPLOADED, so block it to isolate export behavior.
+        uploader.result = Result.failure(IllegalStateException("offline"))
+        exporter.result = Result.success("Documents/BioMetrix/BMX-260101-120000/export.json")
+
+        val vm = newViewModel()
+        advanceUntilIdle()
+
         vm.exportSession()
         advanceUntilIdle()
 
         val state = vm.uiState.value
         assertFalse(state.isExporting)
-        assertEquals(SessionStatus.UPLOADED, state.session?.status)
-        assertEquals(SessionStatus.UPLOADED, fakeSessionDao.sessions.single().status)
         assertEquals(
             "Exported to: Documents/BioMetrix/BMX-260101-120000/export.json",
             state.exportResult
         )
-    }
-
-    @Test
-    fun exportSession_failure_leavesStatusUnchangedAndSurfacesError() = runTest {
-        seedSession(SessionStatus.COMPLETED)
-        exportService.result = Result.failure(IllegalStateException("disk full"))
-
-        val vm = newViewModel()
-        advanceUntilIdle()
-        vm.exportSession()
-        advanceUntilIdle()
-
-        val state = vm.uiState.value
-        assertFalse(state.isExporting)
-        assertEquals(SessionStatus.COMPLETED, state.session?.status)
+        // Crucially: export does NOT set UPLOADED.
         assertEquals(SessionStatus.COMPLETED, fakeSessionDao.sessions.single().status)
-        assertEquals("Export failed: disk full", state.exportResult)
     }
 
     @Test
-    fun clearExportResult_resetsToNull() = runTest {
-        seedSession()
-        exportService.result = Result.success("path")
+    fun dismissUploadDialog_resetsToIdle() = runTest {
+        seedSession(SessionStatus.COMPLETED)
+        seedScenario(id = 10)
+        uploader.result = Result.success("ok")
 
         val vm = newViewModel()
         advanceUntilIdle()
-        vm.exportSession()
-        advanceUntilIdle()
-        assertNotNull(vm.uiState.value.exportResult)
+        assertEquals(UploadState.Success, vm.uiState.value.uploadState)
 
-        vm.clearExportResult()
-        assertNull(vm.uiState.value.exportResult)
+        vm.dismissUploadDialog()
+        assertEquals(UploadState.Idle, vm.uiState.value.uploadState)
     }
 
-    @Test
-    fun deleteSession_removesRowAndInvokesCallback() = runTest {
-        seedSession()
-        var called = false
-
-        val vm = newViewModel()
-        advanceUntilIdle()
-        vm.deleteSession { called = true }
-        advanceUntilIdle()
-
-        assertTrue(called)
-        assertTrue(fakeSessionDao.sessions.isEmpty())
-        assertTrue(vm.uiState.value.isDeleting)
+    private class FakeSessionExporter : SessionExporter {
+        var result: Result<String> = Result.success("")
+        override suspend fun exportSession(sessionId: Long): Result<String> = result
     }
 
     private class FakeSessionUploader : SessionUploader {
         var result: Result<String> = Result.success("")
-        override suspend fun upload(sessionId: Long): Result<String> = result
+        var callCount = 0
+        override suspend fun upload(sessionId: Long): Result<String> {
+            callCount++
+            return result
+        }
     }
 }

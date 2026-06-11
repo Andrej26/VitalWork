@@ -14,9 +14,11 @@ BioMetrixOperator is an Android mobile application written in Kotlin using Jetpa
 - Gradle 9.3.0 with Kotlin DSL and version catalog
 - Hilt/Dagger for dependency injection
 - Room 2.7.1 for local database
-- OkHttp 5.3.2 for WebSocket
+- Ktor 3.3.0 (CIO embedded HTTP server) — receives VR scenario events from the Quest
 - Vico 2.1.2 for charts
-- Target: Android API 24–36
+- Play Services Wearable (Data Layer) for the watch ↔ tablet link
+- Samsung Health Sensor SDK (local AAR, `:wear` only) for Galaxy Watch sensors
+- Target: Android API 24–36 (`:app`); `:wear` floors at API 28 (Samsung SDK requirement)
 
 ## Build Commands
 
@@ -25,6 +27,10 @@ BioMetrixOperator is an Android mobile application written in Kotlin using Jetpa
 ./gradlew build                    # Full build
 ./gradlew assembleDebug            # Debug APK only
 ./gradlew bundleRelease            # Signed release AAB (uses keystore from local.properties)
+
+# Per-module (two modules: :app tablet, :wear watch)
+./gradlew :app:assembleDebug       # Tablet/phone APK
+./gradlew :wear:assembleDebug      # Wear OS companion APK
 
 # Run
 ./gradlew installDebug             # Install debug APK on connected device/emulator
@@ -52,16 +58,23 @@ MainActivity (entry point)
             └── Composable screens
 ```
 
-**Module Structure:** Single `:app` module with standard Android source sets:
-- `app/src/main/` — Production code
-- `app/src/test/` — Unit tests (JUnit 4)
-- `app/src/androidTest/` — Instrumented tests (AndroidX Test)
+**Module Structure:** Two Gradle modules:
+- `:app` — the tablet/phone application (minSdk 24).
+  - `app/src/main/` — Production code
+  - `app/src/test/` — Unit tests (JUnit 4)
+  - `app/src/androidTest/` — Instrumented tests (AndroidX Test)
+- `:wear` — a thin Wear OS companion (minSdk 28, **same** `applicationId`) that reads Galaxy
+  Watch sensors via the Samsung Health Sensor SDK and streams them to the tablet over the Wearable
+  Data Layer. See [doc/sensor_galaxy_watch.md](doc/sensor_galaxy_watch.md). The Samsung SDK is a
+  local AAR at `wear/libs/`. `settings.gradle.kts` uses `FAIL_ON_PROJECT_REPOS`, so module-level
+  `repositories {}` blocks are forbidden — repos (incl. the `flatDir` for both `app/libs` and
+  `wear/libs`) live only in `settings.gradle.kts`.
 
 ## Application Purpose
 
 The app has three main responsibilities:
 
-1. **VR Control** — WebSocket client connecting to the BioMetrix VR app on a Meta Quest headset over local Wi-Fi
+1. **VR Control** — embedded HTTP server (Ktor) that the Meta Quest VR app POSTs scenario events to over local Wi-Fi; the tablet advertises itself via a UDP presence beacon (Unreal Engine has no mDNS). The tablet stamps each event's arrival time (tablet clock only; no device sync)
 2. **Sensor Data Collection** — Gather physiological data (heart rate, RR intervals, ECG, respiration) from BLE and audio jack sensors
 3. **Test Management** — Organize anonymous clinical test sessions with recordings, SUDS scores, local storage, and JSON/CSV export
 
@@ -93,11 +106,28 @@ The app has three main responsibilities:
 |--------|--------|------------|----------------|
 | eSense Pulse | Mindfield | BLE | Heart rate (BPM), RR intervals |
 | eSense Respiration | Mindfield | Audio jack | Respiration rate |
+| Galaxy Watch 8 | Samsung | Wearable Data Layer (via `:wear` companion) | Heart rate (BPM), IBI (ms), EDA (µS), battery |
 
-**BLE Requirements:**
+Per-sensor references live in [doc/](doc/): [sensor_esense_pulse.md](doc/sensor_esense_pulse.md),
+[sensor_esense_respiration.md](doc/sensor_esense_respiration.md),
+[sensor_galaxy_watch.md](doc/sensor_galaxy_watch.md).
+
+**BLE Requirements (eSense Pulse):**
 - Android 12+: `BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT` permissions
 - Android 11 and below: `BLUETOOTH`, `BLUETOOTH_ADMIN`, `ACCESS_FINE_LOCATION` permissions
 - **Location Services must be enabled** on the device for BLE scanning to work
+
+**Galaxy Watch 8 (Phase 1 — live display only):** the Watch 8 has **no BLE Heart Rate Profile**;
+its sensors (especially EDA) are reachable only through Samsung's Health Sensor SDK running **on the
+watch**. The `:wear` companion reads them and streams JSON readings to the tablet via `MessageClient`
+over the Wearable Data Layer; the tablet receives them in `WatchListenerService` → `WatchSensorReceiver`
+(Hilt singleton) and shows them under **Sensors → Galaxy Watch**. **No DB/recording/export wiring
+yet.** Continuous screen-off delivery requires a foreground `health` service, `BODY_SENSORS_BACKGROUND`,
+and a 1 Hz `HealthTracker.flush()` loop. **The link must run over direct Bluetooth** — if the phone's
+Bluetooth is off the Data Layer silently falls back to the Google cloud relay, which can't deliver to
+a dozing phone (presents as "connection drops whenever the phone sleeps"); the Galaxy Watch screen
+shows a Bluetooth-off warning to prevent this. See [doc/sensor_galaxy_watch.md](doc/sensor_galaxy_watch.md)
+for the full rationale (incl. what does *not* work).
 
 ## Package Structure
 
@@ -130,7 +160,8 @@ com.biometrix.operator/
 │   ├── network/
 │   │   └── NetworkChecker.kt               # LAN connectivity checker
 │   ├── prefs/
-│   │   └── TutorialPreferencesRepository.kt
+│   │   ├── TutorialPreferencesRepository.kt
+│   │   └── SettingsRepository.kt            # Device prefix (A/B/C/D) for code generation; interface + SharedPrefs impl
 │   ├── recording/
 │   │   ├── GapDetector.kt                  # Sensor data gap detection
 │   │   ├── ScenarioRecordingRepository.kt
@@ -152,12 +183,18 @@ com.biometrix.operator/
 │   │   │   └── model/
 │   │   │       ├── BleDevice.kt
 │   │   │       └── BleGattService.kt
-│   └── vr/
-│       ├── VRWebSocketClient.kt
-│       ├── MdnsDiscoveryService.kt          # mDNS headset auto-discovery
-│       └── model/
-│           ├── DiscoveredVrDevice.kt
-│           └── WebSocketMessage.kt
+│   │   └── watch/                          # Galaxy Watch (Data Layer receiver side)
+│   │       ├── WatchListenerService.kt     # WearableListenerService; parses incoming messages
+│   │       ├── WatchSensorReceiver.kt      # Hilt singleton sink + inferred connection state
+│   │       └── model/
+│   │           └── WatchReading.kt
+│   └── vr/                                 # VR link (tablet = HTTP server; Quest = client)
+│       ├── VrHttpServer.kt                  # Ktor CIO server; 4 routes → VrEventReceiver
+│       ├── VrEventReceiver.kt              # Hilt singleton sink; accept/reject + ack-after-write + inferred connection state
+│       ├── VrUdpBeacon.kt                   # UDP presence broadcast (ip/port/sessionId) every 5 s
+│       ├── VrEvent.kt                       # sealed VrEvent (ScenarioStart/StimulusEvent/Reaction/ScenarioStop) + VrEventResult
+│       └── http/
+│           └── VrHttpDtos.kt                # @Serializable wire DTOs (ScenarioRequest + responses)
 ├── presentation/
 │   ├── components/                          # Reusable UI components
 │   │   ├── BioSensorCard.kt
@@ -187,13 +224,16 @@ com.biometrix.operator/
 │       │   │   ├── BleServiceExplorer.kt
 │       │   │   ├── HeartRateDisplay.kt
 │       │   │   └── RrIntervalDisplay.kt
-│       │   └── mindfield/
-│       │       ├── pulse/
-│       │       │   ├── EsensePulseScreen.kt
-│       │       │   └── EsensePulseViewModel.kt
-│       │       └── respiration/
-│       │           ├── EsenseRespirationScreen.kt
-│       │           └── EsenseRespirationViewModel.kt
+│       │   ├── mindfield/
+│       │   │   ├── pulse/
+│       │   │   │   ├── EsensePulseScreen.kt
+│       │   │   │   └── EsensePulseViewModel.kt
+│       │   │   └── respiration/
+│       │   │       ├── EsenseRespirationScreen.kt
+│       │   │       └── EsenseRespirationViewModel.kt
+│       │   └── watch/                       # Galaxy Watch live-readings screen
+│       │       ├── WatchSensorScreen.kt
+│       │       └── WatchSensorViewModel.kt
 │       ├── participants/
 │       │   ├── ParticipantEntryScreen.kt
 │       │   └── ParticipantEntryViewModel.kt
@@ -212,6 +252,9 @@ com.biometrix.operator/
 │       │       ├── SensorSummaryCard.kt
 │       │       ├── SessionCard.kt
 │       │       └── SessionNotesField.kt
+│       ├── settings/                       # Device prefix selection (A/B/C/D)
+│       │   ├── SettingsScreen.kt
+│       │   └── SettingsViewModel.kt
 │       ├── tutorial/
 │       │   ├── TutorialScreen.kt
 │       │   └── TutorialViewModel.kt
@@ -224,13 +267,24 @@ com.biometrix.operator/
     └── Type.kt
 ```
 
+**`:wear` module** (`com.biometrix.operator.wear`):
+
+```
+com.biometrix.operator.wear/
+├── MainActivity.kt           # Minimal Start/Stop watch UI + runtime permission requests
+├── WatchSensorService.kt     # Foreground health service; owns the Samsung SDK, flush() loop, sends STOP
+├── WatchDataSender.kt        # MessageClient sender; resolves/caches the biometrix_phone node
+└── WatchMessage.kt           # Builds JSON lines (reading, capabilities, batch, stop)
+```
+
 ## Navigation Routes
 
 | Route | Screen | Description |
 |-------|--------|-------------|
 | `tutorial` | TutorialScreen | First-launch onboarding |
 | `home` | HomeScreen | Main dashboard with navigation cards |
-| `vr_control` | VRConnectionScreen | VR headset connection (manual IP or mDNS discovery) |
+| `vr_control` | VRConnectionScreen | VR link diagnostics (tablet IP/port + live received-event log) |
+| `settings` | SettingsScreen | Device prefix (A/B/C/D) tagging participant + session codes so parallel tablets don't collide |
 | `sensors` | SensorsScreen | List of available sensors |
 | `sensors/{sensorId}` | SensorDetailScreen | Router to vendor-specific sensor screen |
 | `participants/new` | ParticipantEntryScreen | Anonymized participant entry (creates participant + session) |
@@ -262,12 +316,14 @@ Room database (version 2) with 4 entities. Cascade-delete on all foreign keys.
 
 Reaction time is **derived** at export from `reactionTimestampMs − eventTimestampMs`; not stored. Session duration is derived from `endedAt − startedAt`. All timestamps come from Android's `System.currentTimeMillis()` so cross-stream alignment needs no clock-sync.
 
+**Device prefix (multi-tablet testing):** each tablet picks a one-time prefix (A/B/C/D) under **Settings** (`SettingsRepository`, SharedPreferences, default `A`). The prefix tags both the generated participant code (`A-001`) and session code (`BMX-A-yyMMdd-HHmmss`), so several tablets testing in parallel never mint colliding codes that would look like one duplicated participant after the server merge. The participant-code field is read-only (auto-generated) to keep the scheme typo-proof; participant numbering is counted **per prefix** (`ParticipantDao.getParticipantCountByPrefix`). Operators must agree beforehand which device owns which letter — collisions are only prevented across devices with *distinct* letters.
+
 ## Data Flow
 
 ```
-Meta Quest VR ◄──WebSocket──► VRWebSocketClient ──► VRConnectionViewModel ──► UI
-                               ▲
-                      MdnsDiscoveryService (auto-discovery)
+Meta Quest VR ──HTTP POST──► VrHttpServer ──► VrEventReceiver ──► SessionControlViewModel ──► UI
+                  ▲                               │ (ack-after-write)
+       VrUdpBeacon (tablet advertises ip/port/sessionId)   └──► ScenarioRepository (event/reaction timestamps)
 
 eSense Pulse  ◄────BLE──────► BleManager ──────────► EsensePulseViewModel ──► UI
 eSense Resp.  ◄────Audio────► MindfieldRespiration ► EsenseRespirationViewModel ► UI
@@ -318,9 +374,9 @@ Unit tests live under `app/src/test/` and run on the host JVM (no device/emulato
 | File | Target | What it covers |
 |------|--------|----------------|
 | `data/recording/GapDetectorTest.kt` | `GapDetector.kt` | Gap detection edge cases: empty input, startup threshold, boundary conditions, mixed sensor types, unsorted input, per-sensor-type routing |
-| `data/vr/model/WebSocketMessageTest.kt` | `WebSocketMessage.kt` | `ServerMessage` JSON serialization: minimal/full/failure decoding, round-trip, malformed JSON, missing fields, unknown fields |
-| `data/repository/ParticipantRepositoryTest.kt` | `ParticipantRepository.kt` | Code generation (`P-001`…), uniqueness validation, fetch by ID/code |
-| `data/repository/SessionRepositoryTest.kt` | `SessionRepository.kt` | Session lifecycle: `sessionCode` format (BMX-yyMMdd-HHmmss), participant FK, sample-count aggregation from scenarios at end, status transitions, notes persistence, deletion |
+| `data/vr/VrEventReceiverTest.kt` | `VrEventReceiver.kt` | Event/reaction persistence + accept, reject when no active scenario, first-write-wins, late-reaction grace window, heartbeat-less liveness watchdog |
+| `data/repository/ParticipantRepositoryTest.kt` | `ParticipantRepository.kt` | Code generation (`A-001`…, per-device-prefix scoped), uniqueness validation, fetch by ID/code |
+| `data/repository/SessionRepositoryTest.kt` | `SessionRepository.kt` | Session lifecycle: `sessionCode` format (BMX-{prefix}-yyMMdd-HHmmss), participant FK, sample-count aggregation from scenarios at end, status transitions, notes persistence, deletion |
 | `data/repository/ScenarioRepositoryTest.kt` | `ScenarioRepository.kt` | Scenario lifecycle: create with derived `scenarioCategory`, event/reaction timestamp updates, end (sets `endedAt`), batch sample insert |
 | `data/export/SessionExportMapperTest.kt` | `SessionExportMapper.kt` | Export data transformation (Section 7 shape): participant + session + scenarios + samples; sensor type mapping, gap detection per scenario, derived reaction time |
 | `data/recording/ScenarioRecordingRepositoryImplTest.kt` | `ScenarioRecordingRepositoryImpl.kt` | Start/stop state machine, sensor detection, sample buffering + flushing, scenario-end finalization |
@@ -328,6 +384,5 @@ Unit tests live under `app/src/test/` and run on the host JVM (no device/emulato
 | `presentation/screens/participants/ParticipantEntryViewModelTest.kt` | `ParticipantEntryViewModel.kt` | Form validation, duplicate-code rejection, success emission, active-session redirect |
 | `presentation/screens/sessions/SessionControlViewModelTest.kt` | `SessionControlViewModel.kt` | Session loading, scenario-driven recording, end-session flow |
 | `presentation/screens/sessions/SessionDetailViewModelTest.kt` | `SessionDetailViewModel.kt` | Session/scenario loading, export workflow with `markUploaded` transition |
-| `presentation/screens/vr/VRConnectionViewModelTest.kt` | `VRConnectionViewModel.kt` | VR connection state machine, command sending, discovery lifecycle |
 
 Tests mirror the production package structure (e.g., `GapDetectorTest.kt` is in the same package as `GapDetector.kt`). This enables Android Studio's **Ctrl+Shift+T** navigation between production code and its test.

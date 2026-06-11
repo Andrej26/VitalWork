@@ -19,6 +19,8 @@ class SensorsViewModel @Inject constructor(
     val bleConnectionState: StateFlow<ConnectionState> = connectionRepository.bleConnectionState
 
     val respirationState: StateFlow<DeviceState> = connectionRepository.respirationState
+
+    val watchConnectionState: StateFlow<ConnectionState> = connectionRepository.watchConnectionState
 }
 
 fun DeviceState.toConnectionState(): ConnectionState = when (this) {

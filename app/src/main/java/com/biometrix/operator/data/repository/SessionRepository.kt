@@ -6,6 +6,7 @@ import com.biometrix.operator.data.db.SensorType
 import com.biometrix.operator.data.db.SessionDao
 import com.biometrix.operator.data.db.SessionEntity
 import com.biometrix.operator.data.db.SessionStatus
+import com.biometrix.operator.data.prefs.SettingsRepository
 import kotlinx.coroutines.flow.Flow
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -17,7 +18,8 @@ import javax.inject.Singleton
 class SessionRepository @Inject constructor(
     private val sessionDao: SessionDao,
     private val scenarioDao: ScenarioDao,
-    private val sensorSampleDao: SensorSampleDao
+    private val sensorSampleDao: SensorSampleDao,
+    private val settingsRepository: SettingsRepository
 ) {
     val allSessions: Flow<List<SessionEntity>> = sessionDao.getAllSessions()
     val activeSession: Flow<SessionEntity?> = sessionDao.getActiveSession()
@@ -49,7 +51,8 @@ class SessionRepository @Inject constructor(
     private fun buildNewSession(participantId: Long): SessionEntity {
         val now = LocalDateTime.now()
         val timestampToken = now.format(DateTimeFormatter.ofPattern("yyMMdd-HHmmss", Locale.US))
-        val sessionCode = "BMX-$timestampToken"
+        val prefix = settingsRepository.getDevicePrefix()
+        val sessionCode = "BMX-$prefix-$timestampToken"
         return SessionEntity(
             participantId = participantId,
             sessionCode = sessionCode,
@@ -66,12 +69,12 @@ class SessionRepository @Inject constructor(
         var hrCount = 0
         var respCount = 0
         var rrCount = 0
-        var gsrCount = 0
+        var edaCount = 0
         for (scenario in completedScenarios) {
             hrCount += sensorSampleDao.getSampleCountBySensorType(scenario.id, SensorType.HEART_RATE)
             respCount += sensorSampleDao.getSampleCountBySensorType(scenario.id, SensorType.RESPIRATION)
             rrCount += sensorSampleDao.getSampleCountBySensorType(scenario.id, SensorType.ESENSE_RR_INTERVAL)
-            gsrCount += sensorSampleDao.getSampleCountBySensorType(scenario.id, SensorType.GSR)
+            edaCount += sensorSampleDao.getSampleCountBySensorType(scenario.id, SensorType.EDA)
         }
 
         sessionDao.update(
@@ -82,7 +85,7 @@ class SessionRepository @Inject constructor(
                 hrSampleCount = hrCount,
                 respirationSampleCount = respCount,
                 rrIntervalSampleCount = rrCount,
-                gsrSampleCount = gsrCount
+                edaSampleCount = edaCount
             )
         )
     }

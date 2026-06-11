@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Sensors
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Vrpano
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -24,6 +25,7 @@ fun SecondaryNavRow(
     onSensors: () -> Unit,
     onVrControl: () -> Unit,
     onTutorial: () -> Unit,
+    onSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -36,6 +38,7 @@ fun SecondaryNavRow(
         NavItem(icon = Icons.Default.Sensors, label = "Sensors", onClick = onSensors)
         NavItem(icon = Icons.Default.Vrpano, label = "VR", onClick = onVrControl)
         NavItem(icon = Icons.Default.School, label = "Tutorial", onClick = onTutorial)
+        NavItem(icon = Icons.Default.Settings, label = "Settings", onClick = onSettings)
     }
 }
 

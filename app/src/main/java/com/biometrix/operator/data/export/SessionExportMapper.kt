@@ -59,7 +59,7 @@ class SessionExportMapper @Inject constructor(
                     hrSampleCount = session.hrSampleCount,
                     respirationSampleCount = session.respirationSampleCount,
                     rrIntervalSampleCount = session.rrIntervalSampleCount,
-                    gsrSampleCount = session.gsrSampleCount
+                    edaSampleCount = session.edaSampleCount
                 )
             ),
             scenarios = scenarioExports
@@ -78,7 +78,7 @@ class SessionExportMapper @Inject constructor(
                     SensorType.HEART_RATE -> "heart_rate"
                     SensorType.ESENSE_RR_INTERVAL -> "rr_interval"
                     SensorType.RESPIRATION -> "respiration"
-                    SensorType.GSR -> "gsr"
+                    SensorType.EDA -> "eda"
                 },
                 value = sample.value
             )
