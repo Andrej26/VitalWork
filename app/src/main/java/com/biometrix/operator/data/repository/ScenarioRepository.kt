@@ -6,6 +6,7 @@ import com.biometrix.operator.data.db.ScenarioEntity
 import com.biometrix.operator.data.db.SensorSampleDao
 import com.biometrix.operator.data.db.SensorSampleEntity
 import com.biometrix.operator.data.db.SensorType
+import com.biometrix.operator.data.time.TimeProvider
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -13,7 +14,8 @@ import javax.inject.Singleton
 @Singleton
 class ScenarioRepository @Inject constructor(
     private val scenarioDao: ScenarioDao,
-    private val sensorSampleDao: SensorSampleDao
+    private val sensorSampleDao: SensorSampleDao,
+    private val timeProvider: TimeProvider
 ) {
 
     fun getScenariosForSession(sessionId: Long): Flow<List<ScenarioEntity>> =
@@ -43,7 +45,7 @@ class ScenarioRepository @Inject constructor(
             sessionId = sessionId,
             scenarioCode = scenarioCode,
             scenarioCategory = scenarioCode.category,
-            startedAt = System.currentTimeMillis()
+            startedAt = timeProvider.nowMs()
         )
         val id = scenarioDao.insert(scenario)
         return scenario.copy(id = id)
@@ -65,7 +67,7 @@ class ScenarioRepository @Inject constructor(
     suspend fun endScenario(scenarioId: Long) {
         val scenario = scenarioDao.getScenarioById(scenarioId) ?: return
         if (scenario.endedAt != null) return
-        scenarioDao.update(scenario.copy(endedAt = System.currentTimeMillis()))
+        scenarioDao.update(scenario.copy(endedAt = timeProvider.nowMs()))
     }
 
     /** Inserts a batch of sensor samples. Called by the recording layer. */

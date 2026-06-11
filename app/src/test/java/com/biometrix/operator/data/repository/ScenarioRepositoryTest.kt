@@ -6,6 +6,7 @@ import com.biometrix.operator.data.db.ScenarioCategory
 import com.biometrix.operator.data.db.ScenarioCode
 import com.biometrix.operator.data.db.SensorSampleEntity
 import com.biometrix.operator.data.db.SensorType
+import com.biometrix.operator.data.time.TimeProvider
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -23,7 +24,7 @@ class ScenarioRepositoryTest {
     fun setUp() {
         fakeScenarioDao = FakeScenarioDao()
         fakeSensorSampleDao = FakeSensorSampleDao()
-        repository = ScenarioRepository(fakeScenarioDao, fakeSensorSampleDao)
+        repository = ScenarioRepository(fakeScenarioDao, fakeSensorSampleDao, TimeProvider.system())
     }
 
     @Test

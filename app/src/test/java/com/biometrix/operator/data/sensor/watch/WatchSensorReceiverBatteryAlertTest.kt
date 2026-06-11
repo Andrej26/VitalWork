@@ -1,6 +1,7 @@
 package com.biometrix.operator.data.sensor.watch
 
 import com.biometrix.operator.data.sensor.watch.model.WatchReading
+import com.biometrix.operator.data.time.TimeProvider
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -12,13 +13,13 @@ import org.junit.Test
 class WatchSensorReceiverBatteryAlertTest {
 
     private fun receiverWithBattery(level: Int): WatchSensorReceiver =
-        WatchSensorReceiver().apply {
+        WatchSensorReceiver(TimeProvider.system()).apply {
             onReading(WatchReading(type = "BATTERY", value = level.toFloat(), accuracy = 0, timestampMs = 0L))
         }
 
     @Test
     fun noReadingYet_isNone() {
-        assertEquals(WatchBatteryAlert.NONE, WatchSensorReceiver().currentBatteryAlert())
+        assertEquals(WatchBatteryAlert.NONE, WatchSensorReceiver(TimeProvider.system()).currentBatteryAlert())
     }
 
     @Test

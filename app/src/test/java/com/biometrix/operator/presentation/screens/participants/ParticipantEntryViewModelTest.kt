@@ -9,6 +9,7 @@ import com.biometrix.operator.data.db.SessionStatus
 import com.biometrix.operator.data.prefs.FakeSettingsRepository
 import com.biometrix.operator.data.repository.ParticipantRepository
 import com.biometrix.operator.data.repository.SessionRepository
+import com.biometrix.operator.data.time.TimeProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -47,7 +48,8 @@ class ParticipantEntryViewModelTest {
             sessionDao,
             scenarioDao,
             sampleDao,
-            FakeSettingsRepository("A")
+            FakeSettingsRepository("A"),
+            TimeProvider.system()
         )
     }
 

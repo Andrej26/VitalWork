@@ -11,6 +11,7 @@ import com.biometrix.operator.data.sensor.DeviceState
 import com.biometrix.operator.data.sensor.SensorDevice
 import com.biometrix.operator.data.sensor.ble.BleManager
 import com.biometrix.operator.data.sensor.watch.WatchSensorReceiver
+import com.biometrix.operator.data.time.TimeProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -30,6 +31,7 @@ class ScenarioRecordingRepositoryImpl(
     private val respirationDevice: SensorDevice,
     private val scenarioRepository: ScenarioRepository,
     private val watchReceiver: WatchSensorReceiver,
+    private val timeProvider: TimeProvider = TimeProvider.system(),
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 ) : ScenarioRecordingRepository {
 
@@ -78,7 +80,7 @@ class ScenarioRecordingRepositoryImpl(
     override suspend fun startRecording(scenarioId: Long, scenarioIdentifier: String) {
         if (_recordingState.value == DataRecordingState.RECORDING) return
 
-        startTimeMs = System.currentTimeMillis()
+        startTimeMs = timeProvider.nowMs()
         currentScenarioId = scenarioId
 
         val isHeartRateConnected = bleManager.connectionState.value == ConnectionState.CONNECTED
@@ -199,7 +201,7 @@ class ScenarioRecordingRepositoryImpl(
         updateMetadata: (ScenarioMetadata) -> ScenarioMetadata
     ): Job = scope.launch {
         flow.collect { value ->
-            val now = System.currentTimeMillis()
+            val now = timeProvider.nowMs()
             writeChannel.send(
                 SensorSampleEntity(
                     scenarioId = currentScenarioId,

@@ -10,6 +10,7 @@ import com.biometrix.operator.data.db.SensorSampleEntity
 import com.biometrix.operator.data.db.SensorType
 import com.biometrix.operator.data.db.SessionStatus
 import com.biometrix.operator.data.prefs.FakeSettingsRepository
+import com.biometrix.operator.data.time.TimeProvider
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -34,7 +35,8 @@ class SessionRepositoryTest {
             fakeSessionDao,
             fakeScenarioDao,
             fakeSensorSampleDao,
-            FakeSettingsRepository("A")
+            FakeSettingsRepository("A"),
+            TimeProvider.system()
         )
     }
 

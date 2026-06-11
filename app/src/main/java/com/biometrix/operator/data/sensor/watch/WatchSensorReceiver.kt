@@ -2,6 +2,7 @@ package com.biometrix.operator.data.sensor.watch
 
 import com.biometrix.operator.data.model.ConnectionState
 import com.biometrix.operator.data.sensor.watch.model.WatchReading
+import com.biometrix.operator.data.time.TimeProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -32,7 +33,9 @@ import javax.inject.Singleton
  * Phase 1 = live display only (no DB / no recording).
  */
 @Singleton
-class WatchSensorReceiver @Inject constructor() {
+class WatchSensorReceiver @Inject constructor(
+    private val timeProvider: TimeProvider
+) {
 
     private companion object {
         // Data arrives ~1 Hz (flush loop). 6 s of silence reliably means a real drop, not a hiccup —
@@ -91,8 +94,15 @@ class WatchSensorReceiver @Inject constructor() {
     @Volatile
     private var offsetCaptured: Boolean = false
 
-    /** Map a watch-stamped timestamp onto the phone clock using the captured offset. */
-    fun correctedTimestamp(watchTimestampMs: Long): Long = watchTimestampMs + clockOffsetMs
+    /**
+     * Map a watch-stamped timestamp onto the NTP-corrected timeline used for all persisted samples.
+     * [clockOffsetMs] (captured on the raw device clock) lifts the watch stamp onto the tablet's
+     * device clock; [TimeProvider.ntpOffsetMs] then lifts that onto true UTC. Keeping the capture on
+     * the raw device clock (see [maybeCaptureClockOffset]) keeps the ±[LIVE_READING_WINDOW_MS] window
+     * valid even when the device clock is far from NTP.
+     */
+    fun correctedTimestamp(watchTimestampMs: Long): Long =
+        watchTimestampMs + clockOffsetMs + timeProvider.ntpOffsetMs()
 
     /**
      * Snapshot of the low-battery alert tier from the **last-known** battery level, read on demand
