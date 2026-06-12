@@ -145,7 +145,7 @@ class ScenarioRecordingRepositoryImplTest {
         val samples = fakeSensorSampleDao.samples
         assertEquals(3, samples.size)
         assertTrue(samples.all { it.scenarioId == 42L })
-        assertEquals(1, samples.count { it.sensorType == SensorType.HEART_RATE })
+        assertEquals(1, samples.count { it.sensorType == SensorType.ESENSE_HEART_RATE })
         assertEquals(1, samples.count { it.sensorType == SensorType.ESENSE_RR_INTERVAL })
         assertEquals(1, samples.count { it.sensorType == SensorType.RESPIRATION })
     }

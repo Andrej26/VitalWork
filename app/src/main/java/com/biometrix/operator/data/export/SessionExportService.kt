@@ -73,8 +73,8 @@ class SessionExportService @Inject constructor(
 
                 val outputPath = writeToDocuments(folderName, jsonFileName, jsonContent.toByteArray())
 
-                for (scenario in scenarios) {
-                    exportScenarioCsv(session.sessionCode, scenario, folderName)
+                scenarios.forEachIndexed { index, scenario ->
+                    exportScenarioCsv(session.sessionCode, scenario, folderName, ordinal = index + 1)
                 }
 
                 Result.success(outputPath)
@@ -86,7 +86,8 @@ class SessionExportService @Inject constructor(
     private suspend fun exportScenarioCsv(
         sessionCode: String,
         scenario: ScenarioEntity,
-        folderName: String
+        folderName: String,
+        ordinal: Int
     ) {
         val samples = scenarioRepository.getSamplesForScenario(scenario.id)
         if (samples.isEmpty()) return
@@ -95,10 +96,12 @@ class SessionExportService @Inject constructor(
         val rrGaps = detectEsenseRrIntervalGaps(samples)
         val respGaps = detectRespirationGaps(samples)
 
-        val hrCount = samples.count { it.sensorType == SensorType.HEART_RATE }
+        val hrCount = samples.count { it.sensorType == SensorType.ESENSE_HEART_RATE }
         val rrCount = samples.count { it.sensorType == SensorType.ESENSE_RR_INTERVAL }
         val respCount = samples.count { it.sensorType == SensorType.RESPIRATION }
-        val edaCount = samples.count { it.sensorType == SensorType.EDA }
+        val watchHrCount = samples.count { it.sensorType == SensorType.WATCH_HR }
+        val watchIbiCount = samples.count { it.sensorType == SensorType.WATCH_IBI }
+        val edaCount = samples.count { it.sensorType == SensorType.WATCH_EDA }
 
         val csvContent = buildString {
             appendLine("# session_code,$sessionCode")
@@ -117,10 +120,12 @@ class SessionExportService @Inject constructor(
             if (scenario.eventTimestampMs != null && scenario.reactionTimestampMs != null) {
                 appendLine("# reaction_time_ms,${scenario.reactionTimestampMs - scenario.eventTimestampMs}")
             }
-            appendLine("# hr_samples,$hrCount")
+            appendLine("# esense_hr_samples,$hrCount")
             if (rrCount > 0) appendLine("# rr_interval_samples,$rrCount")
             appendLine("# respiration_samples,$respCount")
-            if (edaCount > 0) appendLine("# eda_samples,$edaCount")
+            if (watchHrCount > 0) appendLine("# watch_hr_samples,$watchHrCount")
+            if (watchIbiCount > 0) appendLine("# watch_ibi_samples,$watchIbiCount")
+            if (edaCount > 0) appendLine("# watch_eda_samples,$edaCount")
             if (hrGaps.isNotEmpty()) {
                 appendLine("# hr_gaps,${hrGaps.size}")
                 appendLine("# hr_gap_total_ms,${hrGaps.sumOf { it.gapMs }}")
@@ -138,17 +143,21 @@ class SessionExportService @Inject constructor(
 
             samples.forEach { sample ->
                 val sensorType = when (sample.sensorType) {
-                    SensorType.HEART_RATE -> "heart_rate"
+                    SensorType.ESENSE_HEART_RATE -> "esense_heart_rate"
                     SensorType.ESENSE_RR_INTERVAL -> "rr_interval"
                     SensorType.RESPIRATION -> "respiration"
-                    SensorType.EDA -> "eda"
+                    SensorType.WATCH_HR -> "watch_hr"
                     SensorType.WATCH_IBI -> "watch_ibi"
+                    SensorType.WATCH_EDA -> "watch_eda"
                 }
                 appendLine("${sample.timestampMs},${sample.elapsedMs},$sensorType,${sample.value}")
             }
         }
 
-        val fileName = "${sessionCode}_${scenario.scenarioCode.name}.csv"
+        // Several recordings in one session can share a scenario code (e.g. all FALLING_PALLET), so a
+        // code-only filename collides and overwrites. Prefix a 1-based, zero-padded ordinal so each
+        // recording gets its own file and they sort chronologically.
+        val fileName = "${sessionCode}_%02d_${scenario.scenarioCode.name}.csv".format(ordinal)
         writeToDocuments(folderName, fileName, csvContent.toByteArray())
     }
 

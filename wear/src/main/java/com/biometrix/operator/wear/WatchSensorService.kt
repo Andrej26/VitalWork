@@ -72,6 +72,25 @@ class WatchSensorService : Service() {
         val availableTrackers: StateFlow<List<String>> = _availableTrackers.asStateFlow()
         private val _lastValues = MutableStateFlow<Map<String, Float>>(emptyMap())
         val lastValues: StateFlow<Map<String, Float>> = _lastValues.asStateFlow()
+
+        /** Live reference to the running service so the FLUSH command path can drain the SDK buffer. */
+        @Volatile
+        private var instance: WatchSensorService? = null
+
+        /** How long to wait after forcing an SDK flush for the async `onDataReceived` appends to land. */
+        private const val SDK_FLUSH_SETTLE_MS = 1_500L
+
+        /**
+         * Force every active tracker to deliver its buffered samples into the durable store, then wait
+         * briefly for the (asynchronous) `onDataReceived` callbacks to append them. Called by the remote
+         * FLUSH handler BEFORE it reads the store, so a screen-off backlog still sitting in the SDK
+         * buffer is persisted first instead of being read past. No-op if tracking isn't running.
+         */
+        suspend fun flushSdkBufferToStore() {
+            val svc = instance ?: return
+            svc.activeTrackers.forEach { runCatching { it.flush() } }
+            delay(SDK_FLUSH_SETTLE_MS)
+        }
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -126,6 +145,7 @@ class WatchSensorService : Service() {
         // Idempotency guard on the REAL resource (instance), not the static UI flag — prevents
         // rebuilding the SDK connection on service re-entry/redelivery (the connect/unbind churn).
         if (trackingService != null) return
+        instance = this // expose to the FLUSH command path (drain SDK buffer before reading store)
         // Fresh tracking session: drop any rows left over from a prior session that was already
         // flushed & acked (or abandoned). A new session starts with an empty durable store.
         store.clear()
@@ -206,7 +226,7 @@ class WatchSensorService : Service() {
             register(service, HealthTrackerType.EDA_CONTINUOUS) { dp, out ->
                 val eda = dp.getValue(ValueKey.EdaSet.SKIN_CONDUCTANCE)
                 val status = dp.getValue(ValueKey.EdaSet.STATUS)
-                emit("EDA", eda, status, out)
+                emit("WATCH_EDA", eda, status, out)
             }
         }
     }
@@ -248,14 +268,14 @@ class WatchSensorService : Service() {
         // poor contact during doze, -3 not-worn) reports HR=0. Forwarding those 0s made the phone
         // flash 0.0 at startup (~15 s warm-up) and flap 0→value→0 in sleep. Skip invalid samples so
         // the phone keeps the last good value instead.
-        if (hrStatus == 1 && hr > 0) emit("HR", hr.toFloat(), hrStatus, out)
+        if (hrStatus == 1 && hr > 0) emit("WATCH_HR", hr.toFloat(), hrStatus, out)
 
         val ibiList = dp.getValue(ValueKey.HeartRateSet.IBI_LIST)
         val ibiStatusList = dp.getValue(ValueKey.HeartRateSet.IBI_STATUS_LIST)
         ibiList.forEachIndexed { i, ibi ->
             val status = ibiStatusList.getOrNull(i) ?: 1
             // Valid IBI per Samsung spec: status == 0 && value != 0
-            if (status == 0 && ibi != 0) emit("IBI", ibi.toFloat(), 0, out)
+            if (status == 0 && ibi != 0) emit("WATCH_IBI", ibi.toFloat(), 0, out)
         }
     }
 
@@ -335,6 +355,7 @@ class WatchSensorService : Service() {
         activeTrackers.clear()
         runCatching { trackingService?.disconnectService() }
         trackingService = null
+        instance = null
         sender.close()
         isTracking.value = false
         connectionText.value = "Stopped"

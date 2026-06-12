@@ -14,7 +14,7 @@ import org.junit.Test
  */
 class WatchLinkStatusTest {
 
-    private fun freshReading(type: String = "EDA") =
+    private fun freshReading(type: String = "WATCH_EDA") =
         WatchReading(type = type, value = 1.0f, accuracy = 0, timestampMs = System.currentTimeMillis())
 
     @Test

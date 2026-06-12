@@ -31,6 +31,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.BluetoothDisabled
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Mic
@@ -105,8 +106,10 @@ import com.biometrix.operator.presentation.components.LowSignalWarningBanner
 import com.biometrix.operator.presentation.screens.sensors.components.BleDeviceItem
 import com.biometrix.operator.presentation.screens.sensors.toConnectionState
 import com.biometrix.operator.presentation.screens.sessions.components.DeviceSensorGroup
+import com.biometrix.operator.presentation.screens.sessions.components.EndSessionWatchDialog
 import com.biometrix.operator.presentation.screens.sessions.components.LiveSensorCard
 import com.biometrix.operator.presentation.screens.sessions.components.SessionNotesField
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -130,7 +133,7 @@ fun SessionControlScreen(
     val watchEda by viewModel.watchEda.collectAsState()
     val watchBatteryLevel by viewModel.watchBatteryLevel.collectAsState()
     val watchBatteryAlert by viewModel.watchBatteryAlert.collectAsState()
-    val showWatchRecoveryDialog by viewModel.showWatchRecoveryDialog.collectAsState()
+    val endSessionPhase by viewModel.endSessionPhase.collectAsState()
 
     // Recording state
     val recordingUiState by viewModel.recordingUiState.collectAsState()
@@ -260,13 +263,10 @@ fun SessionControlScreen(
         }
     }
 
-    // Handle test end result
+    // Session-end errors surface as a snackbar; successful completion (incl. the green check + the
+    // navigation to review) is driven by EndSessionPhase.Complete in EndSessionWatchDialog below.
     LaunchedEffect(endSessionResult) {
         when (val result = endSessionResult) {
-            is EndSessionResult.Success -> {
-                viewModel.clearEndSessionResult()
-                onSessionEnded(result.sessionId)
-            }
             is EndSessionResult.Error -> {
                 snackbarHostState.showSnackbar(
                     message = result.message,
@@ -274,6 +274,7 @@ fun SessionControlScreen(
                 )
                 viewModel.clearEndSessionResult()
             }
+            is EndSessionResult.Success -> viewModel.clearEndSessionResult()
             null -> {}
         }
     }
@@ -358,35 +359,15 @@ fun SessionControlScreen(
         )
     }
 
-    // Watch EDA recovery — the watch link is down at End Session, so it may still hold sleep-buffered
-    // EDA it never delivered. Prompt the operator to wake it before finalizing (data isn't lost; the
-    // watch buffers locally and flushes on wake). "End anyway" finalizes with whatever has arrived.
-    if (showWatchRecoveryDialog) {
-        AlertDialog(
-            onDismissRequest = { viewModel.dismissWatchRecoveryDialog() },
-            icon = {
-                Icon(Icons.Default.Watch, contentDescription = null)
-            },
-            title = { Text("Galaxy Watch not reachable") },
-            text = {
-                Text(
-                    "The watch link is down. It may still hold EDA recorded while it was asleep. " +
-                        "Wake the watch (tap its screen) and make sure Bluetooth is on to recover it, " +
-                        "then end the session. You can also end now and finalize with the data already received."
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { viewModel.dismissWatchRecoveryDialog() }) {
-                    Text("Wait & recover")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { viewModel.confirmEndSessionAnyway() }) {
-                    Text("End anyway", color = MaterialTheme.colorScheme.error)
-                }
-            }
-        )
-    }
+    // End-Session watch handshake: wake the watch → receive its stored data ("reconnecting" spinner) →
+    // green check → auto-finalize. The watch store is only truncated after the data is persisted, so a
+    // slow/partial transfer never loses data; "End without watch data" always escapes (keeps the store).
+    EndSessionWatchDialog(
+        phase = endSessionPhase,
+        onEndWithoutWatchData = { viewModel.endWithoutWatchData() },
+        onRetry = { viewModel.retryWatchTransfer() },
+        onComplete = { sid -> onSessionEnded(sid) }
+    )
 
 
     // BLE scan dialog
@@ -1328,7 +1309,10 @@ private fun WatchBatteryWarningBanner(level: Int, critical: Boolean) {
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "Charge it before a long session — a dead watch can't deliver its buffered EDA",
+                    text = if (critical)
+                        "At this level the watch can stop recording sensor data while the screen is off — that data will be lost. Charge it before continuing."
+                    else
+                        "Charge it before a long session — if it drops further the watch can stop recording during sleep and lose that data.",
                     color = onContainer,
                     style = MaterialTheme.typography.bodySmall
                 )

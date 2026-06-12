@@ -89,6 +89,21 @@ class WatchSensorReceiver @Inject constructor(
     /** Tracker types the connected watch reports as supported. */
     val availableTrackers: StateFlow<List<String>> = _availableTrackers.asStateFlow()
 
+    /**
+     * Progress of the End-Session store flush handshake (see [WatchFlushState]). The session-end flow
+     * resets it via [onFlushStarted] before sending `FLUSH`, then waits for [WatchFlushState.Complete]
+     * before persisting + acking — so the watch store is never truncated before the phone has the data.
+     */
+    private val _flushState = MutableStateFlow<WatchFlushState>(WatchFlushState.Idle)
+    val flushState: StateFlow<WatchFlushState> = _flushState.asStateFlow()
+
+    // --- Flush handshake bookkeeping (mutated from binder threads; guarded by @Synchronized) ---
+    private var flushBatchId: Long? = null
+    private val flushReceivedIdx = HashSet<Int>()
+    private var flushExpectedChunks: Int? = null
+    private var flushRowCount: Int = 0
+    private var flushMaxWatchTs: Long = Long.MIN_VALUE
+
     private val _batteryLevel = MutableStateFlow<Int?>(null)
     val batteryLevel: StateFlow<Int?> = _batteryLevel.asStateFlow()
 
@@ -156,7 +171,7 @@ class WatchSensorReceiver @Inject constructor(
         _latestByType.value = _latestByType.value.toMutableMap().apply { put(reading.type, reading) }
         when (reading.type) {
             "BATTERY" -> _batteryLevel.value = reading.value.toInt()
-            "EDA", "HR", "IBI" -> _watchSampleFlow.tryEmit(reading)
+            "WATCH_EDA", "WATCH_HR", "WATCH_IBI" -> _watchSampleFlow.tryEmit(reading)
         }
     }
 
@@ -169,16 +184,94 @@ class WatchSensorReceiver @Inject constructor(
     }
 
     /**
-     * Feed historical readings flushed from the watch's durable store (DataItems) into the same
-     * sample stream the live path uses, so the recording layer's session buffer + End-Session drain
-     * handle them identically. These are NOT "live" (their watch-stamp is old), so they must not move
-     * the connection state or the clock offset — hence this bypasses [markActivity]/offset capture.
+     * Historical readings flushed from the watch's durable store, buffered **losslessly** until the
+     * End-Session drain pulls them via [takeFlushedReadings]. A whole screen-off session is thousands
+     * of rows delivered in one burst; routing those through the bounded live [_watchSampleFlow]
+     * (extraBufferCapacity 256, DROP_OLDEST) silently dropped all but the newest ~256 — so only the
+     * last scenario's data survived. This unbounded list never drops, so every scenario's window gets
+     * its readings. Written from a binder thread (onDataChanged), read on the End-Session path.
+     */
+    private val flushedBuffer = java.util.Collections.synchronizedList(ArrayList<WatchReading>())
+
+    /**
+     * Buffer historical readings flushed from the watch's durable store (DataItems). These are NOT
+     * "live" (their watch-stamp is old), so they must not move the connection state or the clock offset
+     * (hence no [markActivity]/offset capture) and must not enter the bounded live flow. They are held
+     * verbatim and corrected onto the phone clock by the recording layer at drain time.
      */
     fun onFlushedReadings(readings: List<WatchReading>) {
         readings.forEach { reading ->
-            if (reading.type == "EDA" || reading.type == "HR" || reading.type == "IBI") {
-                _watchSampleFlow.tryEmit(reading)
+            if (reading.type == "WATCH_EDA" || reading.type == "WATCH_HR" || reading.type == "WATCH_IBI") {
+                flushedBuffer.add(reading)
             }
+        }
+    }
+
+    /** Take (and clear) all flushed readings buffered since the last [onFlushStarted]. */
+    fun takeFlushedReadings(): List<WatchReading> = synchronized(flushedBuffer) {
+        ArrayList(flushedBuffer).also { flushedBuffer.clear() }
+    }
+
+    /** Reset the flush handshake before the phone sends a fresh `FLUSH` command. */
+    @Synchronized
+    fun onFlushStarted() {
+        flushBatchId = null
+        flushReceivedIdx.clear()
+        flushExpectedChunks = null
+        flushRowCount = 0
+        flushMaxWatchTs = Long.MIN_VALUE
+        flushedBuffer.clear()
+        _flushState.value = WatchFlushState.InProgress(received = 0, expected = null)
+    }
+
+    /**
+     * A flush DataItem chunk landed (from [WatchListenerService.onDataChanged]). Track it by index so
+     * re-delivery is idempotent, learn the expected total from the chunk's `count`, and carry the max
+     * raw watch timestamp seen (used as the `FLUSH_ACK` truncation point once persisted).
+     */
+    @Synchronized
+    fun onFlushChunk(batchId: Long, index: Int, count: Int, maxWatchTsInChunk: Long) {
+        adoptBatch(batchId)
+        flushReceivedIdx.add(index)
+        flushExpectedChunks = count
+        if (maxWatchTsInChunk > flushMaxWatchTs) flushMaxWatchTs = maxWatchTsInChunk
+        recomputeFlushState()
+    }
+
+    /**
+     * The watch's `FLUSH_COMPLETE` marker arrived: it states the authoritative chunk/row totals for
+     * this batch. An empty store (`chunkCount == 0`) completes immediately; otherwise this sets the
+     * expected total so completion fires once all chunks are in.
+     */
+    @Synchronized
+    fun onFlushComplete(batchId: Long, chunkCount: Int, rowCount: Int) {
+        adoptBatch(batchId)
+        flushExpectedChunks = chunkCount
+        flushRowCount = rowCount
+        recomputeFlushState()
+    }
+
+    /** Start tracking a new batch (clears prior received-index bookkeeping). */
+    private fun adoptBatch(batchId: Long) {
+        if (flushBatchId != batchId) {
+            flushBatchId = batchId
+            flushReceivedIdx.clear()
+            flushExpectedChunks = null
+            flushRowCount = 0
+            flushMaxWatchTs = Long.MIN_VALUE
+        }
+    }
+
+    private fun recomputeFlushState() {
+        val expected = flushExpectedChunks
+        val received = flushReceivedIdx.size
+        _flushState.value = if (expected != null && received >= expected) {
+            WatchFlushState.Complete(
+                rowsReceived = flushRowCount,
+                maxWatchTimestampMs = if (flushMaxWatchTs == Long.MIN_VALUE) null else flushMaxWatchTs
+            )
+        } else {
+            WatchFlushState.InProgress(received = received, expected = expected)
         }
     }
 
@@ -268,3 +361,17 @@ class WatchSensorReceiver @Inject constructor(
 
 /** Three-way Galaxy Watch link state for UI + session-end logic. See [WatchSensorReceiver.linkStatus]. */
 enum class WatchLinkStatus { LIVE, DOZING, DISCONNECTED }
+
+/**
+ * State of the End-Session store-flush handshake. See [WatchSensorReceiver.flushState].
+ *  - [Idle]: no flush in progress.
+ *  - [InProgress]: `FLUSH` sent; `received` chunks of `expected` (null until the first chunk or the
+ *    `FLUSH_COMPLETE` marker reveals the total).
+ *  - [Complete]: every chunk the watch sent has been received and buffered. [maxWatchTimestampMs] is
+ *    the truncation point for `FLUSH_ACK` (null when the store was empty — nothing to ack).
+ */
+sealed interface WatchFlushState {
+    data object Idle : WatchFlushState
+    data class InProgress(val received: Int, val expected: Int?) : WatchFlushState
+    data class Complete(val rowsReceived: Int, val maxWatchTimestampMs: Long?) : WatchFlushState
+}

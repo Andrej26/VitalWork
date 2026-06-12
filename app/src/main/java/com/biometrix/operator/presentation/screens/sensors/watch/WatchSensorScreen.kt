@@ -161,18 +161,18 @@ fun WatchSensorScreen(
 
 /** Friendly display name for a watch signal type (the wire types are terse). */
 private fun watchSignalLabel(type: String): String = when (type) {
-    "HR" -> "Heart rate"
-    "IBI" -> "Inter-beat interval"
-    "EDA" -> "Skin conductance (EDA)"
+    "WATCH_HR" -> "Heart rate"
+    "WATCH_IBI" -> "Inter-beat interval"
+    "WATCH_EDA" -> "Skin conductance (EDA)"
     "BATTERY" -> "Watch battery"
     else -> type
 }
 
 /** Value text with the signal's unit so a bare number isn't ambiguous. */
 private fun watchValueText(type: String, value: Float): String = when (type) {
-    "HR" -> "${value.toInt()} bpm"
-    "IBI" -> "${value.toInt()} ms"
-    "EDA" -> "%.2f µS".format(value)
+    "WATCH_HR" -> "${value.toInt()} bpm"
+    "WATCH_IBI" -> "${value.toInt()} ms"
+    "WATCH_EDA" -> "%.2f µS".format(value)
     "BATTERY" -> "${value.toInt()} %"
     else -> value.toString()
 }

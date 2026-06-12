@@ -4,7 +4,7 @@ package com.biometrix.operator.wear
  * Builds the newline-delimited JSON lines streamed to the tablet. Hand-built (no serializer)
  * to keep the payload tiny and the format explicit — the tablet parses the same shape.
  *
- *   {"t":1717245600000,"type":"HR","value":72.0,"accuracy":0}
+ *   {"t":1717245600000,"type":"WATCH_HR","value":72.0,"accuracy":0}
  *   {"t":1717245600000,"type":"CAPABILITIES","text":"HEART_RATE_CONTINUOUS,EDA_CONTINUOUS"}
  */
 object WatchMessage {
@@ -30,6 +30,15 @@ object WatchMessage {
     /** Wrap several already-encoded reading lines into one message (screen-off bundles). */
     fun batch(items: List<String>): String =
         """{"type":"BATCH","items":[${items.joinToString(",")}]}"""
+
+    /**
+     * Terminal marker the watch sends after dispatching a store flush. Tells the phone exactly how
+     * many DataItem chunks (and rows) to expect for this `batchId`, so it knows when the transfer is
+     * complete (and so an empty store — `chunkCount == 0` — completes instantly instead of waiting
+     * out a timeout). Sent on the same `MessageClient` path as readings.
+     */
+    fun flushComplete(batchId: Long, chunkCount: Int, rowCount: Int): String =
+        """{"t":${System.currentTimeMillis()},"type":"FLUSH_COMPLETE","batchId":$batchId,"chunkCount":$chunkCount,"rowCount":$rowCount}"""
 
     private fun escape(s: String): String =
         s.replace("\\", "\\\\").replace("\"", "\\\"")

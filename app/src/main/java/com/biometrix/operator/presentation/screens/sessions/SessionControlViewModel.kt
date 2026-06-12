@@ -19,6 +19,8 @@ import com.biometrix.operator.data.sensor.ble.BleEvent
 import com.biometrix.operator.data.sensor.ble.model.BleDevice
 import com.biometrix.operator.data.sensor.watch.WatchBatteryAlert
 import com.biometrix.operator.data.sensor.watch.WatchBatteryThresholds
+import com.biometrix.operator.data.sensor.watch.WatchFlushState
+import com.biometrix.operator.data.sensor.watch.WatchLinkStatus
 import com.biometrix.operator.data.vr.VrEvent
 import com.biometrix.operator.data.vr.VrEventReceiver
 import com.biometrix.operator.presentation.components.BleDialogState
@@ -37,9 +39,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Locale
 import javax.inject.Inject
 
@@ -161,15 +169,21 @@ class SessionControlViewModel @Inject constructor(
     private var savedDismissJob: Job? = null
 
     /**
-     * Shown when the operator hits End Session while the Galaxy Watch link is down. The watch may
-     * still hold sleep-buffered EDA it hasn't delivered; prompting the operator to wake it (tap its
-     * screen / turn Bluetooth on) lets that buffer flush before we finalize. Purely advisory — the
-     * operator can always end anyway.
+     * Drives the End-Session dialog state machine: prompt to wake the watch (if dozing/gone) → show a
+     * "Receiving data from watch…" spinner while the durable store flushes → green check → auto-finalize.
+     * The watch store is only truncated (`FLUSH_ACK`) after the data is persisted, so nothing is lost
+     * to a slow flush, and the flow can never hang (timeout → [EndSessionPhase.Failed] with escapes).
      */
-    private val _showWatchRecoveryDialog = MutableStateFlow(false)
-    val showWatchRecoveryDialog: StateFlow<Boolean> = _showWatchRecoveryDialog.asStateFlow()
+    private val _endSessionPhase = MutableStateFlow<EndSessionPhase>(EndSessionPhase.Idle)
+    val endSessionPhase: StateFlow<EndSessionPhase> = _endSessionPhase.asStateFlow()
 
-    /** Session ending state */
+    /** Operator chose "End without watch data": abort the wait and finalize with what's recorded. */
+    private val _endWithoutWatch = MutableStateFlow(false)
+
+    /** The single in-flight End-Session coroutine (guards against double-taps / re-entry). */
+    private var endSessionJob: Job? = null
+
+    /** Session ending state (drives the End-Session button spinner / disabled state). */
     private val _isEndingSession = MutableStateFlow(false)
     val isEndingSession: StateFlow<Boolean> = _isEndingSession.asStateFlow()
 
@@ -485,70 +499,159 @@ class SessionControlViewModel @Inject constructor(
     }
 
     /**
-     * Entry point for the End-Session button. If a Galaxy Watch was in use this session but its link
-     * is **truly DISCONNECTED** (not merely dozing/buffering), show the recovery dialog first — the
-     * watch may hold undelivered stored readings the remote flush can't reach. A *dozing* watch is
-     * fine: it's reachable, so we go straight to [endSessionAndSave], which sends FLUSH and waits.
+     * Entry point for the End-Session button. Runs the watch-aware finalize handshake (see
+     * [runEndSession]). Re-entrant taps are ignored while a finalize is already in flight.
      */
     fun requestEndSession() {
-        val watchWasInUse = connectionRepository.watchBatteryLevel.value != null
-        val watchGone = connectionRepository.watchLinkStatus.value ==
-            com.biometrix.operator.data.sensor.watch.WatchLinkStatus.DISCONNECTED
-        if (watchWasInUse && watchGone) {
-            _showWatchRecoveryDialog.value = true
+        if (endSessionJob?.isActive == true) return
+        endSessionJob = viewModelScope.launch { runEndSession() }
+    }
+
+    /** Kept as the public name some callers/tests use; identical to [requestEndSession]. */
+    fun endSessionAndSave() = requestEndSession()
+
+    /**
+     * Operator chose "End without watch data" from the wake/transfer dialog. If the finalize coroutine
+     * is waiting (for the watch to wake or the flush to complete), unblock it so it finalizes with what
+     * is already recorded; if we're at a terminal [EndSessionPhase.Failed], start the finalize directly.
+     * Either way **no `FLUSH_ACK` is sent**, so the watch keeps its stored data for a later session.
+     */
+    fun endWithoutWatchData() {
+        if (endSessionJob?.isActive == true) {
+            _endWithoutWatch.value = true
         } else {
-            endSessionAndSave()
+            endSessionJob = viewModelScope.launch { wrapFinalize(ackThroughWatchTs = null) }
         }
     }
 
-    /** Operator dismissed the recovery dialog by choosing to finalize regardless. */
-    fun confirmEndSessionAnyway() {
-        _showWatchRecoveryDialog.value = false
-        endSessionAndSave()
+    /** Retry the whole handshake from a failed/timed-out state (e.g. after waking the watch). */
+    fun retryWatchTransfer() {
+        if (endSessionJob?.isActive == true) return
+        endSessionJob = viewModelScope.launch { runEndSession() }
     }
 
-    /** Operator cancelled End Session from the recovery dialog (e.g. to go wake the watch). */
-    fun dismissWatchRecoveryDialog() {
-        _showWatchRecoveryDialog.value = false
-    }
-
-    fun endSessionAndSave() {
-        viewModelScope.launch {
-            _isEndingSession.value = true
-            try {
-                // Stop recording if active — this sets the last scenario's endedAt, closing its window.
-                if (sensorRecordingRepository.recordingState.value == DataRecordingState.RECORDING) {
-                    sensorRecordingRepository.stopRecording()
-                }
-
-                // Remote wake/flush: ask the watch to push its durable store (EDA + HR + IBI) so the
-                // dataset is complete even after a screen-off/Doze session. Best-effort — if the watch
-                // is unreachable the command simply doesn't land; the operator's manual tap (recovery
-                // dialog) is the fallback, and no data is lost (the watch keeps it until acked).
-                val watchWasInUse = connectionRepository.watchBatteryLevel.value != null
-                if (watchWasInUse) {
-                    runCatching { watchCommandSender.sendFlush() }
-                    // Bounded wait for the flushed DataItem(s) to sync + ingest before we slice.
-                    // Bounded so an unreachable watch never hangs End Session.
-                    delay(WATCH_FLUSH_GRACE_MS)
-                }
-
-                // Drain the session-long watch buffer (EDA/HR/IBI, incl. flushed history) into scenarios
-                // BY TIMESTAMP WINDOW, before endSession rolls up the per-type sample counts. Scenarios
-                // now all have endedAt set.
-                val scenarios = scenarioRepository.getScenariosForSessionOnce(sessionId)
-                sensorRecordingRepository.drainAndFinalizeWatchEda(scenarios)
-
-                sessionRepository.endSession(sessionId)
-
-                _endSessionResult.value = EndSessionResult.Success(sessionId)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                _endSessionResult.value = EndSessionResult.Error(e.message ?: "Failed to save session")
-            } finally {
-                _isEndingSession.value = false
+    private suspend fun runEndSession() {
+        _isEndingSession.value = true
+        _endWithoutWatch.value = false
+        try {
+            // Stop recording if active — this sets the last scenario's endedAt, closing its window.
+            if (sensorRecordingRepository.recordingState.value == DataRecordingState.RECORDING) {
+                sensorRecordingRepository.stopRecording()
             }
+
+            // No watch this session → nothing to transfer; finalize straight away.
+            val watchWasInUse = connectionRepository.watchBatteryLevel.value != null
+            if (!watchWasInUse) {
+                finalize(ackThroughWatchTs = null)
+                return
+            }
+
+            // If the watch is dozing/gone, prompt the operator to wake it and wait until it's LIVE
+            // (or they choose to end without it). The phone can't reliably auto-wake a deeply-dozing
+            // watch, so a manual tap on the wrist is the dependable trigger.
+            if (connectionRepository.watchLinkStatus.value != WatchLinkStatus.LIVE) {
+                _endSessionPhase.value = EndSessionPhase.AwaitingWatchWake
+                when (awaitWatchWake()) {
+                    WakeOutcome.ABORTED -> { finalize(ackThroughWatchTs = null); return }
+                    WakeOutcome.TIMED_OUT -> {
+                        _endSessionPhase.value = EndSessionPhase.Failed("The watch didn't come online.")
+                        return
+                    }
+                    WakeOutcome.LIVE -> { /* fall through to transfer */ }
+                }
+            }
+
+            transferAndFinalize()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _endSessionResult.value = EndSessionResult.Error(e.message ?: "Failed to save session")
+            _endSessionPhase.value = EndSessionPhase.Idle
+        } finally {
+            _isEndingSession.value = false
+        }
+    }
+
+    private enum class WakeOutcome { LIVE, ABORTED, TIMED_OUT }
+
+    /** Suspend until the watch is LIVE, the operator aborts, or [WATCH_WAKE_TIMEOUT_MS] elapses. */
+    private suspend fun awaitWatchWake(): WakeOutcome {
+        val outcome = withTimeoutOrNull(WATCH_WAKE_TIMEOUT_MS) {
+            merge(
+                connectionRepository.watchLinkStatus
+                    .filter { it == WatchLinkStatus.LIVE }
+                    .map { WakeOutcome.LIVE },
+                _endWithoutWatch.filter { it }.map { WakeOutcome.ABORTED }
+            ).first()
+        }
+        return outcome ?: WakeOutcome.TIMED_OUT
+    }
+
+    /**
+     * Send `FLUSH`, show the "Receiving data from watch…" spinner while the store streams in, and wait
+     * for the watch's `FLUSH_COMPLETE` (or the operator's abort, or a timeout) before finalizing.
+     */
+    private suspend fun transferAndFinalize() {
+        connectionRepository.beginWatchFlush()
+        runCatching { watchCommandSender.sendFlush() }
+        _endSessionPhase.value = EndSessionPhase.Transferring(received = 0, expected = null)
+
+        val end = withTimeoutOrNull(WATCH_TRANSFER_TIMEOUT_MS) {
+            merge(
+                connectionRepository.watchFlushState
+                    .onEach { st ->
+                        if (st is WatchFlushState.InProgress) {
+                            _endSessionPhase.value =
+                                EndSessionPhase.Transferring(st.received, st.expected)
+                        }
+                    }
+                    .filterIsInstance<WatchFlushState.Complete>()
+                    .map { TransferEnd.Completed(it.maxWatchTimestampMs) },
+                _endWithoutWatch.filter { it }.map { TransferEnd.Aborted }
+            ).first()
+        }
+
+        when (end) {
+            is TransferEnd.Completed -> finalize(ackThroughWatchTs = end.maxWatchTimestampMs)
+            TransferEnd.Aborted -> finalize(ackThroughWatchTs = null)
+            null -> _endSessionPhase.value =
+                EndSessionPhase.Failed("Couldn't receive all data from the watch.")
+        }
+    }
+
+    private sealed interface TransferEnd {
+        data class Completed(val maxWatchTimestampMs: Long?) : TransferEnd
+        data object Aborted : TransferEnd
+    }
+
+    /**
+     * Persist the watch buffer split by scenario window, then — only if data was actually received —
+     * `FLUSH_ACK` the watch (which truncates its store), then end the session. Acking strictly after
+     * the drain is what makes a slow/partial flush non-destructive.
+     */
+    private suspend fun finalize(ackThroughWatchTs: Long?) {
+        _endSessionPhase.value = EndSessionPhase.Finalizing
+        val scenarios = scenarioRepository.getScenariosForSessionOnce(sessionId)
+        sensorRecordingRepository.drainAndFinalizeWatchEda(scenarios)
+        if (ackThroughWatchTs != null) {
+            runCatching { watchCommandSender.sendFlushAck(ackThroughWatchTs) }
+        }
+        sessionRepository.endSession(sessionId)
+        _endSessionPhase.value = EndSessionPhase.Complete(sessionId)
+    }
+
+    /** [finalize] wrapped with the standard ending-session state guards (for the direct-call path). */
+    private suspend fun wrapFinalize(ackThroughWatchTs: Long?) {
+        _isEndingSession.value = true
+        try {
+            finalize(ackThroughWatchTs)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _endSessionResult.value = EndSessionResult.Error(e.message ?: "Failed to save session")
+            _endSessionPhase.value = EndSessionPhase.Idle
+        } finally {
+            _isEndingSession.value = false
         }
     }
 
@@ -680,12 +783,33 @@ class SessionControlViewModel @Inject constructor(
     }
 
     private companion object {
-        /** Bounded wait for a just-reconnected watch to flush its sleep buffer before slicing. */
-        const val WATCH_FLUSH_GRACE_MS = 2_000L
+        /** How long to wait for the operator to wake a dozing/disconnected watch before giving up. */
+        const val WATCH_WAKE_TIMEOUT_MS = 60_000L
+
+        /** How long to wait for the woken watch to flush its whole store before declaring failure. */
+        const val WATCH_TRANSFER_TIMEOUT_MS = 30_000L
     }
 }
 
 sealed class EndSessionResult {
     data class Success(val sessionId: Long) : EndSessionResult()
     data class Error(val message: String) : EndSessionResult()
+}
+
+/**
+ * Drives the End-Session dialog. See [SessionControlViewModel.endSessionPhase].
+ *  - [Idle]: no end in progress (no dialog).
+ *  - [AwaitingWatchWake]: prompt the operator to wake the watch so it can transfer its stored data.
+ *  - [Transferring]: `FLUSH` sent; receiving the store (`received` of `expected` chunks).
+ *  - [Finalizing]: persisting + splitting by scenario window, then ending the session.
+ *  - [Complete]: all done — show the green check, then navigate to review for [sessionId].
+ *  - [Failed]: the watch never woke / the transfer didn't finish; offer Retry or End-without-watch-data.
+ */
+sealed interface EndSessionPhase {
+    data object Idle : EndSessionPhase
+    data object AwaitingWatchWake : EndSessionPhase
+    data class Transferring(val received: Int, val expected: Int?) : EndSessionPhase
+    data object Finalizing : EndSessionPhase
+    data class Complete(val sessionId: Long) : EndSessionPhase
+    data class Failed(val reason: String) : EndSessionPhase
 }

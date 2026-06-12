@@ -13,7 +13,7 @@ import org.junit.Test
  */
 class WatchSessionDrainerTest {
 
-    private fun reading(t: Long, v: Float = 1.0f, type: SensorType = SensorType.EDA) =
+    private fun reading(t: Long, v: Float = 1.0f, type: SensorType = SensorType.WATCH_EDA) =
         WatchSessionDrainer.Reading(t, type, v)
 
     @Test
@@ -27,7 +27,7 @@ class WatchSessionDrainerTest {
         assertEquals(1, rows.size)
         assertEquals(10L, rows[0].scenarioId)
         assertEquals(1_500L, rows[0].timestampMs)
-        assertEquals(SensorType.EDA, rows[0].sensorType)
+        assertEquals(SensorType.WATCH_EDA, rows[0].sensorType)
         assertEquals(3.3f, rows[0].value)
     }
 
@@ -86,7 +86,7 @@ class WatchSessionDrainerTest {
         val rows = WatchSessionDrainer.drain(
             readings = listOf(reading(2_000L), reading(3_000L), reading(4_000L)),
             windows = windows,
-            highWaterMarks = mapOf(HwmKey(10L, SensorType.EDA) to 3_000L)
+            highWaterMarks = mapOf(HwmKey(10L, SensorType.WATCH_EDA) to 3_000L)
         )
         // Only the 4_000 sample (after the high-water mark) survives.
         assertEquals(listOf(4_000L), rows.map { it.timestampMs })
@@ -134,23 +134,23 @@ class WatchSessionDrainerTest {
         assertTrue(rows.isEmpty())
     }
 
-    // --- per-type behavior (EDA + HR + IBI now share the pipeline) ---
+    // --- per-type behavior (WATCH_EDA + WATCH_HR + WATCH_IBI now share the pipeline) ---
 
     @Test
     fun attributesMixedTypesIntoTheSameScenarioPreservingType() {
         val windows = listOf(ScenarioWindow(10L, startedAt = 1_000L, endedAt = 5_000L))
         val rows = WatchSessionDrainer.drain(
             readings = listOf(
-                reading(1_500L, 72f, SensorType.HEART_RATE),
+                reading(1_500L, 72f, SensorType.WATCH_HR),
                 reading(1_500L, 830f, SensorType.WATCH_IBI),
-                reading(1_500L, 3.3f, SensorType.EDA)
+                reading(1_500L, 3.3f, SensorType.WATCH_EDA)
             ),
             windows = windows,
             highWaterMarks = emptyMap()
         )
         assertEquals(3, rows.size)
         assertEquals(
-            setOf(SensorType.HEART_RATE, SensorType.WATCH_IBI, SensorType.EDA),
+            setOf(SensorType.WATCH_HR, SensorType.WATCH_IBI, SensorType.WATCH_EDA),
             rows.map { it.sensorType }.toSet()
         )
     }
@@ -161,15 +161,15 @@ class WatchSessionDrainerTest {
         // HR is acked through 3_000; IBI/EDA are NOT — an HR HWM must not suppress other types.
         val rows = WatchSessionDrainer.drain(
             readings = listOf(
-                reading(2_000L, 70f, SensorType.HEART_RATE), // ≤ HR hwm → dropped
+                reading(2_000L, 70f, SensorType.WATCH_HR), // ≤ HR hwm → dropped
                 reading(2_000L, 800f, SensorType.WATCH_IBI), // different type → kept
-                reading(2_000L, 2.1f, SensorType.EDA)        // different type → kept
+                reading(2_000L, 2.1f, SensorType.WATCH_EDA)        // different type → kept
             ),
             windows = windows,
-            highWaterMarks = mapOf(HwmKey(10L, SensorType.HEART_RATE) to 3_000L)
+            highWaterMarks = mapOf(HwmKey(10L, SensorType.WATCH_HR) to 3_000L)
         )
         assertEquals(
-            setOf(SensorType.WATCH_IBI, SensorType.EDA),
+            setOf(SensorType.WATCH_IBI, SensorType.WATCH_EDA),
             rows.map { it.sensorType }.toSet()
         )
     }

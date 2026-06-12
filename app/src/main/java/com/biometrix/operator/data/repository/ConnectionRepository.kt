@@ -61,9 +61,16 @@ class ConnectionRepository @Inject constructor(
     val watchLinkStatus: StateFlow<com.biometrix.operator.data.sensor.watch.WatchLinkStatus> =
         watchReceiver.linkStatus
 
+    /** Progress of the End-Session store-flush handshake (Idle / InProgress / Complete). */
+    val watchFlushState: StateFlow<com.biometrix.operator.data.sensor.watch.WatchFlushState> =
+        watchReceiver.flushState
+
+    /** Reset the flush handshake before sending a fresh `FLUSH` to the watch. */
+    fun beginWatchFlush() = watchReceiver.onFlushStarted()
+
     /** Latest EDA value (µS) from the Galaxy Watch for live display, null until first reading. */
     val watchEda: StateFlow<Float?> = watchReceiver.latestByType
-        .map { it["EDA"]?.value }
+        .map { it["WATCH_EDA"]?.value }
         .stateIn(repoScope, SharingStarted.Eagerly, null)
 
     /** Galaxy Watch battery level percentage (0-100), null until first reading. */

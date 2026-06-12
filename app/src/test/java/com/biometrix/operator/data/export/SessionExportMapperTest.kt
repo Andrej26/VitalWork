@@ -39,16 +39,18 @@ class SessionExportMapperTest {
     fun buildScenarioExport_sensorTypesMappedToLowercase() {
         val scenario = scenario()
         val samples = listOf(
-            sample(scenario.id, SensorType.HEART_RATE),
+            sample(scenario.id, SensorType.ESENSE_HEART_RATE),
             sample(scenario.id, SensorType.ESENSE_RR_INTERVAL),
             sample(scenario.id, SensorType.RESPIRATION),
-            sample(scenario.id, SensorType.EDA)
+            sample(scenario.id, SensorType.WATCH_HR),
+            sample(scenario.id, SensorType.WATCH_IBI),
+            sample(scenario.id, SensorType.WATCH_EDA)
         )
 
         val result = mapper.buildScenarioExport(scenario, samples)
 
         assertEquals(
-            listOf("heart_rate", "rr_interval", "respiration", "eda"),
+            listOf("esense_heart_rate", "rr_interval", "respiration", "watch_hr", "watch_ibi", "watch_eda"),
             result.samples.map { it.sensorType }
         )
     }
@@ -90,8 +92,8 @@ class SessionExportMapperTest {
     fun buildScenarioExport_gapsNullWhenNoSignificantGaps() {
         val scenario = scenario()
         val samples = listOf(
-            sample(scenario.id, SensorType.HEART_RATE, elapsedMs = 0L),
-            sample(scenario.id, SensorType.HEART_RATE, elapsedMs = 1_000L)
+            sample(scenario.id, SensorType.ESENSE_HEART_RATE, elapsedMs = 0L),
+            sample(scenario.id, SensorType.ESENSE_HEART_RATE, elapsedMs = 1_000L)
         )
 
         val result = mapper.buildScenarioExport(scenario, samples)
@@ -103,9 +105,9 @@ class SessionExportMapperTest {
     fun buildScenarioExport_heartRateGapsDetected() {
         val scenario = scenario()
         val samples = listOf(
-            sample(scenario.id, SensorType.HEART_RATE, elapsedMs = 11_000L),
-            sample(scenario.id, SensorType.HEART_RATE, elapsedMs = 12_000L),
-            sample(scenario.id, SensorType.HEART_RATE, elapsedMs = 25_000L)
+            sample(scenario.id, SensorType.ESENSE_HEART_RATE, elapsedMs = 11_000L),
+            sample(scenario.id, SensorType.ESENSE_HEART_RATE, elapsedMs = 12_000L),
+            sample(scenario.id, SensorType.ESENSE_HEART_RATE, elapsedMs = 25_000L)
         )
 
         val result = mapper.buildScenarioExport(scenario, samples)
@@ -141,8 +143,8 @@ class SessionExportMapperTest {
         val session = session()
         val scenario = scenario(id = 42L)
         fakeSensorSampleDao.samples.addAll(listOf(
-            sample(scenario.id, SensorType.HEART_RATE, value = 72f),
-            sample(scenario.id, SensorType.HEART_RATE, value = 75f)
+            sample(scenario.id, SensorType.ESENSE_HEART_RATE, value = 72f),
+            sample(scenario.id, SensorType.ESENSE_HEART_RATE, value = 75f)
         ))
 
         val result = mapper.buildExportData(participant, session, listOf(scenario))

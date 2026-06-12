@@ -11,10 +11,15 @@ import androidx.room.TypeConverters
         ScenarioEntity::class,
         SensorSampleEntity::class
     ],
-    // v2: added SensorType.WATCH_IBI for Galaxy Watch store-and-forward (HR reuses HEART_RATE).
-    // The DB uses fallbackToDestructiveMigration (see AppModule), so a new enum value needs no
-    // hand-written Migration — the value is stored as a string by Converters.
-    version = 2,
+    // v2: added SensorType.WATCH_IBI for Galaxy Watch store-and-forward.
+    // v3: split per-device SensorTypes — HEART_RATE → ESENSE_HEART_RATE + WATCH_HR, EDA → WATCH_EDA —
+    //     so HR from the eSense Pulse and the Galaxy Watch (recorded simultaneously) never merge.
+    // v4: added sessions.watchHrSampleCount + watchIbiSampleCount so the session summary counters
+    //     cover all six sample types (previously WATCH_HR/WATCH_IBI were uncounted).
+    // The DB uses fallbackToDestructiveMigration (see AppModule), so renamed enum values and added
+    // columns need no hand-written Migration — the destructive fallback wipes the old local rows
+    // (sessions are already exported/uploaded), and values are stored as strings by Converters.
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

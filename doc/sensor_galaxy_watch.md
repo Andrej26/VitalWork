@@ -155,9 +155,9 @@ parses the same shape.
 
 ```jsonc
 // One reading:
-{"t":1717245600000,"type":"HR","value":72.0,"accuracy":0}
-{"t":1717245600000,"type":"EDA","value":50.5,"accuracy":0}
-{"t":1717245600000,"type":"IBI","value":833.0,"accuracy":0}
+{"t":1717245600000,"type":"WATCH_HR","value":72.0,"accuracy":0}
+{"t":1717245600000,"type":"WATCH_EDA","value":50.5,"accuracy":0}
+{"t":1717245600000,"type":"WATCH_IBI","value":833.0,"accuracy":0}
 {"t":1717245600000,"type":"BATTERY","value":86.0,"accuracy":0}
 
 // Capability list (resent ~5× early so a single drop isn't permanent):
@@ -210,17 +210,33 @@ locally** and the phone **pulls the complete history** at session end.
   the `biometrix_watch` capability (advertised in `wear/src/main/res/values/wear.xml`) and sends the
   command strings.
 - `WatchListenerService.onDataChanged` ingests flushed DataItems → `WatchSensorReceiver.onFlushedReadings`
-  (fed into the same `watchSampleFlow` the live path uses), then **deletes each DataItem (the Data
-  Layer ack)** and sends `FLUSH_ACK:<maxTs>` back so the watch **truncates** its store through that
-  timestamp. Un-acked rows survive for the next flush; the per-(scenario,type) high-water-mark de-dup
-  makes any re-delivery idempotent. **Lossless by construction.**
+  (buffered **losslessly** in an unbounded list — NOT the bounded live `watchSampleFlow`, whose 256-slot
+  DROP_OLDEST would silently discard all but the newest ~256 of a multi-thousand-row session flush and
+  collapse everything into the last scenario; the drain pulls them via `takeFlushedReadings()` and
+  corrects them onto the phone clock), reports chunk progress via
+  `WatchSensorReceiver.onFlushChunk(batchId,index,count,maxTs)`, then **deletes each DataItem**
+  (Data-Layer cleanup only — it does NOT touch the watch's durable store). **It no longer sends
+  `FLUSH_ACK` here.** The ack (which truncates the store) is sent by the session-end flow *after* the
+  rows are persisted, so a slow/partial flush can never destroy data the phone hasn't saved. The
+  per-(scenario,type) high-water-mark de-dup (readings) + per-index chunk set (progress) make
+  re-delivery idempotent. **Lossless by construction.**
 
-**Session end** (`SessionControlViewModel.endSessionAndSave`): if the watch was in use, send `FLUSH`,
-wait a bounded grace (`WATCH_FLUSH_GRACE_MS`) for the DataItems to sync + ingest, then drain the
-session buffer into per-scenario rows. The advisory "wake the watch" dialog (`requestEndSession`) now
-fires **only on a true `DISCONNECTED`** link status (not `DOZING`) — a reachable/dozing watch goes
-straight to the FLUSH path. **Auto-wake is best-effort** (a deeply-Doze/unreachable watch may not get
-the command); the manual tap is the fallback and **no data is lost** because the store is durable.
+**Flush handshake (`FLUSH_COMPLETE`):** after dispatching the DataItem chunks, the watch
+(`WatchCommandListenerService.flushStore`) sends a `MessageClient` line
+`{"type":"FLUSH_COMPLETE","batchId","chunkCount","rowCount"}` (`WatchMessage.flushComplete`). The phone
+(`WatchSensorReceiver.onFlushComplete`) uses it to know exactly how many chunks to expect — so an empty
+store (`chunkCount==0`) completes instantly and a real flush completes once all chunks are in, driving
+`WatchSensorReceiver.flushState` (`Idle → InProgress(received,expected) → Complete(rows,maxWatchTs)`).
+
+**Session end** (`SessionControlViewModel`, `EndSessionPhase` state machine): stop recording (closes
+the last scenario window) → if the watch is dozing/gone, show **"Wake your watch"** and wait until it
+is `LIVE` (or the operator picks "End without watch data") → `beginWatchFlush()` + send `FLUSH` and show
+the **"Receiving data from watch…"** reconnecting-style spinner while `flushState` advances → on
+`Complete`, drain the session buffer into per-scenario rows by timestamp window, **then** send
+`FLUSH_ACK:<maxWatchTs>` (truncate the store), end the session, show the **green check**, and navigate.
+Bounded by `WATCH_WAKE_TIMEOUT_MS` / `WATCH_TRANSFER_TIMEOUT_MS` → `EndSessionPhase.Failed` (Retry /
+End-without-watch-data), so it never hangs. **Auto-wake is best-effort**; the manual tap is the
+dependable trigger and **no data is lost** because the store is only truncated after a successful save.
 
 **Reliability ceiling (verified research, recorded so it isn't re-litigated):** there is **no
 documented guarantee** the Data Layer wakes a *deeply* dozing watch. Google's own deep-Doze wake is
@@ -506,11 +522,16 @@ on the watch by `WatchDataSender` (see *Transport*).
 
 ### Recording / Database Integration (implemented 2026-06)
 
-Watch readings are recorded to the DB and export. Type mapping: **HR → `SensorType.HEART_RATE`**,
-**IBI → `SensorType.WATCH_IBI`** (a distinct value so watch HRV is attributable vs. eSense RR),
-**EDA → `SensorType.EDA`**. The DB is at version 2 (`WATCH_IBI` added); enums store as strings under
-`fallbackToDestructiveMigration`, so no hand-written `Migration` was needed. Export maps `WATCH_IBI`
-to `"watch_ibi"` in both JSON (`SessionExportMapper`) and CSV (`SessionExportService`). The
+Watch readings are recorded to the DB and export. Each `SensorType` maps to **exactly one physical
+sensor** so HR from the watch and the eSense Pulse (recorded simultaneously) never merge — wire types
+`WATCH_HR`/`WATCH_IBI`/`WATCH_EDA` map to **`SensorType.WATCH_HR`**, **`SensorType.WATCH_IBI`** (a
+distinct value so watch HRV is attributable vs. eSense RR), and **`SensorType.WATCH_EDA`**; the eSense
+Pulse uses **`SensorType.ESENSE_HEART_RATE`**. The DB is at version 3 (v3 split per-device HR/EDA;
+`accuracy` is intentionally dropped at ingest — not a DB column); enums store as strings under
+`fallbackToDestructiveMigration`, so the rename needed no hand-written `Migration` (the destructive
+fallback wipes old local rows, which are already exported/uploaded). Export maps each type to a
+distinct lowercase string (`watch_hr`/`watch_ibi`/`watch_eda`/`esense_heart_rate`) in both JSON
+(`SessionExportMapper`) and CSV (`SessionExportService`). The
 session-long buffer + `WatchSessionDrainer` (per-(scenario,type) timestamp-window attribution, with
 high-water-mark de-dup against live-written rows) handle live readings and flushed history identically.
 See **Store-and-Forward + Remote Flush**.

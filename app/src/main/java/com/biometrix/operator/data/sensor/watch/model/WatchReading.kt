@@ -3,7 +3,7 @@ package com.biometrix.operator.data.sensor.watch.model
 /**
  * One sensor reading received from the Galaxy Watch over the Data Layer channel.
  *
- * @param type   "HR", "IBI", "EDA", "PPG", "SPO2", "TEMP", "BATTERY", … (matches the watch stream)
+ * @param type   "WATCH_HR", "WATCH_IBI", "WATCH_EDA", "BATTERY", "HEARTBEAT", … (matches the watch stream)
  * @param value  numeric value (BPM, ms, microsiemens, %, °C, …)
  * @param accuracy per-reading status/accuracy flag from the SDK (0 = good); null if N/A
  * @param timestampMs watch wall-clock at sample time (System.currentTimeMillis on the watch)

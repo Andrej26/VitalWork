@@ -102,7 +102,7 @@ class SessionUploadMapperTest {
                 ),
                 SensorSampleEntity(
                     scenarioId = 5L, timestampMs = 1_790_509_929_100L, elapsedMs = 29_100L,
-                    sensorType = SensorType.HEART_RATE, value = 82f
+                    sensorType = SensorType.ESENSE_HEART_RATE, value = 82f
                 )
             )
         )
@@ -115,7 +115,7 @@ class SessionUploadMapperTest {
         assertEquals("ESENSE_RR_INTERVAL", samples[0].sensorType)
         assertEquals(1_790_509_929_000L, samples[0].timestampMs)
         assertEquals(698.2f, samples[0].value, 0.001f)
-        assertEquals("HEART_RATE", samples[1].sensorType)
+        assertEquals("ESENSE_HEART_RATE", samples[1].sensorType)
         // elapsedMs is intentionally not present on the wire DTO (derivable server-side).
     }
 

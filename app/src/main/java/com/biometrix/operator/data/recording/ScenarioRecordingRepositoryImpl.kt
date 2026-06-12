@@ -151,7 +151,7 @@ class ScenarioRecordingRepositoryImpl(
         // Start sensor collectors
         if (shouldRecordHr) {
             collectorJobs += collectSensor(
-                bleManager.heartRateSampleFlow, SensorType.HEART_RATE
+                bleManager.heartRateSampleFlow, SensorType.ESENSE_HEART_RATE
             ) { it.copy(heartRateSampleCount = it.heartRateSampleCount + 1) }
 
             collectorJobs += collectSensor(
@@ -231,9 +231,9 @@ class ScenarioRecordingRepositoryImpl(
 
     /** Map a watch reading-type string to its DB [SensorType]; null = not a recordable sensor. */
     private fun watchSensorType(type: String): SensorType? = when (type) {
-        "EDA" -> SensorType.EDA
-        "HR" -> SensorType.HEART_RATE
-        "IBI" -> SensorType.WATCH_IBI
+        "WATCH_EDA" -> SensorType.WATCH_EDA
+        "WATCH_HR" -> SensorType.WATCH_HR
+        "WATCH_IBI" -> SensorType.WATCH_IBI
         else -> null
     }
 
@@ -268,7 +268,7 @@ class ScenarioRecordingRepositoryImpl(
                 // Advance the per-(scenario, type) high-water mark (de-dup boundary for the drain).
                 watchHighWaterMarks.merge(WatchSessionDrainer.HwmKey(scenarioId, sensorType), tc, ::maxOf)
                 // EDA sample count drives the existing live metadata badge; keep that behavior.
-                if (sensorType == SensorType.EDA) {
+                if (sensorType == SensorType.WATCH_EDA) {
                     _recordingMetadata.value = _recordingMetadata.value?.let {
                         if (it.scenarioId == scenarioId) it.copy(edaSampleCount = it.edaSampleCount + 1) else it
                     }
@@ -279,6 +279,15 @@ class ScenarioRecordingRepositoryImpl(
 
     override suspend fun drainAndFinalizeWatchEda(scenarios: List<ScenarioEntity>) {
         try {
+            // Pull the historical store flush (buffered losslessly in the receiver) and add it to the
+            // session buffer, corrected onto the phone clock — so the drain sees the WHOLE session, not
+            // just the live samples, and splits it across every scenario window.
+            watchReceiver.takeFlushedReadings().forEach { reading ->
+                val sensorType = watchSensorType(reading.type) ?: return@forEach
+                val tc = watchReceiver.correctedTimestamp(reading.timestampMs)
+                watchSessionBuffer.add(WatchSessionDrainer.Reading(tc, sensorType, reading.value))
+            }
+
             val readings = synchronized(watchSessionBuffer) { watchSessionBuffer.toList() }
             val windows = scenarios.map {
                 WatchSessionDrainer.ScenarioWindow(it.id, it.startedAt, it.endedAt)

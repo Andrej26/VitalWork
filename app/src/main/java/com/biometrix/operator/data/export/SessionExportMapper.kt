@@ -77,11 +77,12 @@ class SessionExportMapper @Inject constructor(
                 timestampMs = sample.timestampMs,
                 elapsedMs = sample.elapsedMs,
                 sensorType = when (sample.sensorType) {
-                    SensorType.HEART_RATE -> "heart_rate"
+                    SensorType.ESENSE_HEART_RATE -> "esense_heart_rate"
                     SensorType.ESENSE_RR_INTERVAL -> "rr_interval"
                     SensorType.RESPIRATION -> "respiration"
-                    SensorType.EDA -> "eda"
+                    SensorType.WATCH_HR -> "watch_hr"
                     SensorType.WATCH_IBI -> "watch_ibi"
+                    SensorType.WATCH_EDA -> "watch_eda"
                 },
                 value = sample.value
             )
