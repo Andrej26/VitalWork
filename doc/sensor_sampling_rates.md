@@ -1,6 +1,6 @@
 # Sensor Sampling Rates
 
-Sampling rates, data types, and synchronization approach for all sensors in BioMetrixOperator.
+Sampling rates, data types, and synchronization approach for all sensors in VitalWork.
 
 ## Overview
 

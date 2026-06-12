@@ -100,9 +100,9 @@ See [sensor_sampling_rates.md](sensor_sampling_rates.md) for multi-sensor synchr
 
 | File | Role |
 |------|------|
-| [data/sensor/audio/MindfieldRespiration.kt](../app/src/main/java/com/biometrix/operator/data/sensor/audio/MindfieldRespiration.kt) | Singleton SDK wrapper (connect, stream, watchdog, rate calculation) |
-| [.../respiration/EsenseRespirationViewModel.kt](../app/src/main/java/com/biometrix/operator/presentation/screens/sensors/mindfield/respiration/EsenseRespirationViewModel.kt) | UI state management |
-| [.../respiration/EsenseRespirationScreen.kt](../app/src/main/java/com/biometrix/operator/presentation/screens/sensors/mindfield/respiration/EsenseRespirationScreen.kt) | Compose UI |
+| [data/sensor/audio/MindfieldRespiration.kt](../app/src/main/java/com/vitalwork/app/data/sensor/audio/MindfieldRespiration.kt) | Singleton SDK wrapper (connect, stream, watchdog, rate calculation) |
+| [.../respiration/EsenseRespirationViewModel.kt](../app/src/main/java/com/vitalwork/app/presentation/screens/sensors/mindfield/respiration/EsenseRespirationViewModel.kt) | UI state management |
+| [.../respiration/EsenseRespirationScreen.kt](../app/src/main/java/com/vitalwork/app/presentation/screens/sensors/mindfield/respiration/EsenseRespirationScreen.kt) | Compose UI |
 
 `MindfieldRespiration` is a Kotlin `object` (singleton). Only one instance exists per process lifetime.
 

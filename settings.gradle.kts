@@ -25,6 +25,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "BioMetrixOperator"
+rootProject.name = "VitalWork"
 include(":app")
 include(":wear")

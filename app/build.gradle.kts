@@ -14,11 +14,11 @@ val localProps = Properties().apply {
 }
 
 android {
-    namespace = "com.biometrix.operator"
+    namespace = "com.vitalwork.app"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.biometrix.operator"
+        applicationId = "com.vitalwork.app"
         minSdk = 24
         targetSdk = 36
         versionCode = 1
@@ -26,12 +26,12 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // BioMetrix server upload config (read from local.properties; never committed).
+        // VitalWork server upload config (read from local.properties; never committed).
         // Null-safe so a machine without these keys still builds (falls back to empty string).
-        val biometrixBaseUrl = (localProps["BIOMETRIX_BASE_URL"] as String?).orEmpty()
-        val biometrixApiKey = (localProps["BIOMETRIX_API_KEY"] as String?).orEmpty()
-        buildConfigField("String", "BIOMETRIX_BASE_URL", "\"$biometrixBaseUrl\"")
-        buildConfigField("String", "BIOMETRIX_API_KEY", "\"$biometrixApiKey\"")
+        val vitalworkBaseUrl = (localProps["VITALWORK_BASE_URL"] as String?).orEmpty()
+        val vitalworkApiKey = (localProps["VITALWORK_API_KEY"] as String?).orEmpty()
+        buildConfigField("String", "VITALWORK_BASE_URL", "\"$vitalworkBaseUrl\"")
+        buildConfigField("String", "VITALWORK_API_KEY", "\"$vitalworkApiKey\"")
     }
 
     val keystorePath = localProps["KEYSTORE_PATH"] as String?
@@ -97,7 +97,7 @@ dependencies {
     implementation(libs.ktor.serialization.kotlinx.json)
     implementation(files("libs/eSense_sdk_2_lib.jar"))
 
-    // Session upload: HTTP client (tablet POSTs completed sessions to the BioMetrix server)
+    // Session upload: HTTP client (tablet POSTs completed sessions to the VitalWork server)
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.cio)
     implementation(libs.ktor.client.content.negotiation)

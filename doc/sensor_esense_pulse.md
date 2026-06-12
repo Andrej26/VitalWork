@@ -104,11 +104,11 @@ R-R samples are emitted through `rrIntervalSampleFlow` (SharedFlow, buffer 256),
 
 | File | Role |
 |------|------|
-| [data/sensor/ble/BleManager.kt](../app/src/main/java/com/biometrix/operator/data/sensor/ble/BleManager.kt) | Interface (scan, connect, disconnect, HR notifications, battery) |
-| [data/sensor/ble/BleManagerImpl.kt](../app/src/main/java/com/biometrix/operator/data/sensor/ble/BleManagerImpl.kt) | Android BLE implementation |
-| [.../mindfield/pulse/EsensePulseViewModel.kt](../app/src/main/java/com/biometrix/operator/presentation/screens/sensors/mindfield/pulse/EsensePulseViewModel.kt) | UI state management |
-| [.../mindfield/pulse/EsensePulseScreen.kt](../app/src/main/java/com/biometrix/operator/presentation/screens/sensors/mindfield/pulse/EsensePulseScreen.kt) | Compose UI |
-| [.../sensors/components/RrIntervalDisplay.kt](../app/src/main/java/com/biometrix/operator/presentation/screens/sensors/components/RrIntervalDisplay.kt) | `RrIntervalCard` and `RrTachogramChart` Compose components for R-R display |
+| [data/sensor/ble/BleManager.kt](../app/src/main/java/com/vitalwork/app/data/sensor/ble/BleManager.kt) | Interface (scan, connect, disconnect, HR notifications, battery) |
+| [data/sensor/ble/BleManagerImpl.kt](../app/src/main/java/com/vitalwork/app/data/sensor/ble/BleManagerImpl.kt) | Android BLE implementation |
+| [.../mindfield/pulse/EsensePulseViewModel.kt](../app/src/main/java/com/vitalwork/app/presentation/screens/sensors/mindfield/pulse/EsensePulseViewModel.kt) | UI state management |
+| [.../mindfield/pulse/EsensePulseScreen.kt](../app/src/main/java/com/vitalwork/app/presentation/screens/sensors/mindfield/pulse/EsensePulseScreen.kt) | Compose UI |
+| [.../sensors/components/RrIntervalDisplay.kt](../app/src/main/java/com/vitalwork/app/presentation/screens/sensors/components/RrIntervalDisplay.kt) | `RrIntervalCard` and `RrTachogramChart` Compose components for R-R display |
 
 ### Data Flow
 

@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-BioMetrixOperator is an Android mobile application written in Kotlin using Jetpack Compose. It is the **operator-side control app** for a research study measuring **operator reaction time in VR-simulated logistics and industrial scenarios** (Project 3 with PBN partner — see `test/Assignment for PBN Partner_Project 3.docx`). The tablet pairs with a Meta Quest VR headset over local Wi-Fi, captures physiological data from BLE / audio-jack sensors during each scenario, and exports the bundled dataset (participant + session + scenarios + samples) to a central server at session end.
+VitalWork is an Android mobile application written in Kotlin using Jetpack Compose. It is the **operator-side control app** for a research study measuring **operator reaction time in VR-simulated logistics and industrial scenarios** (Project 3 with PBN partner — see `test/Assignment for PBN Partner_Project 3.docx`). The tablet pairs with a Meta Quest VR headset over local Wi-Fi, captures physiological data from BLE / audio-jack sensors during each scenario, and exports the bundled dataset (participant + session + scenarios + samples) to a central server at session end.
 
-**Package:** `com.biometrix.operator`
+**Package:** `com.vitalwork.app`
 
 **Tech Stack:**
 - Kotlin 2.3.0 with Jetpack Compose (BOM 2026.01.00)
@@ -52,8 +52,8 @@ BioMetrixOperator is an Android mobile application written in Kotlin using Jetpa
 
 ```
 MainActivity (entry point)
-└── BioMetrixOperatorApplication (Hilt application class)
-    └── BioMetrixOperatorTheme (Material 3 theme wrapper)
+└── VitalWorkApplication (Hilt application class)
+    └── VitalWorkTheme (Material 3 theme wrapper)
         └── AppNavigation (NavHost)
             └── Composable screens
 ```
@@ -85,7 +85,7 @@ The app has three main responsibilities:
 **Dependency Management:** All versions and dependencies are centralized in `gradle/libs.versions.toml`. Add new dependencies there first, then reference them in `app/build.gradle.kts` using the `libs.` accessor.
 
 **App Configuration (`app/build.gradle.kts`):**
-- Application ID: `com.biometrix.operator`
+- Application ID: `com.vitalwork.app`
 - Min SDK 24, Target/Compile SDK 36
 - Java 11 compatibility
 - Compose build feature enabled
@@ -143,9 +143,9 @@ FCM/Wi-Fi were rejected, and what does *not* work).
 ## Package Structure
 
 ```
-com.biometrix.operator/
+com.vitalwork.app/
 ├── MainActivity.kt
-├── BioMetrixOperatorApplication.kt        # Hilt application class
+├── VitalWorkApplication.kt        # Hilt application class
 ├── di/
 │   └── AppModule.kt                        # Hilt dependency injection module
 ├── data/
@@ -279,16 +279,16 @@ com.biometrix.operator/
     └── Type.kt
 ```
 
-**`:wear` module** (`com.biometrix.operator.wear`):
+**`:wear` module** (`com.vitalwork.wear`):
 
 ```
-com.biometrix.operator.wear/
+com.vitalwork.wear/
 ├── MainActivity.kt           # Minimal Start/Stop watch UI + runtime permission requests
 ├── WatchSensorService.kt          # Foreground health service; owns the Samsung SDK, flush() loop, heartbeat; emit() persists to store + streams
 ├── WatchSampleStore.kt            # Append-only JSON-lines durable store; truncate-after-ack (store-and-forward)
 ├── WatchCommandListenerService.kt # WearableListenerService; handles START/FLUSH/STOP/FLUSH_ACK from the phone
 ├── WatchFlushWriter.kt            # Pushes stored rows to the phone as chunked DataClient DataItems
-├── WatchDataSender.kt             # MessageClient sender; resolves/caches the biometrix_phone node
+├── WatchDataSender.kt             # MessageClient sender; resolves/caches the vitalwork_phone node
 └── WatchMessage.kt                # Builds JSON lines (reading, capabilities, batch, stop, heartbeat)
 ```
 
@@ -333,7 +333,7 @@ version bump with no hand-written `Migration` (v2 added `WATCH_IBI`).
 
 Reaction time is **derived** at export from `reactionTimestampMs − eventTimestampMs`; not stored. Session duration is derived from `endedAt − startedAt`. All timestamps come from Android's `System.currentTimeMillis()` so cross-stream alignment needs no clock-sync.
 
-**Device prefix (multi-tablet testing):** each tablet picks a one-time prefix (A/B/C/D) under **Settings** (`SettingsRepository`, SharedPreferences, default `A`). The prefix tags both the generated participant code (`A-001`) and session code (`BMX-A-yyMMdd-HHmmss`), so several tablets testing in parallel never mint colliding codes that would look like one duplicated participant after the server merge. The participant-code field is read-only (auto-generated) to keep the scheme typo-proof; participant numbering is counted **per prefix** (`ParticipantDao.getParticipantCountByPrefix`). Operators must agree beforehand which device owns which letter — collisions are only prevented across devices with *distinct* letters.
+**Device prefix (multi-tablet testing):** each tablet picks a one-time prefix (A/B/C/D) under **Settings** (`SettingsRepository`, SharedPreferences, default `A`). The prefix tags both the generated participant code (`A-001`) and session code (`VW-A-yyMMdd-HHmmss`), so several tablets testing in parallel never mint colliding codes that would look like one duplicated participant after the server merge. The participant-code field is read-only (auto-generated) to keep the scheme typo-proof; participant numbering is counted **per prefix** (`ParticipantDao.getParticipantCountByPrefix`). Operators must agree beforehand which device owns which letter — collisions are only prevented across devices with *distinct* letters.
 
 ## Data Flow
 
@@ -393,7 +393,7 @@ Unit tests live under `app/src/test/` and run on the host JVM (no device/emulato
 | `data/recording/GapDetectorTest.kt` | `GapDetector.kt` | Gap detection edge cases: empty input, startup threshold, boundary conditions, mixed sensor types, unsorted input, per-sensor-type routing |
 | `data/vr/VrEventReceiverTest.kt` | `VrEventReceiver.kt` | Event/reaction persistence + accept, reject when no active scenario, first-write-wins, late-reaction grace window, heartbeat-less liveness watchdog |
 | `data/repository/ParticipantRepositoryTest.kt` | `ParticipantRepository.kt` | Code generation (`A-001`…, per-device-prefix scoped), uniqueness validation, fetch by ID/code |
-| `data/repository/SessionRepositoryTest.kt` | `SessionRepository.kt` | Session lifecycle: `sessionCode` format (BMX-{prefix}-yyMMdd-HHmmss), participant FK, sample-count aggregation from scenarios at end, status transitions, notes persistence, deletion |
+| `data/repository/SessionRepositoryTest.kt` | `SessionRepository.kt` | Session lifecycle: `sessionCode` format (VW-{prefix}-yyMMdd-HHmmss), participant FK, sample-count aggregation from scenarios at end, status transitions, notes persistence, deletion |
 | `data/repository/ScenarioRepositoryTest.kt` | `ScenarioRepository.kt` | Scenario lifecycle: create with derived `scenarioCategory`, event/reaction timestamp updates, end (sets `endedAt`), batch sample insert |
 | `data/export/SessionExportMapperTest.kt` | `SessionExportMapper.kt` | Export data transformation (Section 7 shape): participant + session + scenarios + samples; sensor type mapping, gap detection per scenario, derived reaction time |
 | `data/recording/ScenarioRecordingRepositoryImplTest.kt` | `ScenarioRecordingRepositoryImpl.kt` | Start/stop state machine, sensor detection, sample buffering + flushing, scenario-end finalization |

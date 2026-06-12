@@ -48,8 +48,8 @@
 │    └─► WatchFlushWriter (DataClient DataItems = reliable bulk transfer)       │
 └──────────────┬───────────────────────────────────────────┬──────────────────┘
        live ▲  │ readings/heartbeat (MessageClient)          │ flush (DataClient DataItems)
-            │  ▼  "/biometrix/sensors"                        ▼  "/biometrix/flush"
-        commands ▲ "/biometrix/command" (MessageClient: START/FLUSH/STOP/FLUSH_ACK)
+            │  ▼  "/vitalwork/sensors"                        ▼  "/vitalwork/flush"
+        commands ▲ "/vitalwork/command" (MessageClient: START/FLUSH/STOP/FLUSH_ACK)
                  │  Wearable Data Layer — Bluetooth-direct *if phone BT is on* (else cloud relay, dies in Doze!)
                  ▼
 ┌─────────────────────────── Android Tablet (:app module) ─────────────────────┐
@@ -77,8 +77,8 @@ The watch↔tablet link uses **`MessageClient`**, not a socket, not BLE GATT, no
 | Property | Value |
 |----------|-------|
 | API | `MessageClient.sendMessage(nodeId: String, path: String, data: ByteArray): Task<Int>` |
-| Path | `/biometrix/sensors` |
-| Node discovery | `CapabilityClient.getCapability("biometrix_phone", FILTER_REACHABLE)` |
+| Path | `/vitalwork/sensors` |
+| Node discovery | `CapabilityClient.getCapability("vitalwork_phone", FILTER_REACHABLE)` |
 | Delivery | Best-effort, fire-and-forget (a dropped message loses one sample) |
 | Cost | Free — Google Play Services is a system component; no internet required |
 
@@ -88,7 +88,7 @@ no-op'd with no reconnect. HR/EDA are only ~1 Hz, so a persistent stream buys no
 is **stateless** — each reading is an independent message, nothing to stall, nothing to reconnect.
 
 **Why the phone declares a "capability."** The watch must locate *this specific tablet's* node.
-The tablet advertises a capability named `biometrix_phone` in `app/src/main/res/values/wear.xml`
+The tablet advertises a capability named `vitalwork_phone` in `app/src/main/res/values/wear.xml`
 (`android_wear_capabilities`); the watch resolves it via `CapabilityClient` and caches the node id.
 On send failure the cached id is cleared so the next send re-resolves.
 
@@ -176,9 +176,9 @@ parses the same shape.
 `t` is stamped on the watch with `System.currentTimeMillis()` — same clock convention as the rest of
 the app, so watch samples align to VR events with no clock-sync step.
 
-**Phone → watch commands** ride a separate `MessageClient` path `/biometrix/command` as plain strings:
+**Phone → watch commands** ride a separate `MessageClient` path `/vitalwork/command` as plain strings:
 `START`, `STOP`, `FLUSH`, and `FLUSH_ACK:<maxTimestampMs>`. **Bulk flush data does NOT use
-`MessageClient`** — it uses `DataClient` DataItems on `/biometrix/flush/<batchId>/<chunk>` (see below).
+`MessageClient`** — it uses `DataClient` DataItems on `/vitalwork/flush/<batchId>/<chunk>` (see below).
 
 ## Store-and-Forward + Remote Flush (2026-06)
 
@@ -194,20 +194,20 @@ locally** and the phone **pulls the complete history** at session end.
   and heartbeat are **not** persisted. The write is inside the SDK `onDataReceived` callback, so it
   does **not** depend on the 1 Hz flush loop staying scheduled — it survives Doze. The store is
   cleared on a fresh `START`.
-- `WatchCommandListenerService : WearableListenerService` (path `/biometrix/command`) handles phone
+- `WatchCommandListenerService : WearableListenerService` (path `/vitalwork/command`) handles phone
   commands. **`FLUSH` does its work inline (no foreground service)** — the listener is already alive
   for the callback. **Remote `START` does need the FGS**, which is only legal from this
   background-delivered callback via the **Companion exemption**
   `REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND` (declared in the `:wear` manifest);
   without it, `startForegroundService` throws `ForegroundServiceStartNotAllowedException`.
 - `WatchFlushWriter` — writes the store's rows to the phone as **`DataClient` DataItems**, chunked
-  (~300 rows/item, each well under the ~100 KB DataItem cap) on `/biometrix/flush/<batchId>/<chunk>`.
+  (~300 rows/item, each well under the ~100 KB DataItem cap) on `/vitalwork/flush/<batchId>/<chunk>`.
   `DataClient` (not `MessageClient`) is used for bulk because it **buffers while disconnected and
   auto-syncs on reconnect**, and starts the phone's listener even if the app wasn't running.
 
 **Phone side:**
 - `WatchCommandSender` (interface + `…Impl`, bound in `AppBindsModule`) resolves the watch node via
-  the `biometrix_watch` capability (advertised in `wear/src/main/res/values/wear.xml`) and sends the
+  the `vitalwork_watch` capability (advertised in `wear/src/main/res/values/wear.xml`) and sends the
   command strings.
 - `WatchListenerService.onDataChanged` ingests flushed DataItems → `WatchSensorReceiver.onFlushedReadings`
   (buffered **losslessly** in an unbounded list — NOT the bounded live `watchSampleFlow`, whose 256-slot
@@ -304,7 +304,7 @@ A `PARTIAL_WAKE_LOCK` to keep the AP awake so the flush loop keeps ticking. **Th
 the Galaxy Watch 8 — it is a Wear OS platform limit, not a code bug.** Measured (2026-06):
 
 - While the watch is **Awake**, the lock is honored: `dumpsys power` shows
-  `PARTIAL_WAKE_LOCK 'biometrix:watchsensors' ACQ=…`.
+  `PARTIAL_WAKE_LOCK 'vitalwork:watchsensors' ACQ=…`.
 - The instant `mWakefulness=Dozing` (both natural screen-off **and** forced `deviceidle`), the same
   lock flips to **`DISABLED`** — the OEM power HAL suppresses it. The AP then suspends, the flush
   coroutine's `delay()` freezes, and the phone receives nothing until the next maintenance wake
@@ -439,18 +439,18 @@ Service declarations:
 <service android:name=".WatchCommandListenerService" android:exported="true">
   <intent-filter>
     <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
-    <data android:scheme="wear" android:host="*" android:pathPrefix="/biometrix/command" />
+    <data android:scheme="wear" android:host="*" android:pathPrefix="/vitalwork/command" />
   </intent-filter>
 </service>
 ```
-The watch also advertises a `biometrix_watch` capability (`wear/src/main/res/values/wear.xml`) so the
+The watch also advertises a `vitalwork_watch` capability (`wear/src/main/res/values/wear.xml`) so the
 phone's `WatchCommandSender` can resolve its node.
 
 > **Runtime grants on API 36+:** HR/EDA require `android.permission.health.READ_HEART_RATE` **and**
 > the Samsung `READ_ADDITIONAL_HEALTH_DATA` — `BODY_SENSORS` alone returns PERMISSION_ERROR.
 > `BODY_SENSORS_BACKGROUND` is requested **separately** and routed to a settings screen
 > ("Allow all the time"). For testing it can be granted directly:
-> `adb shell pm grant com.biometrix.operator android.permission.BODY_SENSORS_BACKGROUND`.
+> `adb shell pm grant com.vitalwork.app android.permission.BODY_SENSORS_BACKGROUND`.
 
 ### Tablet side (`:app`)
 
@@ -458,20 +458,20 @@ phone's `WatchCommandSender` can resolve its node.
 <service android:name=".data.sensor.watch.WatchListenerService" android:exported="true">
   <intent-filter>   <!-- live readings + heartbeat -->
     <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
-    <data android:scheme="wear" android:host="*" android:pathPrefix="/biometrix/sensors" />
+    <data android:scheme="wear" android:host="*" android:pathPrefix="/vitalwork/sensors" />
   </intent-filter>
   <intent-filter>   <!-- historical store flush (DataItems) -->
     <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
-    <data android:scheme="wear" android:host="*" android:pathPrefix="/biometrix/flush" />
+    <data android:scheme="wear" android:host="*" android:pathPrefix="/vitalwork/flush" />
   </intent-filter>
 </service>
 ```
-Plus `app/src/main/res/values/wear.xml` declaring the `biometrix_phone` capability. No body-sensor
+Plus `app/src/main/res/values/wear.xml` declaring the `vitalwork_phone` capability. No body-sensor
 permissions on the tablet — it only receives messages and DataItems.
 
 ## Project / Build Setup
 
-- **Module:** `:wear` (`com.android.application`, same `applicationId "com.biometrix.operator"`),
+- **Module:** `:wear` (`com.android.application`, same `applicationId "com.vitalwork.app"`),
   `minSdk 28` (Samsung Sensor SDK floor; Watch 8 far exceeds it), compile/target 36.
 - **Samsung SDK** is a local AAR at `wear/libs/samsung-health-sensor-api-1.4.1.aar`, wired as:
   ```kotlin
@@ -490,16 +490,16 @@ permissions on the tablet — it only receives messages and DataItems.
 
 | File | Role |
 |------|------|
-| [wear/.../WatchSensorService.kt](../wear/src/main/java/com/biometrix/operator/wear/WatchSensorService.kt) | Foreground `health` service; owns the Samsung SDK, registers trackers, runs the `flush()` loop, sends `STOP` |
-| [wear/.../WatchDataSender.kt](../wear/src/main/java/com/biometrix/operator/wear/WatchDataSender.kt) | `MessageClient` sender; resolves & caches the `biometrix_phone` node |
-| [wear/.../WatchMessage.kt](../wear/src/main/java/com/biometrix/operator/wear/WatchMessage.kt) | Builds the JSON lines (`reading`, `capabilities`, `batch`, `stop`) |
-| [wear/.../MainActivity.kt](../wear/src/main/java/com/biometrix/operator/wear/MainActivity.kt) | Minimal Start/Stop watch UI; requests runtime permissions |
-| [app/.../data/sensor/watch/WatchListenerService.kt](../app/src/main/java/com/biometrix/operator/data/sensor/watch/WatchListenerService.kt) | `WearableListenerService`; parses messages → receiver |
-| [app/.../data/sensor/watch/WatchSensorReceiver.kt](../app/src/main/java/com/biometrix/operator/data/sensor/watch/WatchSensorReceiver.kt) | Hilt singleton sink; exposes flows; inferred connection state + watchdog |
-| [app/.../data/sensor/watch/model/WatchReading.kt](../app/src/main/java/com/biometrix/operator/data/sensor/watch/model/WatchReading.kt) | `WatchReading(type, value, accuracy, t)` |
-| [app/.../presentation/screens/sensors/watch/WatchSensorScreen.kt](../app/src/main/java/com/biometrix/operator/presentation/screens/sensors/watch/WatchSensorScreen.kt) | Sensors → Galaxy Watch live-readings screen |
-| [app/.../presentation/screens/sensors/watch/WatchSensorViewModel.kt](../app/src/main/java/com/biometrix/operator/presentation/screens/sensors/watch/WatchSensorViewModel.kt) | Reads receiver flows for the screen; also tracks the **phone's Bluetooth adapter** state (`ACTION_STATE_CHANGED` receiver → `bluetoothEnabled` flow) |
-| [app/.../presentation/components/BluetoothDisabledCard.kt](../app/src/main/java/com/biometrix/operator/presentation/components/BluetoothDisabledCard.kt) | Reusable "Bluetooth Disabled — tap to enable" warning card, shared with the eSense Pulse screen |
+| [wear/.../WatchSensorService.kt](../wear/src/main/java/com/vitalwork/wear/WatchSensorService.kt) | Foreground `health` service; owns the Samsung SDK, registers trackers, runs the `flush()` loop, sends `STOP` |
+| [wear/.../WatchDataSender.kt](../wear/src/main/java/com/vitalwork/wear/WatchDataSender.kt) | `MessageClient` sender; resolves & caches the `vitalwork_phone` node |
+| [wear/.../WatchMessage.kt](../wear/src/main/java/com/vitalwork/wear/WatchMessage.kt) | Builds the JSON lines (`reading`, `capabilities`, `batch`, `stop`) |
+| [wear/.../MainActivity.kt](../wear/src/main/java/com/vitalwork/wear/MainActivity.kt) | Minimal Start/Stop watch UI; requests runtime permissions |
+| [app/.../data/sensor/watch/WatchListenerService.kt](../app/src/main/java/com/vitalwork/app/data/sensor/watch/WatchListenerService.kt) | `WearableListenerService`; parses messages → receiver |
+| [app/.../data/sensor/watch/WatchSensorReceiver.kt](../app/src/main/java/com/vitalwork/app/data/sensor/watch/WatchSensorReceiver.kt) | Hilt singleton sink; exposes flows; inferred connection state + watchdog |
+| [app/.../data/sensor/watch/model/WatchReading.kt](../app/src/main/java/com/vitalwork/app/data/sensor/watch/model/WatchReading.kt) | `WatchReading(type, value, accuracy, t)` |
+| [app/.../presentation/screens/sensors/watch/WatchSensorScreen.kt](../app/src/main/java/com/vitalwork/app/presentation/screens/sensors/watch/WatchSensorScreen.kt) | Sensors → Galaxy Watch live-readings screen |
+| [app/.../presentation/screens/sensors/watch/WatchSensorViewModel.kt](../app/src/main/java/com/vitalwork/app/presentation/screens/sensors/watch/WatchSensorViewModel.kt) | Reads receiver flows for the screen; also tracks the **phone's Bluetooth adapter** state (`ACTION_STATE_CHANGED` receiver → `bluetoothEnabled` flow) |
+| [app/.../presentation/components/BluetoothDisabledCard.kt](../app/src/main/java/com/vitalwork/app/presentation/components/BluetoothDisabledCard.kt) | Reusable "Bluetooth Disabled — tap to enable" warning card, shared with the eSense Pulse screen |
 
 ### Phone-side Bluetooth warning (UI)
 
@@ -579,11 +579,11 @@ See **Store-and-Forward + Remote Flush**.
 - Need `health.READ_HEART_RATE` **and** Samsung `READ_ADDITIONAL_HEALTH_DATA`, not `BODY_SENSORS`.
 
 **No data at all, no errors**
-- Samsung developer mode (Health Platform) not enabled, or the `biometrix_phone` capability isn't
+- Samsung developer mode (Health Platform) not enabled, or the `vitalwork_phone` capability isn't
   declared/resolved (watch can't find the tablet node).
 
 **Tap Start on the watch and "nothing happens" — watch shows "Phone not found", phone gets nothing**
-- The watch resolves the tablet's `biometrix_phone` capability node *at the moment of Start*. The
+- The watch resolves the tablet's `vitalwork_phone` capability node *at the moment of Start*. The
   tablet only advertises that capability **while its app process is alive**, and the capability can
   take several seconds to propagate across the Data Layer — **noticeably longer on a cross-vendor
   pairing** (Galaxy Watch ↔ non-Samsung phone, bridged by `com.samsung.wearable.watchuniteplugin`).
@@ -597,9 +597,9 @@ See **Store-and-Forward + Remote Flush**.
 - Verify the capability is actually reachable from the watch:
   ```bash
   adb -s <watch> shell dumpsys activity service \
-    com.google.android.gms.wearable.service.WearableService | grep -E "biometrix_phone|Reachable|isNearby"
+    com.google.android.gms.wearable.service.WearableService | grep -E "vitalwork_phone|Reachable|isNearby"
   #   the tablet node should be listed under "Reachable Nodes" with isNearby=true,
-  #   and "+ biometrix_phone" should appear under that node.
+  #   and "+ vitalwork_phone" should appear under that node.
   ```
 - On a healthy link the watch logs `WatchDataSender: Resolved tablet node <id>`.
 
@@ -613,12 +613,12 @@ See **Store-and-Forward + Remote Flush**.
   ```bash
   # GMS is receiving on our path (read count climbs ~1/s)?
   adb -s <phone> shell dumpsys activity service \
-    com.google.android.gms.wearable.service.WearableService | grep "com.biometrix.operator: writes/reads"
+    com.google.android.gms.wearable.service.WearableService | grep "com.vitalwork.app: writes/reads"
   # ...but the listener isn't logging the message?
   adb -s <phone> logcat -s WatchListenerService    # expect "rx {...}" lines once healthy
   ```
   Read count rising + no `rx` lines = stale GMS binding.
-- **Fix:** `adb -s <phone> shell am force-stop com.biometrix.operator`, then relaunch the app. This
+- **Fix:** `adb -s <phone> shell am force-stop com.vitalwork.app`, then relaunch the app. This
   clears GMS's cached binding; data lands immediately. (`WatchListenerService` logs each accepted
   message as `rx <body>` to make this unambiguous — previously it only logged on parse errors, so a
   working-but-silent success path looked dead.)
@@ -632,21 +632,21 @@ See **Store-and-Forward + Remote Flush**.
 **Useful adb diagnostics**
 ```bash
 # Is the watch dozing? Is our wake lock honored (it won't be — that's expected)?
-adb -s <watch> shell dumpsys power | grep -E "mWakefulness=|BioMetrix"
+adb -s <watch> shell dumpsys power | grep -E "mWakefulness=|VitalWork"
 # Is the SDK firing 1/s or in bursts?
 adb -s <watch> logcat -s SHS#EDAContinuousSensor WatchDataSender
 # Is the foreground service resident and typed HEALTH?
-adb -s <watch> shell dumpsys activity services com.biometrix.operator
+adb -s <watch> shell dumpsys activity services com.vitalwork.app
 # Did the watch resolve the tablet node? (healthy: "Resolved tablet node <id>")
 adb -s <watch> logcat -s WatchDataSender
 # Can the watch even see the tablet's capability? (expect the tablet under Reachable Nodes, isNearby=true)
 adb -s <watch> shell dumpsys activity service \
-  com.google.android.gms.wearable.service.WearableService | grep -E "biometrix_phone|Reachable|isNearby"
+  com.google.android.gms.wearable.service.WearableService | grep -E "vitalwork_phone|Reachable|isNearby"
 # Are messages arriving on the phone? (healthy: "rx {...}" lines ~1/s)
 adb -s <phone> logcat -s WatchListenerService
 # Transport sanity: is GMS receiving on our path but NOT dispatching? (read count climbs, no rx lines = stale binding → force-stop the app)
 adb -s <phone> shell dumpsys activity service \
-  com.google.android.gms.wearable.service.WearableService | grep "com.biometrix.operator: writes/reads"
+  com.google.android.gms.wearable.service.WearableService | grep "com.vitalwork.app: writes/reads"
 ```
 
 > **Note (Windows / PowerShell):** `adb` may not be on `PATH` — it lives at

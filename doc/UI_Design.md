@@ -2,7 +2,7 @@
 
 ## Overview
 
-BioMetrix Operator is a tablet app for researchers conducting VR therapy sessions for claustrophobia treatment. The app orchestrates VR control, sensor data collection, and test management.
+VitalWork Operator is a tablet app for researchers conducting VR therapy sessions for claustrophobia treatment. The app orchestrates VR control, sensor data collection, and test management.
 
 ## Navigation Pattern
 
@@ -30,7 +30,7 @@ BioMetrix Operator is a tablet app for researchers conducting VR therapy session
 ### 1. Home Screen
 Entry point with large navigation cards.
 
-- App title "BioMetrix Operator"
+- App title "VitalWork Operator"
 - **Tutorial card** -> Tutorial screen
 - **Sensors card** -> Configure sensor connections
 - **VR Control card** -> Configure VR headset connection

@@ -1,4 +1,4 @@
-# Installing the BioMetrix app on the Galaxy Watch (over Wi-Fi)
+# Installing the VitalWork app on the Galaxy Watch (over Wi-Fi)
 
 How to put the latest `:wear` build on the Galaxy Watch 8 whenever there's an update. The watch
 connects over **Wi-Fi** (no cable), using Android's Wireless debugging.
@@ -29,7 +29,7 @@ You'll see something like `192.168.100.37:33479`.
 > reboot). The IP can also change. Always re-check this screen — don't assume last time's value.
 
 ### Step 2 — Connect adb to the watch
-In a PowerShell window in the project folder (`d:\00_Projekty_Praca\BioMetrixOperator`):
+In a PowerShell window in the project folder (`d:\00_Projekty_Praca\VitalWork`):
 
 ```powershell
 $adb = "C:\Users\andre\AppData\Local\Android\Sdk\platform-tools\adb.exe"
@@ -67,13 +67,13 @@ This produces `wear\build\outputs\apk\debug\wear-debug.apk`.
 `-r` reinstalls/updates in place (keeps it as the same app). You want `Success`.
 
 > Why `-s <address>`? The watch and tablet **share the same applicationId**
-> (`com.biometrix.operator`). If you run a plain `:wear:installDebug` while both are connected,
+> (`com.vitalwork.app`). If you run a plain `:wear:installDebug` while both are connected,
 > Gradle/adb may try to install on the wrong device. Targeting by serial avoids that. If
 > *only the watch* is connected, you can instead just run
 > `.\gradlew.bat :wear:installDebug`.
 
 ### Step 5 — Launch & verify
-Open **BioMetrix** on the watch and tap **Start**. On the tablet, go to
+Open **VitalWork** on the watch and tap **Start**. On the tablet, go to
 **Sensors → Galaxy Watch** and confirm live readings (HR / EDA / battery) appear.
 
 ---
@@ -114,7 +114,7 @@ $env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-17.0.18.8-hotspot\"
 | `failed to authenticate` / `unauthorized` | Accept the "Allow wireless debugging" prompt on the watch, then re-run `adb connect`. |
 | `cannot connect ... No connection could be made` | Re-check IP **and port** on the watch (port changes on toggle/reboot); confirm same Wi-Fi; toggle Wireless debugging off/on. |
 | `device offline` | `& $adb disconnect`, then `& $adb connect <address>` again. |
-| `INSTALL_FAILED_UPDATE_INCOMPATIBLE` (signature mismatch) | Uninstall first: `& $adb -s <watch> uninstall com.biometrix.operator`, then install again. |
+| `INSTALL_FAILED_UPDATE_INCOMPATIBLE` (signature mismatch) | Uninstall first: `& $adb -s <watch> uninstall com.vitalwork.app`, then install again. |
 | Watch dropped off Wi-Fi | It sleeps/changes networks; just redo Step 1–2. The connection isn't permanent. |
 | `adb` not found | Use the full path shown above, or add `…\Sdk\platform-tools` to PATH. |
 

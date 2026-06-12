@@ -1,6 +1,6 @@
 # DataProcessing
 
-Basic visualization of exported BioMetrix session data.
+Basic visualization of exported VitalWork session data.
 
 ## Setup
 

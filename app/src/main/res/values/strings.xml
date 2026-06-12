@@ -1,10 +1,10 @@
 <resources>
-    <string name="app_name">BioMetrixOperator</string>
+    <string name="app_name">VitalWork</string>
 
     <!-- Recording foreground service -->
     <string name="recording_channel_name">Recording sessions</string>
     <string name="recording_channel_description">Keeps sensor recording and the VR connection alive while a session is in progress.</string>
-    <string name="recording_notification_title">BioMetrix session active</string>
+    <string name="recording_notification_title">VitalWork session active</string>
     <string name="recording_notification_idle">Session active — ready to record</string>
     <string name="recording_notification_recording">Recording — %1$s</string>
 </resources>

@@ -70,7 +70,7 @@
                 <data
                     android:scheme="wear"
                     android:host="*"
-                    android:pathPrefix="/biometrix/command" />
+                    android:pathPrefix="/vitalwork/command" />
             </intent-filter>
         </service>
     </application>

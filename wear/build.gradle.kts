@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.biometrix.operator.wear"
+    namespace = "com.vitalwork.wear"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.biometrix.operator"
+        applicationId = "com.vitalwork.app"
         // Samsung Health Sensor SDK requires API 28+ (Galaxy Watch4 and later).
         minSdk = 28
         targetSdk = 36

@@ -3,6 +3,6 @@
     <!-- Advertised so the phone's CapabilityClient can locate this watch's node to send
          commands (START / FLUSH / STOP). Must match the phone-side WatchCommandSender capability. -->
     <string-array name="android_wear_capabilities">
-        <item>biometrix_watch</item>
+        <item>vitalwork_watch</item>
     </string-array>
 </resources>
