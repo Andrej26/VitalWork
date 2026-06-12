@@ -18,7 +18,7 @@ import java.io.File
  * the phone parser is unchanged. Each line carries its own watch timestamp `t`, which is what makes
  * timestamp-window attribution (and truncate-after-ack) possible without ordering guarantees.
  *
- *   {"t":1717245600000,"type":"HR","value":72.0,"accuracy":1}
+ *   {"t":1717245600000,"type":"WATCH_HR","value":72.0,"accuracy":1}
  *
  * **Reliability model.** Append is fire-and-forget durable (one `appendText`). Flush reads the whole
  * file; the phone acks the max timestamp it persisted; [truncateThrough] drops every line at-or-before
@@ -37,7 +37,7 @@ class WatchSampleStore(dir: File) {
         const val TAG = "WatchSampleStore"
         const val FILE_NAME = "watch_samples.jsonl"
         /** Reading types that are study data and must be persisted (battery/heartbeat are not). */
-        val PERSISTED_TYPES = setOf("HR", "IBI", "EDA")
+        val PERSISTED_TYPES = setOf("WATCH_HR", "WATCH_IBI", "WATCH_EDA")
     }
 
     private val lock = Any()

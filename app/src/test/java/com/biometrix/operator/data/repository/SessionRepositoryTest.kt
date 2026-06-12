@@ -67,12 +67,12 @@ class SessionRepositoryTest {
         val s2 = insertScenario(session.id, endedAt = System.currentTimeMillis())
         val unfinished = insertScenario(session.id, endedAt = null)
 
-        fakeSensorSampleDao.samples.addAll(samples(s1.id, SensorType.HEART_RATE, count = 10))
-        fakeSensorSampleDao.samples.addAll(samples(s2.id, SensorType.HEART_RATE, count = 5))
+        fakeSensorSampleDao.samples.addAll(samples(s1.id, SensorType.ESENSE_HEART_RATE, count = 10))
+        fakeSensorSampleDao.samples.addAll(samples(s2.id, SensorType.ESENSE_HEART_RATE, count = 5))
         fakeSensorSampleDao.samples.addAll(samples(s1.id, SensorType.RESPIRATION, count = 3))
-        fakeSensorSampleDao.samples.addAll(samples(s2.id, SensorType.EDA, count = 7))
+        fakeSensorSampleDao.samples.addAll(samples(s2.id, SensorType.WATCH_EDA, count = 7))
         // Samples on the unfinished scenario should not be counted.
-        fakeSensorSampleDao.samples.addAll(samples(unfinished.id, SensorType.HEART_RATE, count = 999))
+        fakeSensorSampleDao.samples.addAll(samples(unfinished.id, SensorType.ESENSE_HEART_RATE, count = 999))
 
         repository.endSession(session.id)
 

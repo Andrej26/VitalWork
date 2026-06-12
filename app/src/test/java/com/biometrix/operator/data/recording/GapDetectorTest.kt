@@ -10,7 +10,7 @@ class GapDetectorTest {
 
     private fun sample(
         elapsedMs: Long,
-        type: SensorType = SensorType.HEART_RATE,
+        type: SensorType = SensorType.ESENSE_HEART_RATE,
         value: Float = 70f
     ) = SensorSampleEntity(
         scenarioId = 1L,
@@ -105,10 +105,10 @@ class GapDetectorTest {
         // Respiration samples sit in the middle of the HR gap.
         // detectHeartRateGaps must ignore them and still see the HR gap.
         val samples = listOf(
-            sample(20_000, SensorType.HEART_RATE),
+            sample(20_000, SensorType.ESENSE_HEART_RATE),
             sample(22_000, SensorType.RESPIRATION),
             sample(24_000, SensorType.RESPIRATION),
-            sample(28_000, SensorType.HEART_RATE)
+            sample(28_000, SensorType.ESENSE_HEART_RATE)
         )
         val gaps = detectHeartRateGaps(samples)
         assertEquals(1, gaps.size)
@@ -164,7 +164,7 @@ class GapDetectorTest {
     )
 
     private val mixedFixture: List<SensorSampleEntity> =
-        gapPair(SensorType.HEART_RATE) +
+        gapPair(SensorType.ESENSE_HEART_RATE) +
         gapPair(SensorType.RESPIRATION) +
         gapPair(SensorType.ESENSE_RR_INTERVAL)
 

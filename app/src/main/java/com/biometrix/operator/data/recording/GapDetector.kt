@@ -11,7 +11,7 @@ fun detectHeartRateGaps(
     samples: List<SensorSampleEntity>,
     minGapMs: Long = 5_000L,
     startupThresholdMs: Long = 10_000L
-): List<GapEvent> = detectGaps(SensorType.HEART_RATE, samples, minGapMs, startupThresholdMs)
+): List<GapEvent> = detectGaps(SensorType.ESENSE_HEART_RATE, samples, minGapMs, startupThresholdMs)
 
 fun detectRespirationGaps(
     samples: List<SensorSampleEntity>,

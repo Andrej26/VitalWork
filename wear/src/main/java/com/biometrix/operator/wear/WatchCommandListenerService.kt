@@ -81,14 +81,29 @@ class WatchCommandListenerService : WearableListenerService() {
         }
     }
 
-    /** Read the store and write it to the phone as DataItems. No FGS — short one-shot job. */
+    /**
+     * Read the store and write it to the phone as DataItems, then send a `FLUSH_COMPLETE` marker so
+     * the phone knows the transfer is finished (and how many chunks to expect). No FGS — short
+     * one-shot job; we run it (incl. the completion send) inside [runBlocking] so it finishes before
+     * the service is unbound.
+     */
     private fun flushStore() {
         try {
             val store = WatchSampleStore(applicationContext)
             val writer = WatchFlushWriter(applicationContext)
-            val rows = store.readAll()
-            val sent = runBlocking { writer.flush(rows) }
-            Log.i(TAG, "flush dispatched $sent rows")
+            val sender = WatchDataSender(applicationContext)
+            runBlocking {
+                // Drain any screen-off backlog still buffered in the SDK INTO the store before reading
+                // it — a just-woken watch otherwise reads its store before the flush loop has persisted
+                // those samples, and the screen-off data is missed.
+                WatchSensorService.flushSdkBufferToStore()
+                val rows = store.readAll()
+                val result = writer.flush(rows)
+                Log.i(TAG, "flush dispatched ${result.rowCount} rows in ${result.chunkCount} chunks")
+                sender.sendLineBlocking(
+                    WatchMessage.flushComplete(result.batchId, result.chunkCount, result.rowCount)
+                )
+            }
         } catch (e: Exception) {
             Log.e(TAG, "flush failed", e)
         }

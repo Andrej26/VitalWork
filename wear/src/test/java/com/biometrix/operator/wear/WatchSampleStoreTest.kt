@@ -18,7 +18,7 @@ class WatchSampleStoreTest {
 
     private fun store() = WatchSampleStore(tmp.root)
 
-    private fun line(t: Long, type: String = "EDA", value: Float = 1.0f) =
+    private fun line(t: Long, type: String = "WATCH_EDA", value: Float = 1.0f) =
         """{"t":$t,"type":"$type","value":$value,"accuracy":0}"""
 
     @Test
@@ -77,9 +77,9 @@ class WatchSampleStoreTest {
     @Test
     fun shouldPersist_onlyStudyTypes() {
         val s = store()
-        assertTrue(s.shouldPersist("HR"))
-        assertTrue(s.shouldPersist("IBI"))
-        assertTrue(s.shouldPersist("EDA"))
+        assertTrue(s.shouldPersist("WATCH_HR"))
+        assertTrue(s.shouldPersist("WATCH_IBI"))
+        assertTrue(s.shouldPersist("WATCH_EDA"))
         assertFalse(s.shouldPersist("BATTERY"))
         assertFalse(s.shouldPersist("HEARTBEAT"))
     }

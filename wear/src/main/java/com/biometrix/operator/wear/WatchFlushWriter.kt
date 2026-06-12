@@ -36,15 +36,19 @@ class WatchFlushWriter(context: Context) {
 
     private val dataClient = Wearable.getDataClient(context)
 
+    /** Outcome of a flush: lets the caller send the phone a `FLUSH_COMPLETE` marker it can wait on. */
+    data class FlushResult(val batchId: Long, val chunkCount: Int, val rowCount: Int)
+
     /**
-     * Write the current store contents to the phone as chunked DataItems. Returns the number of rows
-     * sent (0 if the store was empty). Does NOT truncate — truncation happens only on the phone's
-     * `FLUSH_ACK`, so an undelivered flush is safely retried.
+     * Write the current store contents to the phone as chunked DataItems. Returns a [FlushResult]
+     * describing the batch (`chunkCount == 0` / `rowCount == 0` when the store was empty). Does NOT
+     * truncate — truncation happens only on the phone's `FLUSH_ACK`, so an undelivered flush is
+     * safely retried.
      */
-    suspend fun flush(lines: List<String>): Int {
+    suspend fun flush(lines: List<String>): FlushResult {
         if (lines.isEmpty()) {
             Log.i(TAG, "flush: nothing to send")
-            return 0
+            return FlushResult(batchId = 0L, chunkCount = 0, rowCount = 0)
         }
         val batchId = System.currentTimeMillis()
         val chunks = lines.chunked(CHUNK_SIZE)
@@ -64,6 +68,6 @@ class WatchFlushWriter(context: Context) {
                 Log.w(TAG, "putDataItem failed for $path (will sync when linked)", e)
             }
         }
-        return lines.size
+        return FlushResult(batchId = batchId, chunkCount = chunks.size, rowCount = lines.size)
     }
 }

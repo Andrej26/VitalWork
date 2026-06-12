@@ -45,6 +45,9 @@ class FakeScenarioRecordingRepository : ScenarioRecordingRepository {
     var lastDrainScenarios: List<ScenarioEntity>? = null
         private set
 
+    /** Optional shared ordering log (e.g. to assert drain happens before FLUSH_ACK). */
+    var eventLog: MutableList<String>? = null
+
     override fun startWatchEdaSession() {
         startWatchEdaSessionCallCount++
     }
@@ -52,5 +55,6 @@ class FakeScenarioRecordingRepository : ScenarioRecordingRepository {
     override suspend fun drainAndFinalizeWatchEda(scenarios: List<ScenarioEntity>) {
         drainWatchEdaCallCount++
         lastDrainScenarios = scenarios
+        eventLog?.add("drain")
     }
 }

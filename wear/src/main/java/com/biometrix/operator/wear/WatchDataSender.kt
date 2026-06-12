@@ -22,7 +22,7 @@ import kotlinx.coroutines.tasks.await
  *
  * One message body per reading (newline not required, but kept identical to the prior format
  * so the phone parser is unchanged):
- *   {"t":1717245600000,"type":"HR","value":72.0,"accuracy":0}
+ *   {"t":1717245600000,"type":"WATCH_HR","value":72.0,"accuracy":0}
  *   {"t":1717245600000,"type":"CAPABILITIES","text":"HEART_RATE_CONTINUOUS,EDA_CONTINUOUS"}
  */
 class WatchDataSender(context: Context) {
@@ -96,6 +96,25 @@ class WatchDataSender(context: Context) {
 
     /** Send one already-encoded JSON line as a single best-effort message. */
     fun sendLine(jsonLine: String) = send(jsonLine)
+
+    /**
+     * Send one line and await the result, so a caller running inside a short-lived
+     * [WearableListenerService] callback (e.g. the flush handler) can guarantee delivery is dispatched
+     * before it returns and the service is unbound. Returns true if the message was handed off.
+     */
+    suspend fun sendLineBlocking(jsonLine: String): Boolean {
+        val node = resolveNodeId() ?: run { isConnected = false; return false }
+        return try {
+            messageClient.sendMessage(node, MESSAGE_PATH, jsonLine.toByteArray(Charsets.UTF_8)).await()
+            isConnected = true
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "sendLineBlocking failed; will re-resolve node", e)
+            cachedNodeId = null
+            isConnected = false
+            false
+        }
+    }
 
     /** Send several readings from one SDK callback as ONE bundled best-effort message. */
     fun sendBatch(lines: List<String>) {

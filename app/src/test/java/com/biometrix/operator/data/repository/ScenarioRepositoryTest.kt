@@ -86,11 +86,11 @@ class ScenarioRepositoryTest {
         val samples = listOf(
             SensorSampleEntity(
                 scenarioId = 1L, timestampMs = 1000L, elapsedMs = 0L,
-                sensorType = SensorType.HEART_RATE, value = 72f
+                sensorType = SensorType.ESENSE_HEART_RATE, value = 72f
             ),
             SensorSampleEntity(
                 scenarioId = 1L, timestampMs = 2000L, elapsedMs = 1000L,
-                sensorType = SensorType.EDA, value = 1.2f
+                sensorType = SensorType.WATCH_EDA, value = 1.2f
             )
         )
 
@@ -98,7 +98,7 @@ class ScenarioRepositoryTest {
 
         val retrieved = repository.getSamplesForScenario(1L)
         assertEquals(2, retrieved.size)
-        assertEquals(1, repository.getSampleCountBySensorType(1L, SensorType.HEART_RATE))
-        assertEquals(1, repository.getSampleCountBySensorType(1L, SensorType.EDA))
+        assertEquals(1, repository.getSampleCountBySensorType(1L, SensorType.ESENSE_HEART_RATE))
+        assertEquals(1, repository.getSampleCountBySensorType(1L, SensorType.WATCH_EDA))
     }
 }

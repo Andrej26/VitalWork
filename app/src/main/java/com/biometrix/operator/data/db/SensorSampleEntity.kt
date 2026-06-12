@@ -5,18 +5,32 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
+/**
+ * Sensor reading category. Every value maps to **exactly one physical sensor** so a sample's source
+ * is unambiguous — heart rate in particular is recorded from two devices simultaneously (eSense Pulse
+ * and the Galaxy Watch), so they get distinct types and are never merged.
+ *
+ *  - `ESENSE_*` → Mindfield eSense (Pulse over BLE, Respiration over audio jack).
+ *  - `WATCH_*`  → Samsung Galaxy Watch via the `:wear` companion / Data Layer.
+ */
 enum class SensorType {
-    HEART_RATE,
+    /** eSense Pulse heart rate (BPM), over BLE. */
+    ESENSE_HEART_RATE,
+    /** eSense Respiration breathing rate (breaths/min), over audio jack. */
     RESPIRATION,
+    /** eSense Pulse RR interval (ms), over BLE. */
     ESENSE_RR_INTERVAL,
-    EDA,
 
+    /** Galaxy Watch heart rate (BPM). Distinct from [ESENSE_HEART_RATE] — both record HR at once. */
+    WATCH_HR,
     /**
      * Galaxy Watch inter-beat interval (ms). Kept distinct from [ESENSE_RR_INTERVAL] so watch HRV
      * data is attributable to its source in export/analysis (eSense RR comes from a different sensor
-     * with different validity conventions). Galaxy Watch HR reuses [HEART_RATE].
+     * with different validity conventions).
      */
-    WATCH_IBI
+    WATCH_IBI,
+    /** Galaxy Watch electrodermal activity / skin conductance (µS). */
+    WATCH_EDA
 }
 
 @Entity(

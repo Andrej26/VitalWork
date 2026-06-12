@@ -59,6 +59,8 @@ class SessionControlViewModelTest {
     private lateinit var sessionRepository: SessionRepository
     private lateinit var scenarioRepository: ScenarioRepository
     private lateinit var lanAvailableFlow: MutableStateFlow<Boolean>
+    private lateinit var watchReceiver: WatchSensorReceiver
+    private lateinit var fakeWatchCommandSender: FakeWatchCommandSender
 
     private val sessionId = 1L
 
@@ -74,12 +76,14 @@ class SessionControlViewModelTest {
         lanAvailableFlow = MutableStateFlow(true)
         scenarioRepository = ScenarioRepository(fakeScenarioDao, fakeSensorSampleDao, TimeProvider.system())
         vrEventReceiver = VrEventReceiver(scenarioRepository, VrLinkLog())
+        watchReceiver = WatchSensorReceiver(TimeProvider.system())
+        fakeWatchCommandSender = FakeWatchCommandSender()
 
         connectionRepository = ConnectionRepository(
             vrEventReceiver = vrEventReceiver,
             bleManager = fakeBleManager,
             respirationDevice = fakeRespiration,
-            watchReceiver = WatchSensorReceiver(TimeProvider.system()),
+            watchReceiver = watchReceiver,
             lanAvailableFlow = lanAvailableFlow
         )
         sessionRepository = SessionRepository(
@@ -118,18 +122,42 @@ class SessionControlViewModelTest {
             vrEventReceiver = vrEventReceiver,
             locationChecker = fakeLocationChecker,
             readinessChecker = FakeSystemReadinessChecker(),
-            watchCommandSender = FakeWatchCommandSender(),
+            watchCommandSender = fakeWatchCommandSender,
             savedStateHandle = savedState
         )
     }
 
-    /** No-op watch command sender — the watch link isn't exercised in these host tests. */
+    /** Records FLUSH / FLUSH_ACK calls (and their order, via [eventLog]) for the watch handshake tests. */
     private class FakeWatchCommandSender :
         com.biometrix.operator.data.sensor.watch.WatchCommandSender {
+        var sendFlushCallCount = 0; private set
+        var sendFlushAckCallCount = 0; private set
+        var lastAckTimestampMs: Long? = null; private set
+        var eventLog: MutableList<String>? = null
+
         override suspend fun sendStart(): Boolean = true
-        override suspend fun sendFlush(): Boolean = true
         override suspend fun sendStop(): Boolean = true
-        override suspend fun sendFlushAck(throughTimestampMs: Long): Boolean = true
+        override suspend fun sendFlush(): Boolean {
+            sendFlushCallCount++
+            eventLog?.add("flush")
+            return true
+        }
+        override suspend fun sendFlushAck(throughTimestampMs: Long): Boolean {
+            sendFlushAckCallCount++
+            lastAckTimestampMs = throughTimestampMs
+            eventLog?.add("ack")
+            return true
+        }
+    }
+
+    /** Feed a reading into the watch receiver — marks the link LIVE; a BATTERY reading also marks the
+     *  watch "in use" (battery level non-null), which is the End-Session watch-flow trigger. */
+    private fun feedWatchReading(type: String, value: Float) {
+        watchReceiver.onReading(
+            com.biometrix.operator.data.sensor.watch.model.WatchReading(
+                type = type, value = value, accuracy = 0, timestampMs = System.currentTimeMillis()
+            )
+        )
     }
 
     private suspend fun emitScenarioStart(code: ScenarioCode = ScenarioCode.FALLING_PALLET) {
@@ -237,7 +265,7 @@ class SessionControlViewModelTest {
     }
 
     @Test
-    fun endSessionAndSave_stopsRecording_thenCompletesSession() = runTest {
+    fun endSession_noWatch_stopsRecording_finalizesWithoutFlush() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         seedActiveSession()
 
@@ -251,7 +279,85 @@ class SessionControlViewModelTest {
 
         assertEquals(1, fakeScenarioRecordingRepo.stopRecordingCallCount)
         assertEquals(SessionStatus.COMPLETED, fakeSessionDao.sessions[0].status)
-        assertTrue(vm.endSessionResult.value is EndSessionResult.Success)
+        assertTrue(vm.endSessionPhase.value is EndSessionPhase.Complete)
+        // No watch in use → no FLUSH and no FLUSH_ACK.
+        assertEquals(0, fakeWatchCommandSender.sendFlushCallCount)
+        assertEquals(0, fakeWatchCommandSender.sendFlushAckCallCount)
+    }
+
+    @Test
+    fun endSession_watchLive_sendsFlush_thenAcksOnlyAfterDrain() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        seedActiveSession()
+
+        val vm = createVm()
+        advanceUntilIdle()
+
+        // Watch in use + LIVE → End Session skips the wake prompt and transfers straight away.
+        feedWatchReading("BATTERY", 80f)
+        advanceUntilIdle()
+
+        val log = mutableListOf<String>()
+        fakeWatchCommandSender.eventLog = log
+        fakeScenarioRecordingRepo.eventLog = log
+
+        // Unconfined dispatcher runs the end-session job eagerly to its transfer-wait suspension; do
+        // NOT advance time here or the bounded transfer wait would elapse before the chunk lands.
+        vm.endSessionAndSave()
+
+        // The watch streams its store; a chunk completes the batch (max watch ts = 5000).
+        watchReceiver.onFlushChunk(batchId = 1L, index = 0, count = 1, maxWatchTsInChunk = 5_000L)
+        advanceUntilIdle()
+
+        // FLUSH first, drain (persist) before FLUSH_ACK — never ack data that wasn't persisted.
+        assertEquals(listOf("flush", "drain", "ack"), log)
+        assertEquals(5_000L, fakeWatchCommandSender.lastAckTimestampMs)
+        assertEquals(SessionStatus.COMPLETED, fakeSessionDao.sessions[0].status)
+        assertTrue(vm.endSessionPhase.value is EndSessionPhase.Complete)
+    }
+
+    @Test
+    fun endSession_watchLive_transferTimesOut_failsWithoutAck() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        seedActiveSession()
+
+        val vm = createVm()
+        advanceUntilIdle()
+
+        feedWatchReading("BATTERY", 80f)
+        advanceUntilIdle()
+
+        vm.endSessionAndSave()
+        advanceUntilIdle() // no flush ever completes → the bounded transfer wait elapses
+
+        assertTrue(vm.endSessionPhase.value is EndSessionPhase.Failed)
+        // Store untouched: no FLUSH_ACK, so the watch keeps its data for a later session.
+        assertEquals(0, fakeWatchCommandSender.sendFlushAckCallCount)
+        // Session not yet completed (operator can retry or end without watch data).
+        assertEquals(SessionStatus.ACTIVE, fakeSessionDao.sessions[0].status)
+    }
+
+    @Test
+    fun endWithoutWatchData_duringTransfer_finalizesWithoutAck() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        seedActiveSession()
+
+        val vm = createVm()
+        advanceUntilIdle()
+
+        feedWatchReading("BATTERY", 80f)
+        advanceUntilIdle()
+
+        // Runs eagerly to the transfer-wait suspension (no time advanced yet).
+        vm.endSessionAndSave()
+
+        vm.endWithoutWatchData() // operator aborts the wait
+        advanceUntilIdle()
+
+        assertEquals(1, fakeScenarioRecordingRepo.drainWatchEdaCallCount)
+        assertEquals(0, fakeWatchCommandSender.sendFlushAckCallCount)
+        assertEquals(SessionStatus.COMPLETED, fakeSessionDao.sessions[0].status)
+        assertTrue(vm.endSessionPhase.value is EndSessionPhase.Complete)
     }
 
     @Test

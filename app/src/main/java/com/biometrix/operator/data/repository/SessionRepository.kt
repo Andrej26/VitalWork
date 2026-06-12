@@ -73,10 +73,10 @@ class SessionRepository @Inject constructor(
         var rrCount = 0
         var edaCount = 0
         for (scenario in completedScenarios) {
-            hrCount += sensorSampleDao.getSampleCountBySensorType(scenario.id, SensorType.HEART_RATE)
+            hrCount += sensorSampleDao.getSampleCountBySensorType(scenario.id, SensorType.ESENSE_HEART_RATE)
             respCount += sensorSampleDao.getSampleCountBySensorType(scenario.id, SensorType.RESPIRATION)
             rrCount += sensorSampleDao.getSampleCountBySensorType(scenario.id, SensorType.ESENSE_RR_INTERVAL)
-            edaCount += sensorSampleDao.getSampleCountBySensorType(scenario.id, SensorType.EDA)
+            edaCount += sensorSampleDao.getSampleCountBySensorType(scenario.id, SensorType.WATCH_EDA)
         }
 
         sessionDao.update(
