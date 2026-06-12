@@ -38,14 +38,17 @@ import javax.inject.Singleton
 class VrEventReceiver(
     private val scenarioRepository: ScenarioRepository,
     private val clock: () -> Long,
-    dispatcher: CoroutineDispatcher
+    dispatcher: CoroutineDispatcher,
+    // Default lets the unit test construct this without a log; Hilt always injects the singleton.
+    private val linkLog: VrLinkLog = VrLinkLog()
 ) {
     /** Production constructor used by Hilt. Tests use the primary constructor to inject a fake clock/dispatcher. */
     @Inject
-    constructor(scenarioRepository: ScenarioRepository) : this(
+    constructor(scenarioRepository: ScenarioRepository, linkLog: VrLinkLog) : this(
         scenarioRepository,
         clock = { System.currentTimeMillis() },
-        dispatcher = Dispatchers.Default
+        dispatcher = Dispatchers.Default,
+        linkLog = linkLog
     )
 
 
@@ -77,7 +80,9 @@ class VrEventReceiver(
     private val _heartbeatState = MutableStateFlow(ConnectionState.DISCONNECTED)
     /**
      * Heartbeat-driven liveness of the bonded Quest — the signal the app-wide VR indicator should
-     * use. CONNECTED while heartbeats arrive; DISCONNECTED after [HEARTBEAT_TIMEOUT_MS] of silence.
+     * use. CONNECTED while heartbeats arrive; RECONNECTING (amber) after [HEARTBEAT_TIMEOUT_MS] of
+     * silence — the bond is kept and the Quest auto-reconnects when it wakes, so this is a pause, not
+     * a loss. Only a deliberate Stop ([onLinkStopped]) drops it to DISCONNECTED (gray).
      */
     val heartbeatState: StateFlow<ConnectionState> = _heartbeatState.asStateFlow()
 
@@ -115,6 +120,9 @@ class VrEventReceiver(
 
     @Synchronized
     fun clearActiveScenario() {
+        // No-op if already cleared — a duplicate /stop POST re-emits this event, and a second
+        // call must not wipe the grace window set by the first.
+        if (activeScenarioDbId == null) return
         // Keep the just-ended scenario addressable for a short grace period for late reactions.
         graceScenarioDbId = activeScenarioDbId
         graceCode = activeCode
@@ -137,8 +145,8 @@ class VrEventReceiver(
     // ── HTTP route entry point ───────────────────────────────────────────────
 
     /**
-     * Validate and process a VR event. For `event`/`reaction` the timestamp DB write is awaited
-     * before returning [VrEventResult.Accepted] (ack-after-write). Lifecycle events are emitted to
+     * Validate and process a VR event. For `stop`, any provided timestamps are persisted before
+     * returning [VrEventResult.Accepted] (ack-after-write). Lifecycle events are emitted to
      * [events] for the VM to act on; they ack on accept.
      */
     suspend fun submit(event: VrEvent): VrEventResult {
@@ -146,49 +154,51 @@ class VrEventReceiver(
         return when (event) {
             is VrEvent.ScenarioStart -> {
                 // Gating + row creation happen in the VM (it owns session state). Just forward.
+                linkLog.add(VrLinkLog.Level.INFO, "Scenario start: ${event.code.officialCode}")
                 _events.emit(event)
                 VrEventResult.Accepted()
             }
             is VrEvent.ScenarioStop -> {
+                // Resolve the target and persist timestamps BEFORE emitting — at this point
+                // activeScenarioDbId is still set (the VM hasn't run clearActiveScenario() yet),
+                // so this resolves deterministically via the active path, not the grace window.
+                val scenarioId = targetFor(event.code)
+                if (scenarioId == null) {
+                    linkLog.add(
+                        VrLinkLog.Level.WARNING,
+                        "Scenario stop ignored: no active scenario for ${event.code.officialCode}"
+                    )
+                    return VrEventResult.Rejected("no_active_scenario")
+                }
+
+                writeTimestampsIfPresent(scenarioId, event)
+
+                linkLog.add(
+                    VrLinkLog.Level.INFO,
+                    "Scenario stop: ${event.code.officialCode} " +
+                        "(event=${event.eventTimestampMs ?: "—"}, reaction=${event.reactionTimestampMs ?: "—"})"
+                )
                 _events.emit(event)
                 VrEventResult.Accepted()
-            }
-            is VrEvent.StimulusEvent -> {
-                // Surface to the log for live diagnostics (e.g. the VR Control screen) regardless of
-                // whether it's accepted/recorded. tryEmit (non-suspending) so the ack-after-write
-                // measurement path is never slowed; a dropped log line under burst is acceptable.
-                _events.tryEmit(event)
-                writeTimestamp(event.code, event.receivedAtMs, isReaction = false)
-            }
-            is VrEvent.Reaction -> {
-                _events.tryEmit(event)
-                writeTimestamp(event.code, event.receivedAtMs, isReaction = true)
             }
         }
     }
 
-    private suspend fun writeTimestamp(
-        code: ScenarioCode,
-        timestampMs: Long,
-        isReaction: Boolean
-    ): VrEventResult {
-        val scenarioId = targetFor(code)
-            ?: return VrEventResult.Rejected("no_active_scenario")
+    /**
+     * First-write-wins persistence of [VrEvent.ScenarioStop]'s optional timestamps: each is only
+     * written if provided and not already recorded (so a retry doesn't clobber the original).
+     */
+    private suspend fun writeTimestampsIfPresent(scenarioId: Long, event: VrEvent.ScenarioStop) {
+        if (event.eventTimestampMs == null && event.reactionTimestampMs == null) return
 
-        // First-write-wins: don't let a delayed retry clobber an already-recorded timestamp.
-        val scenario = scenarioRepository.getScenarioById(scenarioId)
-            ?: return VrEventResult.Rejected("scenario_not_found")
-        val already = if (isReaction) scenario.reactionTimestampMs else scenario.eventTimestampMs
-        if (already != null) {
-            return VrEventResult.Accepted(already) // idempotent: report the stored value
-        }
+        val scenario = scenarioRepository.getScenarioById(scenarioId) ?: return
 
-        if (isReaction) {
-            scenarioRepository.setReactionTimestamp(scenarioId, timestampMs)
-        } else {
-            scenarioRepository.setEventTimestamp(scenarioId, timestampMs)
+        if (event.eventTimestampMs != null && scenario.eventTimestampMs == null) {
+            scenarioRepository.setEventTimestamp(scenarioId, event.eventTimestampMs)
         }
-        return VrEventResult.Accepted(timestampMs)
+        if (event.reactionTimestampMs != null && scenario.reactionTimestampMs == null) {
+            scenarioRepository.setReactionTimestamp(scenarioId, event.reactionTimestampMs)
+        }
     }
 
     // ── Liveness watchdog (mirrors WatchSensorReceiver) ──────────────────────
@@ -220,6 +230,13 @@ class VrEventReceiver(
      */
     fun markHeartbeat() {
         lastHeartbeatMs = clock()
+        // Log the connect transition distinctly (SUCCESS) from the steady pulse (INFO), so the
+        // operator can both confirm the link is alive beat-by-beat and spot when it (re)connected.
+        if (_heartbeatState.value != ConnectionState.CONNECTED) {
+            linkLog.add(VrLinkLog.Level.SUCCESS, "VR connected (heartbeat received)")
+        } else {
+            linkLog.add(VrLinkLog.Level.INFO, "Heartbeat")
+        }
         _heartbeatState.value = ConnectionState.CONNECTED
         ensureHeartbeatWatchdog()
     }
@@ -233,12 +250,38 @@ class VrEventReceiver(
                 if (_heartbeatState.value == ConnectionState.CONNECTED &&
                     clock() - lastHeartbeatMs > HEARTBEAT_TIMEOUT_MS
                 ) {
-                    // Was alive, now silent → mark lost once and signal the service to re-arm.
-                    _heartbeatState.value = ConnectionState.DISCONNECTED
+                    // Was alive, now silent → flip the UI to RECONNECTING (amber), not DISCONNECTED
+                    // (gray). The bond is deliberately KEPT (a quiet headset is usually just asleep),
+                    // so this is a pause, not a loss — the Quest auto-reconnects when heartbeats
+                    // resume (markHeartbeat → CONNECTED). Only the operator's Stop drops it to gray
+                    // DISCONNECTED ([onLinkStopped]). heartbeatLost is still emitted for any
+                    // interested observer; nothing currently drops the bond on it.
+                    _heartbeatState.value = ConnectionState.RECONNECTING
+                    linkLog.add(
+                        VrLinkLog.Level.WARNING,
+                        "No heartbeat for >${HEARTBEAT_TIMEOUT_MS / 1000}s — headset asleep? " +
+                            "Bond kept; will auto-reconnect when it wakes."
+                    )
                     _heartbeatLost.tryEmit(Unit)
                 }
             }
         }
+    }
+
+    /**
+     * The operator stopped the VR link (VR Control "Stop"). Reset liveness to DISCONNECTED and
+     * cancel the watchdogs **without** going through the heartbeat-loss path — so deliberately
+     * ending the link doesn't fire a false "VR connection lost" warning (or [heartbeatLost] re-arm)
+     * when the headset's heartbeats then cease. A later [markHeartbeat] cleanly revives everything.
+     */
+    @Synchronized
+    fun onLinkStopped() {
+        heartbeatWatchdogJob?.cancel()
+        heartbeatWatchdogJob = null
+        watchdogJob?.cancel()
+        watchdogJob = null
+        _heartbeatState.value = ConnectionState.DISCONNECTED
+        _connectionState.value = ConnectionState.DISCONNECTED
     }
 
     /**

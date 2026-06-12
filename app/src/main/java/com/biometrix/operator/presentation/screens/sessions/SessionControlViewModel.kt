@@ -292,15 +292,14 @@ class SessionControlViewModel @Inject constructor(
             }
         }
 
-        // VR scenario lifecycle from the Quest (HTTP events via VrEventReceiver). Only the
-        // lifecycle events (start/stop) are handled here; the receiver writes event/reaction
-        // timestamps itself (ack-after-write). Gating preserved: session ACTIVE + a sensor connected.
+        // VR scenario lifecycle from the Quest (HTTP events via VrEventReceiver). The receiver
+        // writes the stop event's event/reaction timestamps itself (ack-after-write) before
+        // emitting. Gating preserved: session ACTIVE + a sensor connected.
         viewModelScope.launch {
             vrEventReceiver.events.collect { event ->
                 when (event) {
                     is VrEvent.ScenarioStart -> handleVrScenarioStart(event)
                     is VrEvent.ScenarioStop -> handleVrScenarioStop()
-                    else -> { /* StimulusEvent / Reaction handled by the receiver */ }
                 }
             }
         }

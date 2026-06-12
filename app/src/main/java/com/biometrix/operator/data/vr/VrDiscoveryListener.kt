@@ -44,7 +44,8 @@ import javax.inject.Singleton
 class VrDiscoveryListener @Inject constructor(
     @ApplicationContext private val context: Context,
     private val pairingManager: VrPairingManager,
-    private val networkChecker: NetworkChecker
+    private val networkChecker: NetworkChecker,
+    private val linkLog: VrLinkLog
 ) {
     private companion object {
         const val DISCOVERY_PORT = 8889
@@ -132,8 +133,13 @@ class VrDiscoveryListener @Inject constructor(
                     reuseAddress = true
                     bind(InetSocketAddress(DISCOVERY_PORT))
                 }
-            }.onFailure { android.util.Log.e(TAG, "bind $DISCOVERY_PORT failed", it) }
-                .getOrNull() ?: return@launch
+            }.onFailure {
+                android.util.Log.e(TAG, "bind $DISCOVERY_PORT failed", it)
+                linkLog.add(
+                    VrLinkLog.Level.ERROR,
+                    "Discovery socket bind failed on port $DISCOVERY_PORT — pairing unavailable"
+                )
+            }.getOrNull() ?: return@launch
             socket = boundSocket
             android.util.Log.i(TAG, "listening on $DISCOVERY_PORT (multicastLock=${multicastLock?.isHeld})")
 
@@ -195,8 +201,16 @@ class VrDiscoveryListener @Inject constructor(
             }
         }.onSuccess {
             android.util.Log.d(TAG, "reply sent to ${target.address.hostAddress}:${target.port} -> $tabletIp:$HTTP_PORT")
+            linkLog.add(
+                VrLinkLog.Level.INFO,
+                "Sent tablet address $tabletIp:$HTTP_PORT to headset at ${target.address.hostAddress}"
+            )
         }.onFailure {
             android.util.Log.e(TAG, "reply send failed to ${target.address.hostAddress}:${target.port}", it)
+            linkLog.add(
+                VrLinkLog.Level.ERROR,
+                "Failed to send tablet address to ${target.address.hostAddress} — ${it.message ?: it.javaClass.simpleName}"
+            )
         }
     }
 

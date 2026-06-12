@@ -2,6 +2,7 @@ package com.biometrix.operator.data.sensor.watch
 
 import com.biometrix.operator.data.model.ConnectionState
 import com.biometrix.operator.data.sensor.watch.model.WatchReading
+import com.biometrix.operator.data.time.TimeProvider
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -18,21 +19,21 @@ class WatchLinkStatusTest {
 
     @Test
     fun freshState_isDisconnected() {
-        val r = WatchSensorReceiver()
+        val r = WatchSensorReceiver(TimeProvider.system())
         assertEquals(WatchLinkStatus.DISCONNECTED, r.linkStatus.value)
         assertEquals(ConnectionState.DISCONNECTED, r.connectionState.value)
     }
 
     @Test
     fun aRecentReading_isLive_andConnected() {
-        val r = WatchSensorReceiver().apply { onReading(freshReading()) }
+        val r = WatchSensorReceiver(TimeProvider.system()).apply { onReading(freshReading()) }
         assertEquals(WatchLinkStatus.LIVE, r.linkStatus.value)
         assertEquals(ConnectionState.CONNECTED, r.connectionState.value)
     }
 
     @Test
     fun heartbeatWithoutReading_isDozing_butStillConnected() {
-        val r = WatchSensorReceiver().apply { onHeartbeat() }
+        val r = WatchSensorReceiver(TimeProvider.system()).apply { onHeartbeat() }
         // A heartbeat is activity (not gone) but not a reading → DOZING, and CONNECTED at the coarse level.
         assertEquals(WatchLinkStatus.DOZING, r.linkStatus.value)
         assertEquals(ConnectionState.CONNECTED, r.connectionState.value)
@@ -40,7 +41,7 @@ class WatchLinkStatusTest {
 
     @Test
     fun explicitStop_isDisconnected() {
-        val r = WatchSensorReceiver().apply {
+        val r = WatchSensorReceiver(TimeProvider.system()).apply {
             onReading(freshReading())
             onStop()
         }

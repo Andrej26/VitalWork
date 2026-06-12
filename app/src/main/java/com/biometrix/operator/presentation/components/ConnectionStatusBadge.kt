@@ -34,6 +34,7 @@ fun ConnectionStatusBadge(
         targetValue = when (state) {
             ConnectionState.DISCONNECTED -> Color.Gray
             ConnectionState.CONNECTING -> Color(0xFFFFA000)
+            ConnectionState.RECONNECTING -> Color(0xFFFFA000)
             ConnectionState.CONNECTED -> Color(0xFF4CAF50)
             ConnectionState.ERROR -> Color(0xFFF44336)
         },
@@ -44,6 +45,7 @@ fun ConnectionStatusBadge(
     val statusText = label ?: when (state) {
         ConnectionState.DISCONNECTED -> "Disconnected"
         ConnectionState.CONNECTING -> "Connecting"
+        ConnectionState.RECONNECTING -> "Reconnecting"
         ConnectionState.CONNECTED -> "Connected"
         ConnectionState.ERROR -> "Error"
     }
@@ -52,7 +54,7 @@ fun ConnectionStatusBadge(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
     ) {
-        if (state == ConnectionState.CONNECTING) {
+        if (state == ConnectionState.CONNECTING || state == ConnectionState.RECONNECTING) {
             CircularProgressIndicator(
                 modifier = Modifier.size(12.dp),
                 strokeWidth = 2.dp,

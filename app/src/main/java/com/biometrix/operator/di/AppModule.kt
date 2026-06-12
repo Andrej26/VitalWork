@@ -26,6 +26,9 @@ import com.biometrix.operator.data.system.LocationChecker
 import com.biometrix.operator.data.system.LocationCheckerImpl
 import com.biometrix.operator.data.system.SystemReadinessChecker
 import com.biometrix.operator.data.system.SystemReadinessCheckerImpl
+import com.biometrix.operator.data.time.TimeProvider
+import com.lyft.kronos.AndroidClockFactory
+import com.lyft.kronos.KronosClock
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -75,6 +78,18 @@ object AppModule {
     @Named("lanAvailable")
     fun provideLanAvailableFlow(networkChecker: NetworkChecker): StateFlow<Boolean> =
         networkChecker.lanAvailable
+
+    /**
+     * NTP clock used for offset correction (never sets the system clock). [TimeProvider] wraps this;
+     * [com.biometrix.operator.BioMetrixOperatorApplication] kicks off the first sync at startup.
+     */
+    @Provides
+    @Singleton
+    fun provideKronosClock(@ApplicationContext context: Context): KronosClock =
+        AndroidClockFactory.createKronosClock(
+            context,
+            ntpHosts = listOf("time.google.com", "time.cloudflare.com", "pool.ntp.org")
+        )
 
     @Provides
     @Singleton
@@ -129,10 +144,11 @@ object AppModule {
         bleManager: BleManager,
         @Named("respiration") respirationDevice: SensorDevice,
         scenarioRepository: ScenarioRepository,
-        watchReceiver: WatchSensorReceiver
+        watchReceiver: WatchSensorReceiver,
+        timeProvider: TimeProvider
     ): ScenarioRecordingRepository {
         return ScenarioRecordingRepositoryImpl(
-            bleManager, respirationDevice, scenarioRepository, watchReceiver
+            bleManager, respirationDevice, scenarioRepository, watchReceiver, timeProvider
         )
     }
 }

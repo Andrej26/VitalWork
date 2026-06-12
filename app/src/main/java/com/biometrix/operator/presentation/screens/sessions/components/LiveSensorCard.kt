@@ -64,6 +64,7 @@ fun LiveSensorCard(
         targetValue = when (connectionState) {
             ConnectionState.CONNECTED -> Color(0xFF4CAF50)
             ConnectionState.CONNECTING -> Color(0xFFFFA000)
+            ConnectionState.RECONNECTING -> Color(0xFFFFA000)
             ConnectionState.ERROR -> Color(0xFFF44336)
             ConnectionState.DISCONNECTED -> MaterialTheme.colorScheme.outlineVariant
         },

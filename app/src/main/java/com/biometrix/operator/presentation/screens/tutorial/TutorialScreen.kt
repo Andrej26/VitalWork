@@ -1305,6 +1305,7 @@ private fun DeviceStatusCard(
         connectionState != null -> when (connectionState) {
             ConnectionState.CONNECTED -> "Connected"
             ConnectionState.CONNECTING -> "Connecting…"
+            ConnectionState.RECONNECTING -> "Reconnecting"
             ConnectionState.ERROR -> "Error"
             ConnectionState.DISCONNECTED -> "Disconnected"
         }

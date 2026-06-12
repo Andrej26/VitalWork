@@ -4,10 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.biometrix.operator.data.model.ConnectionState
 import com.biometrix.operator.data.network.NetworkChecker
-import com.biometrix.operator.data.vr.VrDiscoveryListener
-import com.biometrix.operator.data.vr.VrEvent
+import com.biometrix.operator.data.repository.SessionRepository
 import com.biometrix.operator.data.vr.VrEventReceiver
-import com.biometrix.operator.data.vr.VrHttpServer
+import com.biometrix.operator.data.vr.VrLinkLog
+import com.biometrix.operator.data.vr.VrLinkManager
 import com.biometrix.operator.data.vr.VrPairingManager
 import com.biometrix.operator.presentation.log.LogEntry
 import com.biometrix.operator.presentation.log.LogType
@@ -41,6 +41,13 @@ data class VRConnectionUiState(
      * gap before the first heartbeat. Reset whenever the bond drops.
      */
     val everConnectedSinceBond: Boolean = false,
+    /** Whether the app-scoped VR link is running. Drives the Start/Stop button + pairing card copy. */
+    val linkActive: Boolean = false,
+    /**
+     * Whether a session is currently ACTIVE. Stop is disabled while one runs — stopping mid-session
+     * would clear the bond the recording depends on, so the operator must end the session first.
+     */
+    val sessionActive: Boolean = false,
     val logEntries: List<LogEntry> = emptyList()
 )
 
@@ -48,8 +55,9 @@ data class VRConnectionUiState(
 class VRConnectionViewModel @Inject constructor(
     private val vrEventReceiver: VrEventReceiver,
     private val vrPairingManager: VrPairingManager,
-    private val vrDiscoveryListener: VrDiscoveryListener,
-    private val vrHttpServer: VrHttpServer,
+    private val vrLinkManager: VrLinkManager,
+    private val vrLinkLog: VrLinkLog,
+    private val sessionRepository: SessionRepository,
     private val networkChecker: NetworkChecker
 ) : ViewModel() {
 
@@ -62,33 +70,54 @@ class VRConnectionViewModel @Inject constructor(
 
     init {
         observeConnectionState()
-        observeEvents()
         observePairing()
+        observeLog()
+        observeLinkActive()
+        observeSessionActive()
     }
 
     /**
-     * Run the VR link (discovery listener + HTTP server) while the VR Control screen is on-screen,
-     * so the operator can pair and watch live events with no session running. Reference-counted: a
-     * session holding its own reference keeps these alive when the operator leaves the screen.
+     * Start the app-scoped VR link if it isn't already running. Unlike the old screen-scoped hold,
+     * this is NOT released when the operator leaves VR Control — the link persists across the whole
+     * app until [stopVrLink] (the Stop button). Idempotent, so re-entering the screen is harmless.
      */
-    fun acquireVrLink() {
-        vrDiscoveryListener.acquire()
-        vrHttpServer.acquire()
+    fun startVrLink() {
+        vrLinkManager.start()
     }
 
-    /** Release this screen's hold on the VR link (see [acquireVrLink]). */
-    fun releaseVrLink() {
-        vrDiscoveryListener.release()
-        vrHttpServer.release()
+    /**
+     * Operator tapped Stop: cleanly disconnect the VR link before quitting the headset app, so the
+     * tablet doesn't pop a false "connection lost" warning when heartbeats cease. Ignored while a
+     * session is active (the UI also disables the button) — stopping then would clear the bond the
+     * recording relies on.
+     */
+    fun stopVrLink() {
+        if (_uiState.value.sessionActive) return
+        vrLinkManager.stop()
     }
 
-    /** Operator tapped Connect: bond to the candidate Quest. */
+    private fun observeLinkActive() {
+        viewModelScope.launch {
+            vrLinkManager.active.collect { active ->
+                _uiState.update { it.copy(linkActive = active) }
+            }
+        }
+    }
+
+    private fun observeSessionActive() {
+        viewModelScope.launch {
+            sessionRepository.activeSession.collect { session ->
+                _uiState.update { it.copy(sessionActive = session != null) }
+            }
+        }
+    }
+
+    /**
+     * Operator tapped Connect: bond to the candidate Quest. The bond reply (telling the Quest where
+     * to POST) is sent by [VrLinkManager]'s pairing observer, which runs whenever the link is up.
+     */
     fun confirmPairing() {
         vrPairingManager.confirm()
-        // Tell the Quest where to POST. The session service does this via its own pairingState
-        // observer, but that doesn't run without a session — so drive it here too. Idempotent: a
-        // duplicate reply when a session is also active just re-informs the Quest of the address.
-        vrDiscoveryListener.sendBondReply()
     }
 
     private fun observePairing() {
@@ -122,25 +151,34 @@ class VRConnectionViewModel @Inject constructor(
                         everConnectedSinceBond = it.everConnectedSinceBond || state == ConnectionState.CONNECTED
                     )
                 }
-                val logType = if (state == ConnectionState.CONNECTED) LogType.SUCCESS else LogType.INFO
-                addLogEntry(logType, "VR ${state.name.lowercase()}")
             }
         }
     }
 
-    private fun observeEvents() {
+    /**
+     * Mirror the shared [VrLinkLog] into the UI. The whole VR link writes to it (pairing handshake,
+     * heartbeats, scenario events, rejections), so the event log shows the full story even across
+     * leaving and re-entering this screen — newest first.
+     */
+    private fun observeLog() {
         viewModelScope.launch {
-            vrEventReceiver.events.collect { event ->
-                val label = when (event) {
-                    is VrEvent.ScenarioStart -> "scenario_start ${event.code.officialCode}"
-                    is VrEvent.StimulusEvent -> "event ${event.code.officialCode}"
-                    is VrEvent.Reaction -> "reaction ${event.code.officialCode}"
-                    is VrEvent.ScenarioStop -> "scenario_stop ${event.code.officialCode}"
-                }
-                addLogEntry(LogType.NOTIFICATION, label)
+            vrLinkLog.entries.collect { entries ->
+                val mapped = entries.asReversed().map { it.toLogEntry() }
+                _uiState.update { it.copy(logEntries = mapped) }
             }
         }
     }
+
+    private fun VrLinkLog.Entry.toLogEntry(): LogEntry = LogEntry(
+        timestamp = timeFormatter.format(Date(atMs)),
+        type = when (level) {
+            VrLinkLog.Level.INFO -> LogType.INFO
+            VrLinkLog.Level.SUCCESS -> LogType.SUCCESS
+            VrLinkLog.Level.WARNING -> LogType.NOTIFICATION
+            VrLinkLog.Level.ERROR -> LogType.ERROR
+        },
+        message = message
+    )
 
     /** Re-read the tablet's LAN IP (e.g. after the network changes). */
     fun refreshAddress() {
@@ -148,14 +186,6 @@ class VRConnectionViewModel @Inject constructor(
     }
 
     fun clearLog() {
-        _uiState.update { it.copy(logEntries = emptyList()) }
-    }
-
-    private fun addLogEntry(type: LogType, message: String) {
-        val timestamp = timeFormatter.format(Date())
-        val entry = LogEntry(timestamp, type, message)
-        _uiState.update { state ->
-            state.copy(logEntries = (listOf(entry) + state.logEntries).take(100))
-        }
+        vrLinkLog.clear()
     }
 }

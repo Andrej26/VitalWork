@@ -13,6 +13,7 @@ import com.biometrix.operator.data.export.SessionUploader
 import com.biometrix.operator.data.prefs.FakeSettingsRepository
 import com.biometrix.operator.data.repository.ScenarioRepository
 import com.biometrix.operator.data.repository.SessionRepository
+import com.biometrix.operator.data.time.TimeProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -51,9 +52,10 @@ class SessionDetailViewModelTest {
             fakeSessionDao,
             fakeScenarioDao,
             fakeSampleDao,
-            FakeSettingsRepository("A")
+            FakeSettingsRepository("A"),
+            TimeProvider.system()
         )
-        scenarioRepository = ScenarioRepository(fakeScenarioDao, fakeSampleDao)
+        scenarioRepository = ScenarioRepository(fakeScenarioDao, fakeSampleDao, TimeProvider.system())
         exporter = FakeSessionExporter()
         uploader = FakeSessionUploader()
     }

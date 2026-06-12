@@ -1,6 +1,7 @@
 package com.biometrix.operator.data.sensor.watch
 
 import com.biometrix.operator.data.sensor.watch.model.WatchReading
+import com.biometrix.operator.data.time.TimeProvider
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -12,13 +13,13 @@ import org.junit.Test
 class WatchSensorReceiverBatteryAlertTest {
 
     private fun receiverWithBattery(level: Int): WatchSensorReceiver =
-        WatchSensorReceiver().apply {
+        WatchSensorReceiver(TimeProvider.system()).apply {
             onReading(WatchReading(type = "BATTERY", value = level.toFloat(), accuracy = 0, timestampMs = 0L))
         }
 
     @Test
     fun noReadingYet_isNone() {
-        assertEquals(WatchBatteryAlert.NONE, WatchSensorReceiver().currentBatteryAlert())
+        assertEquals(WatchBatteryAlert.NONE, WatchSensorReceiver(TimeProvider.system()).currentBatteryAlert())
     }
 
     @Test
@@ -54,12 +55,12 @@ class WatchSensorReceiverBatteryAlertTest {
     }
 
     @Test
-    fun lastKnownLowLevel_survivesStop() {
-        // Watch sends explicit STOP (disconnect) after a low reading. The snapshot intentionally
-        // uses the last-known level regardless of current connection, so it still reports the tier.
+    fun stopClearsTheAlert() {
+        // Watch sends explicit STOP (disconnect) after a low reading. A disconnected watch should not
+        // leave a stale low-battery warning on Home, so onStop() clears the last-seen level → NONE.
         val receiver = receiverWithBattery(10)
         receiver.onStop()
-        assertEquals(WatchBatteryAlert.CRITICAL, receiver.currentBatteryAlert())
+        assertEquals(WatchBatteryAlert.NONE, receiver.currentBatteryAlert())
     }
 
     @Test

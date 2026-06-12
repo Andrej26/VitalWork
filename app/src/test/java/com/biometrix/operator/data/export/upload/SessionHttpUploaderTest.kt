@@ -14,6 +14,7 @@ import com.biometrix.operator.data.prefs.FakeSettingsRepository
 import com.biometrix.operator.data.repository.ParticipantRepository
 import com.biometrix.operator.data.repository.ScenarioRepository
 import com.biometrix.operator.data.repository.SessionRepository
+import com.biometrix.operator.data.time.TimeProvider
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.request.HttpRequestData
@@ -47,9 +48,9 @@ class SessionHttpUploaderTest {
         sessionDao = FakeSessionDao()
         scenarioDao = FakeScenarioDao()
         sampleDao = FakeSensorSampleDao()
-        sessionRepo = SessionRepository(sessionDao, scenarioDao, sampleDao, FakeSettingsRepository("A"))
+        sessionRepo = SessionRepository(sessionDao, scenarioDao, sampleDao, FakeSettingsRepository("A"), TimeProvider.system())
         participantRepo = ParticipantRepository(participantDao, FakeSettingsRepository("A"))
-        scenarioRepo = ScenarioRepository(scenarioDao, sampleDao)
+        scenarioRepo = ScenarioRepository(scenarioDao, sampleDao, TimeProvider.system())
         mapper = SessionUploadMapper(scenarioRepo)
 
         participantDao.participants.add(ParticipantEntity(id = 1L, participantCode = "A-001"))

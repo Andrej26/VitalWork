@@ -119,6 +119,9 @@ dependencies {
     // Vico Charts
     implementation(libs.vico.compose.m3)
 
+    // Kronos — NTP clock offset (does not set the system clock)
+    implementation(libs.kronos.android)
+
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation("org.json:json:20240303")

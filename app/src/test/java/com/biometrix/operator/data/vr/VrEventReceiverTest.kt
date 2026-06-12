@@ -5,7 +5,9 @@ import com.biometrix.operator.data.db.FakeSensorSampleDao
 import com.biometrix.operator.data.db.ScenarioCode
 import com.biometrix.operator.data.model.ConnectionState
 import com.biometrix.operator.data.repository.ScenarioRepository
+import com.biometrix.operator.data.time.TimeProvider
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -26,7 +28,7 @@ class VrEventReceiverTest {
     @Before
     fun setUp() {
         scenarioDao = FakeScenarioDao()
-        scenarioRepository = ScenarioRepository(scenarioDao, FakeSensorSampleDao())
+        scenarioRepository = ScenarioRepository(scenarioDao, FakeSensorSampleDao(), TimeProvider.system())
         now = 1_000_000L
     }
 
@@ -46,81 +48,124 @@ class VrEventReceiverTest {
     }
 
     @Test
-    fun stimulusEvent_withActiveScenario_persistsTimestampAndAccepts() = runTest {
+    fun stop_withTimestamps_persistsBothAndAccepts() = runTest {
         val receiver = newReceiver()
         val id = seedActiveScenario(receiver)
 
         val result = receiver.submit(
-            VrEvent.StimulusEvent(1L, ScenarioCode.FALLING_PALLET, receivedAtMs = 42L)
+            VrEvent.ScenarioStop(
+                code = ScenarioCode.FALLING_PALLET,
+                receivedAtMs = 1_000L,
+                eventTimestampMs = 10L,
+                reactionTimestampMs = 20L
+            )
         )
 
         assertTrue(result is VrEventResult.Accepted)
-        assertEquals(42L, scenarioDao.getScenarioById(id)?.eventTimestampMs)
-    }
-
-    @Test
-    fun reaction_withActiveScenario_persistsReactionTimestamp() = runTest {
-        val receiver = newReceiver()
-        val id = seedActiveScenario(receiver)
-
-        receiver.submit(VrEvent.Reaction(1L, ScenarioCode.FALLING_PALLET, receivedAtMs = 99L))
-
-        assertEquals(99L, scenarioDao.getScenarioById(id)?.reactionTimestampMs)
-    }
-
-    @Test
-    fun event_withNoActiveScenario_isRejected() = runTest {
-        val receiver = newReceiver()
-
-        val result = receiver.submit(
-            VrEvent.StimulusEvent(1L, ScenarioCode.FALLING_PALLET, receivedAtMs = 1L)
-        )
-
-        assertTrue(result is VrEventResult.Rejected)
-    }
-
-    @Test
-    fun secondEvent_isIgnored_firstWriteWins() = runTest {
-        val receiver = newReceiver()
-        val id = seedActiveScenario(receiver)
-
-        receiver.submit(VrEvent.StimulusEvent(1L, ScenarioCode.FALLING_PALLET, receivedAtMs = 10L))
-        receiver.submit(VrEvent.StimulusEvent(1L, ScenarioCode.FALLING_PALLET, receivedAtMs = 20L))
-
-        // The original timestamp is preserved; the retry did not clobber it.
         assertEquals(10L, scenarioDao.getScenarioById(id)?.eventTimestampMs)
+        assertEquals(20L, scenarioDao.getScenarioById(id)?.reactionTimestampMs)
+
+        receiver.stop()
     }
 
     @Test
-    fun reactionWithinGraceWindow_afterStop_stillLands() = runTest {
+    fun stop_withNullReaction_persistsEventOnly() = runTest {
         val receiver = newReceiver()
         val id = seedActiveScenario(receiver)
 
-        receiver.clearActiveScenario() // scenario "ended"
-        now += 1_000L // 1 s later, within the 3 s grace window
-
         val result = receiver.submit(
-            VrEvent.Reaction(1L, ScenarioCode.FALLING_PALLET, receivedAtMs = 555L)
+            VrEvent.ScenarioStop(
+                code = ScenarioCode.FALLING_PALLET,
+                receivedAtMs = 1_000L,
+                eventTimestampMs = 10L,
+                reactionTimestampMs = null
+            )
         )
 
         assertTrue(result is VrEventResult.Accepted)
-        assertEquals(555L, scenarioDao.getScenarioById(id)?.reactionTimestampMs)
+        assertEquals(10L, scenarioDao.getScenarioById(id)?.eventTimestampMs)
+        assertNull(scenarioDao.getScenarioById(id)?.reactionTimestampMs)
+
+        receiver.stop()
     }
 
     @Test
-    fun reactionAfterGraceWindow_isRejected() = runTest {
+    fun stop_withNoActiveScenario_isRejected() = runTest {
         val receiver = newReceiver()
-        val id = seedActiveScenario(receiver)
-
-        receiver.clearActiveScenario()
-        now += 5_000L // past the 3 s grace window
 
         val result = receiver.submit(
-            VrEvent.Reaction(1L, ScenarioCode.FALLING_PALLET, receivedAtMs = 1L)
+            VrEvent.ScenarioStop(
+                code = ScenarioCode.FALLING_PALLET,
+                receivedAtMs = 1_000L,
+                eventTimestampMs = 10L,
+                reactionTimestampMs = 20L
+            )
         )
 
         assertTrue(result is VrEventResult.Rejected)
-        assertNull(scenarioDao.getScenarioById(id)?.reactionTimestampMs)
+        assertEquals("no_active_scenario", (result as VrEventResult.Rejected).reason)
+
+        receiver.stop()
+    }
+
+    @Test
+    fun stop_retry_firstWriteWins() = runTest {
+        val receiver = newReceiver()
+        val id = seedActiveScenario(receiver)
+
+        val first = receiver.submit(
+            VrEvent.ScenarioStop(
+                code = ScenarioCode.FALLING_PALLET,
+                receivedAtMs = 1_000L,
+                eventTimestampMs = 10L,
+                reactionTimestampMs = 20L
+            )
+        )
+        val second = receiver.submit(
+            VrEvent.ScenarioStop(
+                code = ScenarioCode.FALLING_PALLET,
+                receivedAtMs = 1_001L,
+                eventTimestampMs = 999L,
+                reactionTimestampMs = 999L
+            )
+        )
+
+        assertTrue(first is VrEventResult.Accepted)
+        assertTrue(second is VrEventResult.Accepted)
+        assertEquals(10L, scenarioDao.getScenarioById(id)?.eventTimestampMs)
+        assertEquals(20L, scenarioDao.getScenarioById(id)?.reactionTimestampMs)
+
+        receiver.stop()
+    }
+
+    @Test
+    fun clearActiveScenario_calledTwice_doesNotResetGraceWindow() = runTest {
+        val receiver = newReceiver()
+        val id = seedActiveScenario(receiver)
+
+        receiver.clearActiveScenario() // scenario "ended" — now in grace window
+        now += 1_000L // still within the 3 s grace window
+
+        // Simulate the ViewModel reacting to a duplicate ScenarioStop emit by calling
+        // clearActiveScenario() a second time. Without the idempotency fix, this would null out
+        // the grace window (graceScenarioDbId = activeScenarioDbId, which is already null), and
+        // the ScenarioStop below would be rejected.
+        receiver.clearActiveScenario()
+
+        val result = receiver.submit(
+            VrEvent.ScenarioStop(
+                code = ScenarioCode.FALLING_PALLET,
+                receivedAtMs = now,
+                eventTimestampMs = 10L,
+                reactionTimestampMs = 20L
+            )
+        )
+
+        assertTrue(result is VrEventResult.Accepted)
+        assertEquals(10L, scenarioDao.getScenarioById(id)?.eventTimestampMs)
+        assertEquals(20L, scenarioDao.getScenarioById(id)?.reactionTimestampMs)
+
+        receiver.stop()
     }
 
     @Test
@@ -133,7 +178,9 @@ class VrEventReceiverTest {
         )
         seedActiveScenario(receiver)
 
-        receiver.submit(VrEvent.StimulusEvent(1L, ScenarioCode.FALLING_PALLET, receivedAtMs = 1L))
+        receiver.submit(
+            VrEvent.ScenarioStop(ScenarioCode.FALLING_PALLET, receivedAtMs = 1L)
+        )
         runCurrent()
         assertEquals(ConnectionState.CONNECTED, receiver.connectionState.value)
 
@@ -171,7 +218,41 @@ class VrEventReceiverTest {
     }
 
     @Test
-    fun heartbeat_survivesLongEventQuietGap_thenLostWhenHeartbeatsStop() = runTest {
+    fun onLinkStopped_resetsLivenessWithoutFiringLost() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val receiver = VrEventReceiver(
+            scenarioRepository = scenarioRepository,
+            clock = { now },
+            dispatcher = dispatcher
+        )
+
+        // Record whether the heartbeat-loss signal (which the service uses to re-arm + which surfaces
+        // the "connection lost" warning) ever fires after a deliberate stop. It must not.
+        val lostEvents = mutableListOf<Unit>()
+        val collectJob = launch { receiver.heartbeatLost.collect { lostEvents.add(it) } }
+
+        receiver.markHeartbeat()
+        runCurrent()
+        assertEquals(ConnectionState.CONNECTED, receiver.heartbeatState.value)
+
+        // Operator taps Stop while connected.
+        receiver.onLinkStopped()
+        runCurrent()
+        assertEquals(ConnectionState.DISCONNECTED, receiver.heartbeatState.value)
+
+        // Past the heartbeat timeout with no further beats: because the watchdog was cancelled by the
+        // deliberate stop, no late "lost" is emitted (no false warning when the headset then quits).
+        now += 11_000L
+        advanceTimeBy(2_000L)
+        runCurrent()
+        assertTrue("onLinkStopped must not emit heartbeatLost", lostEvents.isEmpty())
+
+        collectJob.cancel()
+        receiver.stop()
+    }
+
+    @Test
+    fun heartbeat_survivesLongEventQuietGap_thenReconnectingWhenHeartbeatsStop() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         val receiver = VrEventReceiver(
             scenarioRepository = scenarioRepository,
@@ -191,11 +272,17 @@ class VrEventReceiverTest {
         runCurrent()
         assertEquals(ConnectionState.CONNECTED, receiver.heartbeatState.value)
 
-        // Now stop heartbeats: after the ~10 s heartbeat timeout it goes lost (state flips).
+        // Now stop heartbeats: after the ~10 s heartbeat timeout it flips to RECONNECTING (amber) —
+        // NOT DISCONNECTED (gray). The bond is kept; only a deliberate Stop drops it to disconnected.
         now += 11_000L
         advanceTimeBy(2_000L)
         runCurrent()
-        assertEquals(ConnectionState.DISCONNECTED, receiver.heartbeatState.value)
+        assertEquals(ConnectionState.RECONNECTING, receiver.heartbeatState.value)
+
+        // Heartbeats resume → it auto-reconnects back to CONNECTED (no re-pair needed).
+        receiver.markHeartbeat()
+        runCurrent()
+        assertEquals(ConnectionState.CONNECTED, receiver.heartbeatState.value)
 
         // Cancel the watchdog poll loop so runTest's end-of-body advanceUntilIdle() can drain the
         // shared test scheduler — an uncancelled `while(isActive){ delay() }` loop spins it forever.

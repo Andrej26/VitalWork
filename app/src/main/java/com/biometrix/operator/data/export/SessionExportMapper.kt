@@ -19,6 +19,7 @@ import com.biometrix.operator.data.recording.detectEsenseRrIntervalGaps
 import com.biometrix.operator.data.recording.detectHeartRateGaps
 import com.biometrix.operator.data.recording.detectRespirationGaps
 import com.biometrix.operator.data.repository.ScenarioRepository
+import com.biometrix.operator.data.time.TimeProvider
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -27,7 +28,8 @@ import javax.inject.Singleton
 
 @Singleton
 class SessionExportMapper @Inject constructor(
-    private val scenarioRepository: ScenarioRepository
+    private val scenarioRepository: ScenarioRepository,
+    private val timeProvider: TimeProvider
 ) {
     private val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
 
@@ -42,7 +44,7 @@ class SessionExportMapper @Inject constructor(
         }
 
         return SessionExport(
-            exportedAt = isoFormat.format(Date()),
+            exportedAt = isoFormat.format(Date(timeProvider.nowMs())),
             participant = ParticipantExport(
                 participantCode = participant.participantCode,
                 age = participant.age,

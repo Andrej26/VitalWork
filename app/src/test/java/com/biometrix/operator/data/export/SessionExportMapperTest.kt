@@ -11,6 +11,7 @@ import com.biometrix.operator.data.db.SensorType
 import com.biometrix.operator.data.db.SessionEntity
 import com.biometrix.operator.data.db.SessionStatus
 import com.biometrix.operator.data.repository.ScenarioRepository
+import com.biometrix.operator.data.time.TimeProvider
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -30,8 +31,8 @@ class SessionExportMapperTest {
     fun setUp() {
         fakeScenarioDao = FakeScenarioDao()
         fakeSensorSampleDao = FakeSensorSampleDao()
-        scenarioRepository = ScenarioRepository(fakeScenarioDao, fakeSensorSampleDao)
-        mapper = SessionExportMapper(scenarioRepository)
+        scenarioRepository = ScenarioRepository(fakeScenarioDao, fakeSensorSampleDao, TimeProvider.system())
+        mapper = SessionExportMapper(scenarioRepository, TimeProvider.system())
     }
 
     @Test

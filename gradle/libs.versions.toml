@@ -18,6 +18,7 @@ room = "2.7.1"
 vico = "2.1.2"
 playServicesWearable = "19.0.0"
 ktor = "3.3.0"
+kronos = "0.0.1-alpha11"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -58,6 +59,7 @@ ktor-client-core = { group = "io.ktor", name = "ktor-client-core", version.ref =
 ktor-client-cio = { group = "io.ktor", name = "ktor-client-cio", version.ref = "ktor" }
 ktor-client-content-negotiation = { group = "io.ktor", name = "ktor-client-content-negotiation", version.ref = "ktor" }
 ktor-client-mock = { group = "io.ktor", name = "ktor-client-mock", version.ref = "ktor" }
+kronos-android = { group = "com.lyft.kronos", name = "kronos-android", version.ref = "kronos" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
