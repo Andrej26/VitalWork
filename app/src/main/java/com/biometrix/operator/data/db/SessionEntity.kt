@@ -50,5 +50,9 @@ data class SessionEntity(
 
     val edaSampleCount: Int = 0,
 
+    val watchHrSampleCount: Int = 0,
+
+    val watchIbiSampleCount: Int = 0,
+
     val scenarioCount: Int = 0
 )
