@@ -21,8 +21,6 @@ import com.vitalwork.app.data.sensor.watch.WatchBatteryAlert
 import com.vitalwork.app.data.sensor.watch.WatchBatteryThresholds
 import com.vitalwork.app.data.sensor.watch.WatchFlushState
 import com.vitalwork.app.data.sensor.watch.WatchLinkStatus
-import com.vitalwork.app.data.vr.VrEvent
-import com.vitalwork.app.data.vr.VrEventReceiver
 import com.vitalwork.app.presentation.components.BleDialogState
 import com.vitalwork.app.presentation.components.DialogAction
 import com.vitalwork.app.presentation.components.gattStatusToString
@@ -57,7 +55,6 @@ class SessionControlViewModel @Inject constructor(
     private val sensorRecordingRepository: ScenarioRecordingRepository,
     private val sessionRepository: SessionRepository,
     private val scenarioRepository: ScenarioRepository,
-    private val vrEventReceiver: VrEventReceiver,
     private val locationChecker: LocationChecker,
     private val readinessChecker: com.vitalwork.app.data.system.SystemReadinessChecker,
     private val watchCommandSender: com.vitalwork.app.data.sensor.watch.WatchCommandSender,
@@ -104,9 +101,6 @@ class SessionControlViewModel @Inject constructor(
 
     private val _session = MutableStateFlow<SessionEntity?>(null)
     val session: StateFlow<SessionEntity?> = _session.asStateFlow()
-
-    /** VR headset connection state (inferred from time-since-last-event) */
-    val vrConnectionState: StateFlow<ConnectionState> = connectionRepository.vrConnectionState
 
     /** BLE sensor (eSense Pulse) connection state */
     val bleConnectionState: StateFlow<ConnectionState> = connectionRepository.bleConnectionState
@@ -226,10 +220,6 @@ class SessionControlViewModel @Inject constructor(
     private var lastConnectedDevice: BleDevice? = null
     private var bleFirstDataJob: Job? = null
 
-    /** Whether the current recording was triggered (auto-started) by a VR scenario_start event */
-    private val _vrTriggeredRecording = MutableStateFlow(false)
-    val vrTriggeredRecording: StateFlow<Boolean> = _vrTriggeredRecording.asStateFlow()
-
     /** Scenarios for this session */
     val scenarios: StateFlow<List<ScenarioEntity>> = if (sessionId > 0) {
         scenarioRepository.getScenariosForSession(sessionId)
@@ -302,18 +292,6 @@ class SessionControlViewModel @Inject constructor(
                         lowBatteryShownForConnection = false
                         _pulseLatestRr.value = null
                     }
-                }
-            }
-        }
-
-        // VR scenario lifecycle from the Quest (HTTP events via VrEventReceiver). The receiver
-        // writes the stop event's event/reaction timestamps itself (ack-after-write) before
-        // emitting. Gating preserved: session ACTIVE + a sensor connected.
-        viewModelScope.launch {
-            vrEventReceiver.events.collect { event ->
-                when (event) {
-                    is VrEvent.ScenarioStart -> handleVrScenarioStart(event)
-                    is VrEvent.ScenarioStop -> handleVrScenarioStop()
                 }
             }
         }
@@ -403,37 +381,8 @@ class SessionControlViewModel @Inject constructor(
     }
 
     /**
-     * VR `scenario_start`: create the scenario row for the real [ScenarioCode] the Quest sent,
-     * register it with the receiver (so subsequent event/reaction POSTs resolve to it), and begin
-     * sensor capture. Gated on an ACTIVE session with at least one sensor connected.
-     */
-    private fun handleVrScenarioStart(event: VrEvent.ScenarioStart) {
-        viewModelScope.launch {
-            val session = _session.value ?: return@launch
-            val currentState = sensorRecordingRepository.recordingState.value
-
-            if (currentState == DataRecordingState.IDLE &&
-                session.status == com.vitalwork.app.data.db.SessionStatus.ACTIVE &&
-                anySensorConnected()
-            ) {
-                val scenario = scenarioRepository.createScenario(
-                    sessionId = session.id,
-                    scenarioCode = event.code
-                )
-                vrEventReceiver.setActiveScenario(session.id, scenario.id, event.code)
-                val scenarioIdentifier = "${session.sessionCode}-${event.code.officialCode}"
-                _vrTriggeredRecording.value = true
-                sensorRecordingRepository.startRecording(scenario.id, scenarioIdentifier)
-            }
-        }
-    }
-
-    /**
-     * Manual test start: spin up a scenario + recording exactly the way a VR `scenario_start` would,
-     * so the operator can exercise capture on the phone before the VR link is wired up. Uses a fixed
-     * test scenario code. Same gating as VR: ACTIVE session with at least one sensor connected.
-     *
-     * TODO(remove once VR drives recording): test-only manual control.
+     * Start a scenario + sensor recording from the phone. Creates a scenario row for a fixed
+     * scenario code and begins capture. Gated on an ACTIVE session with at least one sensor connected.
      */
     fun startManualRecording() {
         viewModelScope.launch {
@@ -447,24 +396,17 @@ class SessionControlViewModel @Inject constructor(
                 sessionId = session.id,
                 scenarioCode = scenarioCode
             )
-            vrEventReceiver.setActiveScenario(session.id, scenario.id, scenarioCode)
             val scenarioIdentifier = "${session.sessionCode}-${scenarioCode.officialCode}"
-            _vrTriggeredRecording.value = false
             sensorRecordingRepository.startRecording(scenario.id, scenarioIdentifier)
         }
     }
 
-    /** Manual test stop: mirrors a VR `scenario_stop`. TODO(remove once VR drives recording). */
-    fun stopManualRecording() = handleVrScenarioStop()
-
-    /** VR `scenario_stop`: stop sensor capture, finalize the scenario row, clear the active mirror. */
-    private fun handleVrScenarioStop() {
+    /** Stop sensor capture and finalize the scenario row. */
+    fun stopManualRecording() {
         viewModelScope.launch {
             if (sensorRecordingRepository.recordingState.value == DataRecordingState.RECORDING) {
                 sensorRecordingRepository.stopRecording()
             }
-            vrEventReceiver.clearActiveScenario()
-            _vrTriggeredRecording.value = false
         }
     }
 

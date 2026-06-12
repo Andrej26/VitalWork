@@ -20,9 +20,6 @@ import com.vitalwork.app.data.sensor.ble.FakeBleManager
 import com.vitalwork.app.data.db.ScenarioCode
 import com.vitalwork.app.data.system.FakeLocationChecker
 import com.vitalwork.app.data.system.FakeSystemReadinessChecker
-import com.vitalwork.app.data.vr.VrEvent
-import com.vitalwork.app.data.vr.VrEventReceiver
-import com.vitalwork.app.data.vr.VrLinkLog
 import com.vitalwork.app.presentation.components.BleDialogState
 import com.vitalwork.app.presentation.screens.sessions.components.NotesSaveStatus
 import kotlinx.coroutines.Dispatchers
@@ -47,7 +44,6 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class SessionControlViewModelTest {
 
-    private lateinit var vrEventReceiver: VrEventReceiver
     private lateinit var fakeBleManager: FakeBleManager
     private lateinit var fakeRespiration: FakeSensorDevice
     private lateinit var fakeSessionDao: FakeSessionDao
@@ -75,12 +71,10 @@ class SessionControlViewModelTest {
         fakeLocationChecker = FakeLocationChecker(locationEnabled = true)
         lanAvailableFlow = MutableStateFlow(true)
         scenarioRepository = ScenarioRepository(fakeScenarioDao, fakeSensorSampleDao, TimeProvider.system())
-        vrEventReceiver = VrEventReceiver(scenarioRepository, VrLinkLog())
         watchReceiver = WatchSensorReceiver(TimeProvider.system())
         fakeWatchCommandSender = FakeWatchCommandSender()
 
         connectionRepository = ConnectionRepository(
-            vrEventReceiver = vrEventReceiver,
             bleManager = fakeBleManager,
             respirationDevice = fakeRespiration,
             watchReceiver = watchReceiver,
@@ -119,7 +113,6 @@ class SessionControlViewModelTest {
             sensorRecordingRepository = fakeScenarioRecordingRepo,
             sessionRepository = sessionRepository,
             scenarioRepository = scenarioRepository,
-            vrEventReceiver = vrEventReceiver,
             locationChecker = fakeLocationChecker,
             readinessChecker = FakeSystemReadinessChecker(),
             watchCommandSender = fakeWatchCommandSender,
@@ -160,14 +153,6 @@ class SessionControlViewModelTest {
         )
     }
 
-    private suspend fun emitScenarioStart(code: ScenarioCode = ScenarioCode.FALLING_PALLET) {
-        vrEventReceiver.submit(VrEvent.ScenarioStart(code, System.currentTimeMillis()))
-    }
-
-    private suspend fun emitScenarioStop(code: ScenarioCode = ScenarioCode.FALLING_PALLET) {
-        vrEventReceiver.submit(VrEvent.ScenarioStop(code, System.currentTimeMillis()))
-    }
-
     @Test
     fun init_loadsSessionFromRepository() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
@@ -191,7 +176,7 @@ class SessionControlViewModelTest {
     }
 
     @Test
-    fun vrScenarioStart_whenSensorConnected_createsRealScenarioAndStarts() = runTest {
+    fun manualStart_whenSensorConnected_createsScenarioAndStarts() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         seedActiveSession()
         fakeBleManager.connectionState.value = ConnectionState.CONNECTED
@@ -199,33 +184,30 @@ class SessionControlViewModelTest {
         val vm = createVm()
         advanceUntilIdle()
 
-        emitScenarioStart(ScenarioCode.BLIND_CORNER)
+        vm.startManualRecording()
         advanceUntilIdle()
 
         assertEquals(1, fakeScenarioRecordingRepo.startRecordingCallCount)
         assertEquals(1, fakeScenarioDao.scenarios.size)
-        // The real scenario code is recorded (no placeholder).
-        assertEquals(ScenarioCode.BLIND_CORNER, fakeScenarioDao.scenarios[0].scenarioCode)
-        assertTrue(vm.vrTriggeredRecording.value)
+        assertEquals(ScenarioCode.FALLING_PALLET, fakeScenarioDao.scenarios[0].scenarioCode)
     }
 
     @Test
-    fun vrScenarioStart_whenNoSensorConnected_doesNotStartRecording() = runTest {
+    fun manualStart_whenNoSensorConnected_doesNotStartRecording() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         seedActiveSession()
 
         val vm = createVm()
         advanceUntilIdle()
 
-        emitScenarioStart()
+        vm.startManualRecording()
         advanceUntilIdle()
 
         assertEquals(0, fakeScenarioRecordingRepo.startRecordingCallCount)
-        assertFalse(vm.vrTriggeredRecording.value)
     }
 
     @Test
-    fun vrScenarioStop_whileRecording_stopsRecording() = runTest {
+    fun manualStop_whileRecording_stopsRecording() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         seedActiveSession()
         fakeBleManager.connectionState.value = ConnectionState.CONNECTED
@@ -233,15 +215,14 @@ class SessionControlViewModelTest {
         val vm = createVm()
         advanceUntilIdle()
 
-        emitScenarioStart()
+        vm.startManualRecording()
         advanceUntilIdle()
         assertEquals(DataRecordingState.RECORDING, fakeScenarioRecordingRepo.recordingState.value)
 
-        emitScenarioStop()
+        vm.stopManualRecording()
         advanceUntilIdle()
 
         assertEquals(1, fakeScenarioRecordingRepo.stopRecordingCallCount)
-        assertFalse(vm.vrTriggeredRecording.value)
     }
 
     @Test

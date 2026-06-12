@@ -3,9 +3,7 @@ package com.vitalwork.app.presentation.screens.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.vitalwork.app.data.db.SessionEntity
-import com.vitalwork.app.data.model.ConnectionState
 import com.vitalwork.app.data.prefs.TutorialPreferencesRepository
-import com.vitalwork.app.data.repository.ConnectionRepository
 import com.vitalwork.app.data.repository.SessionRepository
 import com.vitalwork.app.data.sensor.watch.WatchBatteryAlert
 import com.vitalwork.app.data.sensor.watch.WatchSensorReceiver
@@ -25,14 +23,11 @@ import javax.inject.Inject
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
-    connectionRepository: ConnectionRepository,
     private val sessionRepository: SessionRepository,
     private val tutorialPreferences: TutorialPreferencesRepository,
     private val readinessChecker: SystemReadinessChecker,
     private val watchReceiver: WatchSensorReceiver
 ) : ViewModel() {
-
-    val vrConnectionState: StateFlow<ConnectionState> = connectionRepository.vrConnectionState
 
     /**
      * Session prerequisites currently missing. Re-derived from live OS state via [refresh] on

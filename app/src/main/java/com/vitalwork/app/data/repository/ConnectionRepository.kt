@@ -16,7 +16,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharedFlow
-import com.vitalwork.app.data.vr.VrEventReceiver
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -32,7 +31,6 @@ import javax.inject.Singleton
  */
 @Singleton
 class ConnectionRepository @Inject constructor(
-    private val vrEventReceiver: VrEventReceiver,
     private val bleManager: BleManager,
     @Named("respiration") private val respirationDevice: SensorDevice,
     private val watchReceiver: WatchSensorReceiver,
@@ -40,13 +38,6 @@ class ConnectionRepository @Inject constructor(
 ) {
     /** Long-lived scope for repository-owned derived flows (process-scoped singleton). */
     private val repoScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-
-    /**
-     * VR headset connection state — driven by the bonded Quest's heartbeat (~5 s), not by sparse
-     * scenario events, so it stays CONNECTED through a long quiet scenario and only drops ~10 s after
-     * heartbeats stop. (The event-activity state lives on as an internal log in [VrEventReceiver].)
-     */
-    val vrConnectionState: StateFlow<ConnectionState> = vrEventReceiver.heartbeatState
 
     /** BLE sensor (eSense Pulse) connection state */
     val bleConnectionState: StateFlow<ConnectionState> = bleManager.connectionState
@@ -117,7 +108,7 @@ class ConnectionRepository @Inject constructor(
     /** Whether Bluetooth is currently enabled on the device */
     val bluetoothEnabled: StateFlow<Boolean> = bleManager.bluetoothEnabled
 
-    /** Whether WiFi/LAN is available (for VR headset connection) */
+    /** Whether WiFi/LAN is available */
     val wifiEnabled: StateFlow<Boolean> = lanAvailableFlow
 
     /** Flow of BLE events (connection timeout, battery, disconnection, etc.) */

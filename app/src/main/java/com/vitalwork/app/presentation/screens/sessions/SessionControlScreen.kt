@@ -39,7 +39,6 @@ import androidx.compose.material.icons.filled.Watch
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Sensors
-import androidx.compose.material.icons.filled.Vrpano
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Warning
@@ -100,7 +99,6 @@ import android.os.Build
 import android.provider.Settings
 import androidx.core.content.ContextCompat
 import com.vitalwork.app.presentation.components.BleDialogState
-import com.vitalwork.app.presentation.components.ConnectionStatusBadge
 import com.vitalwork.app.presentation.components.DialogAction
 import com.vitalwork.app.presentation.components.LowSignalWarningBanner
 import com.vitalwork.app.presentation.screens.sensors.components.BleDeviceItem
@@ -120,7 +118,6 @@ fun SessionControlScreen(
     viewModel: SessionControlViewModel = hiltViewModel()
 ) {
     // Connection states
-    val vrConnectionState by viewModel.vrConnectionState.collectAsState()
     val pulseSensorState by viewModel.bleConnectionState.collectAsState()
     val respirationSensorState by viewModel.respirationState.collectAsState()
     val watchConnectionState by viewModel.watchConnectionState.collectAsState()
@@ -181,7 +178,6 @@ fun SessionControlScreen(
     }
 
     // VR auto-recording cue (set when the Quest's scenario_start triggers recording)
-    val vrTriggeredRecording by viewModel.vrTriggeredRecording.collectAsState()
 
     // Low signal warning
     val respirationLowSignalWarning by viewModel.respirationLowSignalWarning.collectAsState()
@@ -468,8 +464,7 @@ fun SessionControlScreen(
                 actions = {
                     RecordingBadge(
                         recordingState = recordingUiState.recordingState,
-                        duration = recordingUiState.durationFormatted,
-                        isVrTriggered = vrTriggeredRecording
+                        duration = recordingUiState.durationFormatted
                     )
                 },
                 colors = if (isRecording) {
@@ -603,56 +598,6 @@ fun SessionControlScreen(
                 )
             }
 
-            // VR Controls Section
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Vrpano,
-                            contentDescription = null,
-                            modifier = Modifier.size(24.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "VR Control",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.weight(1f)
-                        )
-                        ConnectionStatusBadge(state = vrConnectionState)
-                    }
-
-                    // The tablet is now an HTTP server: the Quest connects to us and drives
-                    // scenarios via POSTs. There is nothing to dial out to or command from here.
-                    // Connection is inferred from recent VR events; setup diagnostics (tablet
-                    // IP/port, event log) live on the dedicated VR screen.
-                    Text(
-                        text = when (vrConnectionState) {
-                            ConnectionState.CONNECTED ->
-                                "VR headset connected — scenarios are driven by the Quest."
-                            ConnectionState.RECONNECTING ->
-                                "VR headset paused — reconnecting… The pairing is kept and recording continues; it reconnects automatically when the headset wakes."
-                            else ->
-                                "Waiting for the VR headset to connect. Open VR Control for the tablet address and event log."
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
             // Recording Control Section
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -674,25 +619,6 @@ fun SessionControlScreen(
                             fontWeight = FontWeight.Medium,
                             modifier = Modifier.weight(1f)
                         )
-                        // VR auto-control indicator
-                        if (vrConnectionState == ConnectionState.CONNECTED) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Vrpano,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                    tint = Color(0xFF2196F3)
-                                )
-                                Text(
-                                    text = "VR Auto",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFF2196F3)
-                                )
-                            }
-                        }
                     }
 
                     Row(
@@ -775,8 +701,7 @@ fun SessionControlScreen(
 
                     HorizontalDivider()
 
-                    // Manual test controls — start/stop recording from the phone before the VR
-                    // link drives it. TODO(remove once VR controls recording).
+                    // Start/stop recording from the phone.
                     val isIdle = recordingUiState.recordingState == DataRecordingState.IDLE
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -803,28 +728,6 @@ fun SessionControlScreen(
                             Text("Stop Recording")
                         }
                     }
-
-                    if (vrTriggeredRecording) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Vrpano,
-                                contentDescription = null,
-                                modifier = Modifier.size(14.dp),
-                                tint = Color(0xFF2196F3)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "Started by VR biofeedback command",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF2196F3)
-                            )
-                        }
-                    }
-
                 }
             }
 
@@ -861,8 +764,7 @@ fun SessionControlScreen(
 @Composable
 private fun RecordingBadge(
     recordingState: DataRecordingState,
-    duration: String,
-    isVrTriggered: Boolean = false
+    duration: String
 ) {
     if (recordingState == DataRecordingState.IDLE) return
 
@@ -882,15 +784,6 @@ private fun RecordingBadge(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        // VR indicator when recording was triggered by VR
-        if (isVrTriggered && recordingState == DataRecordingState.RECORDING) {
-            Icon(
-                imageVector = Icons.Default.Vrpano,
-                contentDescription = "VR triggered",
-                modifier = Modifier.size(16.dp),
-                tint = Color.White.copy(alpha = 0.9f)
-            )
-        }
         Box(
             modifier = Modifier
                 .size(10.dp)

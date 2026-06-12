@@ -62,7 +62,6 @@ import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.Vrpano
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -202,7 +201,7 @@ private val TUTORIAL_SLIDES = listOf(
         type = SlideType.COMPLETE,
         phase = SlidePhase.COMPLETE,
         title = "All Set!",
-        body = "Sensors and VR are configured. You're ready to start a therapy session."
+        body = "Sensors are configured. You're ready to start a therapy session."
     )
 )
 
@@ -635,7 +634,7 @@ private fun TutorialWelcomeStep() {
             HorizontalDivider()
 
             Text(
-                text = "A session consists of three phases:",
+                text = "A session consists of two phases:",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.fillMaxWidth()
@@ -649,15 +648,9 @@ private fun TutorialWelcomeStep() {
             )
             SessionOverviewItem(
                 number = "2",
-                icon = Icons.Default.Vrpano,
-                label = "Set up & connect the VR headset",
-                detail = "Meta Quest running the VitalWork VR application"
-            )
-            SessionOverviewItem(
-                number = "3",
                 icon = Icons.Default.Folder,
                 label = "Start a therapy test session",
-                detail = "Record physiological data while running VR scenarios"
+                detail = "Record physiological data during the session"
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -1257,7 +1250,7 @@ private fun TutorialCompleteStep(onGoToTests: () -> Unit) {
             )
 
             Text(
-                text = "Sensors and VR are configured. You're ready to start a therapy session.",
+                text = "Sensors are configured. You're ready to start a therapy session.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center

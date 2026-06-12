@@ -20,7 +20,6 @@ import com.vitalwork.app.R
 import com.vitalwork.app.data.recording.ScenarioRecordingRepository
 import com.vitalwork.app.data.recording.model.DataRecordingState
 import com.vitalwork.app.data.repository.SessionRepository
-import com.vitalwork.app.data.vr.VrLinkManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -36,25 +35,19 @@ import javax.inject.Inject
 /**
  * Foreground service that runs for the lifetime of an ACTIVE session. It does not own any
  * sensor logic — the app-scoped singletons ([ScenarioRecordingRepository], BLE manager,
- * respiration device, VR client) keep doing the work. This service's only job is to keep the
+ * respiration device) keep doing the work. This service's only job is to keep the
  * process alive and legally retain microphone + connected-device + network access while the
  * screen is locked, by holding foreground status (+ a Wi-Fi lock) until the session ends.
  *
  * Lifecycle is self-managed: the UI starts the service when entering an ACTIVE session, and the
  * service stops itself once [SessionRepository.activeSession] emits null (which happens when the
  * session is ended → COMPLETED, or discarded → deleted). No explicit stop call is needed.
- *
- * VR: the service does **not** own the VR link or pairing — [VrLinkManager] does. The service just
- * calls [VrLinkManager.start] (idempotent), which keeps an already-connected headset bonded instead
- * of re-pairing, and provides the foreground status + Wi-Fi lock that keep that link alive while the
- * screen is off. The link is left running after the session (the operator stops it from VR Control).
  */
 @AndroidEntryPoint
 class SessionRecordingService : Service() {
 
     @Inject lateinit var sessionRepository: SessionRepository
     @Inject lateinit var recordingRepository: ScenarioRecordingRepository
-    @Inject lateinit var vrLinkManager: VrLinkManager
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var observerJob: Job? = null
@@ -76,11 +69,6 @@ class SessionRecordingService : Service() {
         // on an already-running service, e.g. after a START_STICKY null-intent restart.
         startForegroundWithType(buildNotification(isRecording = false, durationMs = 0L))
         startObserving()
-        // Ensure the VR link is running, reusing whatever is already connected. Idempotent: if VR
-        // Control (or an earlier session) already started it and bonded a headset, this is a no-op
-        // and the bond is preserved — no re-pairing. If nothing started it yet, this starts it so the
-        // operator can pair. The foreground status + Wi-Fi lock below keep it alive screen-off.
-        vrLinkManager.start()
         return START_STICKY
     }
 
@@ -92,8 +80,6 @@ class SessionRecordingService : Service() {
     private fun startObserving() {
         if (observerJob != null) return
 
-        // VR pairing/heartbeat handling lives in VrLinkManager (it runs whenever the link is up,
-        // session or not), so the service no longer observes it here — it only tracks session state.
         observerJob = scope.launch {
             combine(
                 sessionRepository.activeSession,
@@ -122,7 +108,7 @@ class SessionRecordingService : Service() {
 
     /**
      * Builds the foreground-service type from currently granted permissions. `connectedDevice`
-     * (BLE) + `dataSync` (VR WebSocket persistence) are always claimed; `microphone` is added
+     * (BLE) + `dataSync` (watch data transfer) are always claimed; `microphone` is added
      * only when RECORD_AUDIO is granted — on API 34+ a microphone-typed FGS throws if the
      * permission is missing, so a BLE-only session must omit it.
      */
@@ -176,8 +162,6 @@ class SessionRecordingService : Service() {
     }
 
     private fun stopForegroundAndSelf() {
-        // The VR link is intentionally left running (owned by VrLinkManager) so the connection
-        // survives the session ending; the operator stops it from VR Control when finished.
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -191,7 +175,7 @@ class SessionRecordingService : Service() {
         } else {
             WifiManager.WIFI_MODE_FULL_HIGH_PERF
         }
-        // The Wi-Fi lock is an optimization to keep the VR WebSocket alive under Doze — it must
+        // The Wi-Fi lock is an optimization to keep network access alive under Doze — it must
         // never crash the service. Degrade gracefully if it can't be acquired.
         try {
             wifiLock = wifiManager.createWifiLock(mode, WIFI_LOCK_TAG).apply {

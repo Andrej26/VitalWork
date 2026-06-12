@@ -7,7 +7,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.vitalwork.app.presentation.screens.vr.VRConnectionScreen
 import com.vitalwork.app.presentation.screens.home.HomeScreen
 import com.vitalwork.app.presentation.screens.participants.ParticipantEntryScreen
 import com.vitalwork.app.presentation.screens.sensors.SensorDetailScreen
@@ -24,7 +23,6 @@ sealed class Route(val route: String) {
     data object SensorDetail : Route("sensors/{sensorId}") {
         fun createRoute(sensorId: String) = "sensors/$sensorId"
     }
-    data object VrControl : Route("vr_control")
     data object Sessions : Route("sessions")
     data object ParticipantEntry : Route("participants/new")
     data object SessionActive : Route("sessions/active/{sessionId}") {
@@ -50,7 +48,6 @@ fun AppNavigation(
             HomeScreen(
                 onNavigateToTutorial = { navController.navigate(Route.Tutorial.route) },
                 onNavigateToSensors = { navController.navigate(Route.Sensors.route) },
-                onNavigateToVrControl = { navController.navigate(Route.VrControl.route) },
                 onNavigateToSettings = { navController.navigate(Route.Settings.route) },
                 onNavigateToSessions = { navController.navigate(Route.Sessions.route) },
                 onNavigateToParticipantEntry = {
@@ -98,12 +95,6 @@ fun AppNavigation(
             val sensorId = backStackEntry.arguments?.getString("sensorId") ?: ""
             SensorDetailScreen(
                 sensorId = sensorId,
-                onNavigateBack = { navController.popBackStack() }
-            )
-        }
-
-        composable(Route.VrControl.route) {
-            VRConnectionScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }

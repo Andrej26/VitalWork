@@ -40,7 +40,6 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import android.Manifest
 import com.vitalwork.app.data.system.SessionPrerequisite
 import com.vitalwork.app.data.system.SystemReadinessChecker
-import com.vitalwork.app.presentation.components.ConnectionStatusBadge
 import com.vitalwork.app.presentation.components.ReadinessWarningCard
 import com.vitalwork.app.presentation.components.WatchBatteryWarningCard
 import com.vitalwork.app.presentation.components.onPermissionDenied
@@ -53,7 +52,6 @@ import com.vitalwork.app.presentation.screens.home.components.SecondaryNavRow
 fun HomeScreen(
     onNavigateToTutorial: () -> Unit,
     onNavigateToSensors: () -> Unit,
-    onNavigateToVrControl: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToSessions: () -> Unit,
     onNavigateToParticipantEntry: () -> Unit,
@@ -61,7 +59,6 @@ fun HomeScreen(
     @Suppress("UNUSED_PARAMETER") onNavigateToSessionReview: (Long) -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
-    val vrConnectionState by viewModel.vrConnectionState.collectAsState()
     val activeSession by viewModel.activeSession.collectAsState()
     val isStarting by viewModel.isStarting.collectAsState()
     val shouldAutoShowTutorial by viewModel.shouldAutoShowTutorial.collectAsState()
@@ -126,13 +123,6 @@ fun HomeScreen(
                     Text(
                         text = "VitalWork Operator",
                         fontWeight = FontWeight.SemiBold
-                    )
-                },
-                actions = {
-                    ConnectionStatusBadge(
-                        state = vrConnectionState,
-                        label = "VR",
-                        modifier = Modifier.padding(end = 16.dp)
                     )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -212,7 +202,6 @@ fun HomeScreen(
 
                 SecondaryNavRow(
                     onSensors = onNavigateToSensors,
-                    onVrControl = onNavigateToVrControl,
                     onTutorial = onNavigateToTutorial,
                     onSettings = onNavigateToSettings
                 )
