@@ -47,9 +47,9 @@ fun WatchBatteryWarningCard(
     val contentColor = if (isCritical) MaterialTheme.colorScheme.onError else Color.White
     val pct = level?.let { "$it%" } ?: ""
     val text = if (isCritical) {
-        "Galaxy Watch battery critically low${if (pct.isEmpty()) "" else " ($pct)"} — do not start a new session without charging the watch."
+        "Galaxy Watch battery critically low${if (pct.isEmpty()) "" else " ($pct)"} — at this level the watch may stop recording sensor data while the screen is off and that data will be lost. Do not start a new session without charging the watch."
     } else {
-        "Galaxy Watch battery low${if (pct.isEmpty()) "" else " ($pct)"} — charge as soon as possible."
+        "Galaxy Watch battery low${if (pct.isEmpty()) "" else " ($pct)"} — charge as soon as possible. If it drops further the watch can stop recording during sleep and lose that data."
     }
 
     // Critical pulses to grab attention; warning is static.

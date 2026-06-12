@@ -40,13 +40,14 @@ class WatchSensorReceiverBatteryAlertTest {
 
     @Test
     fun justAboveCritical_isWarning() {
-        assertEquals(WatchBatteryAlert.WARNING, receiverWithBattery(17).currentBatteryAlert())
+        assertEquals(WatchBatteryAlert.WARNING, receiverWithBattery(21).currentBatteryAlert())
     }
 
     @Test
     fun exactlyCriticalThreshold_isCritical() {
-        // 16% boundary: <= 16 → CRITICAL (precedence over WARNING).
-        assertEquals(WatchBatteryAlert.CRITICAL, receiverWithBattery(16).currentBatteryAlert())
+        // 20% boundary: <= 20 → CRITICAL (precedence over WARNING). Raised from 16 to stay clear of
+        // the low-battery Power-Saving range where the watch stops sampling screen-off (data loss).
+        assertEquals(WatchBatteryAlert.CRITICAL, receiverWithBattery(20).currentBatteryAlert())
     }
 
     @Test
