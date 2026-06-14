@@ -226,7 +226,7 @@ class WatchSensorService : Service() {
             register(service, HealthTrackerType.EDA_CONTINUOUS) { dp, out ->
                 val eda = dp.getValue(ValueKey.EdaSet.SKIN_CONDUCTANCE)
                 val status = dp.getValue(ValueKey.EdaSet.STATUS)
-                emit("WATCH_EDA", eda, status, out)
+                emit("WATCH_EDA", eda, status, dp.getTimestamp(), out)
             }
         }
     }
@@ -262,20 +262,28 @@ class WatchSensorService : Service() {
 
     /** HR + IBI live in one HeartRateSet; both are status-gated (HR and IBI use DIFFERENT conventions). */
     private fun handleHeartRate(dp: DataPoint, out: MutableList<String>) {
+        // True capture time of this set (NOT wall-clock at send) — survives Doze-burst delivery, so a
+        // backlog drained on wake keeps each sample's real 1 Hz spacing. Verified on-device: getTimestamp
+        // is epoch wall-clock and buffered samples retain distinct ~1 s-apart timestamps.
+        val setTs = dp.getTimestamp()
+
         val hr = dp.getValue(ValueKey.HeartRateSet.HEART_RATE)
         val hrStatus = dp.getValue(ValueKey.HeartRateSet.HEART_RATE_STATUS)
         // Samsung HR convention: status == 1 means a successful reading; anything else (warm-up,
         // poor contact during doze, -3 not-worn) reports HR=0. Forwarding those 0s made the phone
         // flash 0.0 at startup (~15 s warm-up) and flap 0→value→0 in sleep. Skip invalid samples so
         // the phone keeps the last good value instead.
-        if (hrStatus == 1 && hr > 0) emit("WATCH_HR", hr.toFloat(), hrStatus, out)
+        if (hrStatus == 1 && hr > 0) emit("WATCH_HR", hr.toFloat(), hrStatus, setTs, out)
 
         val ibiList = dp.getValue(ValueKey.HeartRateSet.IBI_LIST)
         val ibiStatusList = dp.getValue(ValueKey.HeartRateSet.IBI_STATUS_LIST)
+        // Back-date over the FULL list so every interval advances time (keeps spacing honest even when
+        // an intermediate beat is status-gated out); emit only the valid beats with their own time.
+        val beatTs = WatchMessage.ibiTimestamps(setTs, ibiList)
         ibiList.forEachIndexed { i, ibi ->
             val status = ibiStatusList.getOrNull(i) ?: 1
             // Valid IBI per Samsung spec: status == 0 && value != 0
-            if (status == 0 && ibi != 0) emit("WATCH_IBI", ibi.toFloat(), 0, out)
+            if (status == 0 && ibi != 0) emit("WATCH_IBI", ibi.toFloat(), 0, beatTs[i], out)
         }
     }
 
@@ -284,9 +292,9 @@ class WatchSensorService : Service() {
      * current outgoing batch. The JSON line is built ONCE so the stored copy and the streamed copy
      * carry the identical timestamp — the phone's timestamp-window attribution relies on that match.
      */
-    private fun emit(type: String, value: Float, accuracy: Int, out: MutableList<String>) {
+    private fun emit(type: String, value: Float, accuracy: Int, timestampMs: Long, out: MutableList<String>) {
         _lastValues.value = _lastValues.value.toMutableMap().apply { put(type, value) }
-        val line = WatchMessage.reading(type, value, accuracy)
+        val line = WatchMessage.reading(type, value, accuracy, timestampMs)
         // Durable record first (survives Doze / dropped messages); then stream live for the display.
         if (store.shouldPersist(type)) store.append(line)
         out.add(line)
@@ -334,7 +342,8 @@ class WatchSensorService : Service() {
                 val level = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
                 if (level in 0..100) {
                     _lastValues.value = _lastValues.value.toMutableMap().apply { put("BATTERY", level.toFloat()) }
-                    sender.sendLine(WatchMessage.reading("BATTERY", level.toFloat(), 0))
+                    // Battery is a status value (not a timeline-aligned sample) → wall-clock stamp is fine.
+                    sender.sendLine(WatchMessage.reading("BATTERY", level.toFloat(), 0, System.currentTimeMillis()))
                 }
                 delay(15_000)
             }

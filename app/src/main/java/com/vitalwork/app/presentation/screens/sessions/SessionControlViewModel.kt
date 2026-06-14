@@ -1,6 +1,7 @@
 package com.vitalwork.app.presentation.screens.sessions
 
 import android.content.Context
+import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -8,6 +9,7 @@ import com.vitalwork.app.data.db.ScenarioEntity
 import com.vitalwork.app.data.db.SessionEntity
 import com.vitalwork.app.data.model.ConnectionState
 import com.vitalwork.app.data.recording.ScenarioRecordingRepository
+import com.vitalwork.app.data.recording.WatchReconciliationReport
 import com.vitalwork.app.data.system.LocationChecker
 import com.vitalwork.app.data.recording.model.DataRecordingState
 import com.vitalwork.app.data.repository.ConnectionRepository
@@ -170,6 +172,15 @@ class SessionControlViewModel @Inject constructor(
      */
     private val _endSessionPhase = MutableStateFlow<EndSessionPhase>(EndSessionPhase.Idle)
     val endSessionPhase: StateFlow<EndSessionPhase> = _endSessionPhase.asStateFlow()
+
+    /**
+     * Session-end Galaxy Watch reconciliation, set by [finalize] once the watch flush is drained.
+     * Non-null only when the flush completed and was verifiable; drives the end-session banner so the
+     * operator sees "recorded N / in DB N ✓" (or a ⚠ on a mismatch / clock-skew). See
+     * [WatchReconciliationReport].
+     */
+    private val _watchReconciliation = MutableStateFlow<WatchReconciliationReport?>(null)
+    val watchReconciliation: StateFlow<WatchReconciliationReport?> = _watchReconciliation.asStateFlow()
 
     /** Operator chose "End without watch data": abort the wait and finalize with what's recorded. */
     private val _endWithoutWatch = MutableStateFlow(false)
@@ -574,7 +585,12 @@ class SessionControlViewModel @Inject constructor(
     private suspend fun finalize(ackThroughWatchTs: Long?) {
         _endSessionPhase.value = EndSessionPhase.Finalizing
         val scenarios = scenarioRepository.getScenariosForSessionOnce(sessionId)
-        sensorRecordingRepository.drainAndFinalizeWatchEda(scenarios)
+        val report = sensorRecordingRepository.drainAndFinalizeWatchEda(scenarios)
+        _watchReconciliation.value = report
+        report?.let {
+            if (it.ok) Log.i(TAG, "watch reconciliation: ${it.summary()}")
+            else Log.w(TAG, "watch reconciliation MISMATCH: ${it.summary()}")
+        }
         if (ackThroughWatchTs != null) {
             runCatching { watchCommandSender.sendFlushAck(ackThroughWatchTs) }
         }
@@ -725,6 +741,8 @@ class SessionControlViewModel @Inject constructor(
     }
 
     private companion object {
+        const val TAG = "SessionControlVM"
+
         /** How long to wait for the operator to wake a dozing/disconnected watch before giving up. */
         const val WATCH_WAKE_TIMEOUT_MS = 60_000L
 

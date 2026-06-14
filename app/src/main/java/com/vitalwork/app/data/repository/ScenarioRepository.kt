@@ -75,6 +75,17 @@ class ScenarioRepository @Inject constructor(
         sensorSampleDao.insertAll(samples)
     }
 
+    /** Total Galaxy Watch samples (HR + IBI + EDA) across a session's scenarios. */
+    suspend fun countWatchSamplesForScenarios(scenarioIds: List<Long>): Int =
+        sensorSampleDao.countWatchSamplesForScenarios(scenarioIds)
+
+    /**
+     * Authoritative rebuild of watch samples from a complete flush: atomically delete the provisional
+     * live-written watch rows for [scenarioIds] and insert [samples]. eSense rows untouched.
+     */
+    suspend fun replaceWatchSamples(scenarioIds: List<Long>, samples: List<SensorSampleEntity>) =
+        sensorSampleDao.replaceWatchSamples(scenarioIds, samples)
+
     suspend fun getSamplesForScenario(scenarioId: Long): List<SensorSampleEntity> =
         sensorSampleDao.getSamplesForScenario(scenarioId)
 

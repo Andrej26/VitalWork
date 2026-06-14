@@ -9,8 +9,32 @@ package com.vitalwork.wear
  */
 object WatchMessage {
 
-    fun reading(type: String, value: Float, accuracy: Int): String =
-        """{"t":${System.currentTimeMillis()},"type":"$type","value":$value,"accuracy":$accuracy}"""
+    /**
+     * One sensor reading. [timestampMs] is the sample's **true capture time** (from
+     * `DataPoint.getTimestamp()`), NOT wall-clock at send time — so a screen-off backlog drained in a
+     * burst keeps each sample's real 1 Hz spacing instead of collapsing onto the wake instant. The
+     * stored copy and the streamed copy are built from this same value, which the phone's de-dup relies
+     * on. See [ibiTimestamps] for how IBI beats within one HeartRateSet get their per-beat times.
+     */
+    fun reading(type: String, value: Float, accuracy: Int, timestampMs: Long): String =
+        """{"t":$timestampMs,"type":"$type","value":$value,"accuracy":$accuracy}"""
+
+    /**
+     * Per-beat capture times for the IBIs in one HeartRateSet. The SDK stamps the whole set with a
+     * single [setTs] (≈ the most recent beat), but each IBI is the interval *before* its beat — so the
+     * beats land at `setTs`, `setTs - ibi[last]`, `setTs - ibi[last] - ibi[last-1]`, … i.e.
+     * `beat[i] = setTs - sum(ibi[i+1..last])`. Result is strictly increasing and ends at [setTs];
+     * consecutive spacing equals the IBI durations. Empty in → empty out. Pure + unit-tested.
+     */
+    fun ibiTimestamps(setTs: Long, ibiDurations: List<Int>): List<Long> {
+        val out = LongArray(ibiDurations.size)
+        var acc = 0L
+        for (i in ibiDurations.indices.reversed()) {
+            out[i] = setTs - acc
+            acc += ibiDurations[i]
+        }
+        return out.toList()
+    }
 
     fun capabilities(csv: String): String =
         """{"t":${System.currentTimeMillis()},"type":"CAPABILITIES","text":"${escape(csv)}"}"""

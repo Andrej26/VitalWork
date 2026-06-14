@@ -10,12 +10,14 @@ import com.vitalwork.app.data.repository.ScenarioRepository
 import com.vitalwork.app.data.sensor.DeviceState
 import com.vitalwork.app.data.sensor.SensorDevice
 import com.vitalwork.app.data.sensor.ble.BleManager
+import com.vitalwork.app.data.sensor.watch.WatchFlushState
 import com.vitalwork.app.data.sensor.watch.WatchSensorReceiver
 import com.vitalwork.app.data.time.TimeProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -277,32 +279,64 @@ class ScenarioRecordingRepositoryImpl(
         }
     }
 
-    override suspend fun drainAndFinalizeWatchEda(scenarios: List<ScenarioEntity>) {
+    override suspend fun drainAndFinalizeWatchEda(scenarios: List<ScenarioEntity>): WatchReconciliationReport? {
+        // Stop the live collector FIRST (and wait for it) so no late live write can race the
+        // authoritative rebuild below. activeWatchTarget is already null post-recording, but joining
+        // makes the ordering explicit and the delete-then-insert safe.
+        watchEdaJob?.let { it.cancelAndJoin() }; watchEdaJob = null
         try {
-            // Pull the historical store flush (buffered losslessly in the receiver) and add it to the
-            // session buffer, corrected onto the phone clock — so the drain sees the WHOLE session, not
-            // just the live samples, and splits it across every scenario window.
-            watchReceiver.takeFlushedReadings().forEach { reading ->
-                val sensorType = watchSensorType(reading.type) ?: return@forEach
-                val tc = watchReceiver.correctedTimestamp(reading.timestampMs)
-                watchSessionBuffer.add(WatchSessionDrainer.Reading(tc, sensorType, reading.value))
+            // The historical store flush — buffered losslessly in the receiver — is the COMPLETE record
+            // of everything the watch sampled this session (every reading is appended to the watch store
+            // before it streams). Correct each onto the phone clock for window attribution.
+            val flushed = watchReceiver.takeFlushedReadings()
+            val flushedReadings = flushed.mapNotNull { reading ->
+                val sensorType = watchSensorType(reading.type) ?: return@mapNotNull null
+                WatchSessionDrainer.Reading(
+                    watchReceiver.correctedTimestamp(reading.timestampMs), sensorType, reading.value
+                )
             }
-
-            val readings = synchronized(watchSessionBuffer) { watchSessionBuffer.toList() }
             val windows = scenarios.map {
                 WatchSessionDrainer.ScenarioWindow(it.id, it.startedAt, it.endedAt)
             }
+            val scenarioIds = scenarios.map { it.id }
+            val complete = watchReceiver.flushState.value as? WatchFlushState.Complete
+
+            // AUTHORITATIVE PATH — a complete, fully-transferred flush is ground truth. Rebuild the
+            // session's watch rows from it: NO high-water-mark de-dup (so a wake-burst dropped by the
+            // bounded live flow can't be skipped as "already live"), delete-then-insert in one
+            // transaction (so the provisional live rows are replaced, never duplicated). Provably
+            // lossless because the store ⊇ all live writes.
+            if (complete != null && complete.rowsReceived == flushed.size && scenarioIds.isNotEmpty()) {
+                val rows = WatchSessionDrainer.drain(
+                    readings = flushedReadings,
+                    windows = windows,
+                    highWaterMarks = emptyMap()
+                )
+                scenarioRepository.replaceWatchSamples(scenarioIds, rows)
+                val dbRows = scenarioRepository.countWatchSamplesForScenarios(scenarioIds)
+                return WatchReconciliationReport(
+                    claimed = complete.rowsReceived,
+                    received = flushed.size,
+                    inScenario = rows.size,           // in-window flush rows (no skips on this path)
+                    dbRows = dbRows,
+                    clockSkewMs = watchReceiver.observedClockSkewMs()
+                )
+            }
+
+            // FALLBACK PATH — no / partial / aborted flush: keep the provisional live writes and
+            // best-effort drain whatever arrived, de-duped against the live high-water marks. Not
+            // verified (the store could not be confirmed complete), so no reconciliation report.
+            flushedReadings.forEach { watchSessionBuffer.add(it) }
+            val readings = synchronized(watchSessionBuffer) { watchSessionBuffer.toList() }
             val rows = WatchSessionDrainer.drain(
                 readings = readings,
                 windows = windows,
                 highWaterMarks = watchHighWaterMarks.toMap()
             )
-            if (rows.isNotEmpty()) {
-                scenarioRepository.addSamples(rows)
-            }
+            if (rows.isNotEmpty()) scenarioRepository.addSamples(rows)
+            return null
         } finally {
-            // Stop the session collector and clear all session-scoped watch state.
-            watchEdaJob?.cancel(); watchEdaJob = null
+            // Clear all session-scoped watch state.
             watchSessionBuffer.clear()
             watchHighWaterMarks.clear()
             activeWatchTarget = null

@@ -39,12 +39,17 @@ interface ScenarioRecordingRepository {
     fun startWatchEdaSession()
 
     /**
-     * At session end, slices the buffered watch EDA stream into the given scenarios by timestamp
-     * window (de-duplicating against what was written live) and persists the result. Must be called
-     * AFTER the last scenario has its `endedAt` set (i.e. after [stopRecording]) and BEFORE the
-     * session's sample counts are rolled up. Then clears the session buffer.
+     * At session end, persists the session's Galaxy Watch samples (HR + IBI + EDA) into the given
+     * scenarios by timestamp window. When the durable store flush completed in full it is treated as
+     * **authoritative** — the provisional live rows are replaced by an exact rebuild from the flush
+     * (lossless, no de-dup hazard); otherwise the best-effort live + partial data is kept.
+     *
+     * Must be called AFTER the last scenario has its `endedAt` set (i.e. after [stopRecording]) and
+     * BEFORE the session's sample counts are rolled up. Clears the session buffer.
      *
      * @param scenarios the session's scenarios (with durable startedAt/endedAt).
+     * @return a [WatchReconciliationReport] when the flush was complete and verifiable; `null` when it
+     *   could not be verified (no/partial flush, or no scenarios — e.g. the session-abort path).
      */
-    suspend fun drainAndFinalizeWatchEda(scenarios: List<ScenarioEntity>)
+    suspend fun drainAndFinalizeWatchEda(scenarios: List<ScenarioEntity>): WatchReconciliationReport?
 }

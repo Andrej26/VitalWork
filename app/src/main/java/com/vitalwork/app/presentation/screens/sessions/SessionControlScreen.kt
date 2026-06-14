@@ -131,6 +131,7 @@ fun SessionControlScreen(
     val watchBatteryLevel by viewModel.watchBatteryLevel.collectAsState()
     val watchBatteryAlert by viewModel.watchBatteryAlert.collectAsState()
     val endSessionPhase by viewModel.endSessionPhase.collectAsState()
+    val watchReconciliation by viewModel.watchReconciliation.collectAsState()
 
     // Recording state
     val recordingUiState by viewModel.recordingUiState.collectAsState()
@@ -362,7 +363,8 @@ fun SessionControlScreen(
         phase = endSessionPhase,
         onEndWithoutWatchData = { viewModel.endWithoutWatchData() },
         onRetry = { viewModel.retryWatchTransfer() },
-        onComplete = { sid -> onSessionEnded(sid) }
+        onComplete = { sid -> onSessionEnded(sid) },
+        reconciliation = watchReconciliation
     )
 
 

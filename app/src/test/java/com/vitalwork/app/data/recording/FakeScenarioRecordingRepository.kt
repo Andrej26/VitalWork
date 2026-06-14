@@ -48,13 +48,17 @@ class FakeScenarioRecordingRepository : ScenarioRecordingRepository {
     /** Optional shared ordering log (e.g. to assert drain happens before FLUSH_ACK). */
     var eventLog: MutableList<String>? = null
 
+    /** Report returned by [drainAndFinalizeWatchEda]; null mimics an unverified (incomplete) flush. */
+    var drainReport: WatchReconciliationReport? = null
+
     override fun startWatchEdaSession() {
         startWatchEdaSessionCallCount++
     }
 
-    override suspend fun drainAndFinalizeWatchEda(scenarios: List<ScenarioEntity>) {
+    override suspend fun drainAndFinalizeWatchEda(scenarios: List<ScenarioEntity>): WatchReconciliationReport? {
         drainWatchEdaCallCount++
         lastDrainScenarios = scenarios
         eventLog?.add("drain")
+        return drainReport
     }
 }

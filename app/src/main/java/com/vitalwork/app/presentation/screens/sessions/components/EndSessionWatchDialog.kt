@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Watch
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -21,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.vitalwork.app.data.recording.WatchReconciliationReport
 import com.vitalwork.app.presentation.screens.sessions.EndSessionPhase
 import kotlinx.coroutines.delay
 
@@ -48,7 +50,8 @@ fun EndSessionWatchDialog(
     phase: EndSessionPhase,
     onEndWithoutWatchData: () -> Unit,
     onRetry: () -> Unit,
-    onComplete: (sessionId: Long) -> Unit
+    onComplete: (sessionId: Long) -> Unit,
+    reconciliation: WatchReconciliationReport? = null
 ) {
     when (phase) {
         EndSessionPhase.Idle -> Unit
@@ -95,23 +98,28 @@ fun EndSessionWatchDialog(
         )
 
         is EndSessionPhase.Complete -> {
+            val mismatch = reconciliation?.ok == false
             AlertDialog(
                 onDismissRequest = {},
                 icon = {
                     Icon(
-                        Icons.Default.CheckCircle,
+                        if (mismatch) Icons.Default.Warning else Icons.Default.CheckCircle,
                         contentDescription = null,
-                        tint = SuccessGreen,
+                        tint = if (mismatch) ReconnectingOrange else SuccessGreen,
                         modifier = Modifier.size(48.dp)
                     )
                 },
-                title = { Text("Watch data saved") },
-                text = { Text("Finishing up…", textAlign = TextAlign.Center) },
+                title = { Text(if (mismatch) "Saved — verify watch data" else "Watch data saved") },
+                // Show the reconciliation summary (recorded / in-scenario / DB ✓) when the watch flush
+                // was verified; otherwise the plain "finishing up" (no watch, or unverified flush).
+                text = {
+                    Text(reconciliation?.summary() ?: "Finishing up…", textAlign = TextAlign.Center)
+                },
                 confirmButton = {}
             )
-            // Hold the green check briefly, then navigate to the session review.
+            // Hold the result briefly (longer on a mismatch so the operator can read it), then review.
             LaunchedEffect(phase.sessionId) {
-                delay(COMPLETE_HOLD_MS)
+                delay(if (mismatch) COMPLETE_HOLD_MS * 3 else COMPLETE_HOLD_MS)
                 onComplete(phase.sessionId)
             }
         }

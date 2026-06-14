@@ -46,11 +46,6 @@ class WatchSensorReceiver @Inject constructor(
         const val INACTIVITY_TIMEOUT_MS = 6_000L
         const val POLL_INTERVAL_MS = 1_000L
 
-        // A reading whose watch-stamp is within this window of arrival is "live" (not Doze backlog),
-        // so its (arrival − t) is a trustworthy phone↔watch clock offset. Burst-delivered samples
-        // have a much larger (arrival − t) and must NOT set the offset.
-        const val LIVE_READING_WINDOW_MS = 2_000L
-
         // The watch beats a HEARTBEAT every ~30 s. If no readings arrive but a heartbeat lands within
         // this window, the watch is alive-but-dozing (buffering), NOT gone — so we show DOZING instead
         // of DISCONNECTED. ~95 s ≈ 3 missed beats of headroom so a single dropped beat doesn't flap.
@@ -121,25 +116,28 @@ class WatchSensorReceiver @Inject constructor(
     val watchSampleFlow: SharedFlow<WatchReading> = _watchSampleFlow.asSharedFlow()
 
     /**
-     * Phone↔watch clock offset in ms: `phoneClock ≈ watchClock + offsetMs`. Captured once from the
-     * first genuinely-live reading after each (re)connect (see [LIVE_READING_WINDOW_MS]); reset to
-     * "uncaptured" on disconnect so a fresh offset is taken next session. 0 until captured (= trust
-     * the watch clock as-is, the safe fallback).
+     * Smallest observed `(arrival − captureTime)` over live readings this connection — a non-corrective
+     * proxy for delivery latency + watch↔phone clock skew (bursts have large positive deltas, so the
+     * min reflects the most-live sample). Reset on disconnect; surfaced in the session-end report to
+     * flag a mis-set watch clock. `null` until a reading is seen.
      */
     @Volatile
-    private var clockOffsetMs: Long = 0L
-    @Volatile
-    private var offsetCaptured: Boolean = false
+    private var minLiveSkewMs: Long = Long.MAX_VALUE
+
+    /** Observed clock-skew proxy (see [minLiveSkewMs]); null if no live reading was seen. */
+    fun observedClockSkewMs(): Long? = minLiveSkewMs.takeIf { it != Long.MAX_VALUE }
 
     /**
      * Map a watch-stamped timestamp onto the NTP-corrected timeline used for all persisted samples.
-     * [clockOffsetMs] (captured on the raw device clock) lifts the watch stamp onto the tablet's
-     * device clock; [TimeProvider.ntpOffsetMs] then lifts that onto true UTC. Keeping the capture on
-     * the raw device clock (see [maybeCaptureClockOffset]) keeps the ±[LIVE_READING_WINDOW_MS] window
-     * valid even when the device clock is far from NTP.
+     * The watch now stamps each reading's **true capture time** on its own system clock, which Wear OS
+     * keeps in sync with the phone over Bluetooth (auto-time) — so a single [TimeProvider.ntpOffsetMs]
+     * lift onto true UTC is all that's needed, identical to the correction eSense samples already get
+     * ([com.vitalwork.app.data.recording.ScenarioRecordingRepositoryImpl] via `timeProvider.nowMs()`).
+     * No per-connection offset capture: that was fragile (single-sample, poisonable by Doze bursts) and,
+     * with honest capture times, would wrongly bake in transmission/sensor latency.
      */
     fun correctedTimestamp(watchTimestampMs: Long): Long =
-        watchTimestampMs + clockOffsetMs + timeProvider.ntpOffsetMs()
+        watchTimestampMs + timeProvider.ntpOffsetMs()
 
     /**
      * Snapshot of the low-battery alert tier from the **last-known** battery level, read on demand
@@ -167,7 +165,8 @@ class WatchSensorReceiver @Inject constructor(
         val arrivalMs = System.currentTimeMillis()
         lastReadingMs = arrivalMs // an actual reading → eligible for LIVE
         markActivity(arrivalMs)
-        maybeCaptureClockOffset(reading, arrivalMs)
+        val skew = arrivalMs - reading.timestampMs
+        if (skew < minLiveSkewMs) minLiveSkewMs = skew // running min → clock-skew health proxy
         _latestByType.value = _latestByType.value.toMutableMap().apply { put(reading.type, reading) }
         when (reading.type) {
             "BATTERY" -> _batteryLevel.value = reading.value.toInt()
@@ -275,20 +274,6 @@ class WatchSensorReceiver @Inject constructor(
         }
     }
 
-    /**
-     * Capture the phone↔watch clock offset once per connection, from the first reading that is
-     * genuinely live (arrival ≈ watch-stamp). Burst-delivered samples (large arrival − t) are skipped
-     * so a watch connecting mid-Doze-backlog can't poison the offset for the whole session.
-     */
-    private fun maybeCaptureClockOffset(reading: WatchReading, arrivalMs: Long) {
-        if (offsetCaptured) return
-        val delta = arrivalMs - reading.timestampMs
-        if (kotlin.math.abs(delta) <= LIVE_READING_WINDOW_MS) {
-            clockOffsetMs = delta
-            offsetCaptured = true
-        }
-    }
-
     /** Watch signalled it stopped tracking → reflect DISCONNECTED immediately, no watchdog wait. */
     @Synchronized
     fun onStop() {
@@ -296,8 +281,7 @@ class WatchSensorReceiver @Inject constructor(
         _connectionState.value = ConnectionState.DISCONNECTED
         _linkStatus.value = WatchLinkStatus.DISCONNECTED
         lastReadingMs = 0L
-        // Force a fresh clock offset on the next connection.
-        offsetCaptured = false
+        minLiveSkewMs = Long.MAX_VALUE // fresh skew measurement on the next connection
         clearLiveData()
     }
 
@@ -340,7 +324,7 @@ class WatchSensorReceiver @Inject constructor(
             if (status == WatchLinkStatus.DISCONNECTED) ConnectionState.DISCONNECTED
             else ConnectionState.CONNECTED
         if (status == WatchLinkStatus.DISCONNECTED) {
-            offsetCaptured = false
+            minLiveSkewMs = Long.MAX_VALUE // fresh skew measurement on the next connection
             // Clear stale live values only on the edge into DISCONNECTED (the watchdog polls ~1 Hz,
             // so guard against re-clearing every tick while the watch stays gone).
             if (previous != WatchLinkStatus.DISCONNECTED) clearLiveData()

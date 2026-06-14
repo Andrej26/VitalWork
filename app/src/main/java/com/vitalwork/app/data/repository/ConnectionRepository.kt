@@ -67,10 +67,6 @@ class ConnectionRepository @Inject constructor(
     /** Galaxy Watch battery level percentage (0-100), null until first reading. */
     val watchBatteryLevel: StateFlow<Int?> = watchReceiver.batteryLevel
 
-    /** Map a watch-stamped timestamp onto the phone clock (phone↔watch offset correction). */
-    fun watchCorrectedTimestamp(watchTimestampMs: Long): Long =
-        watchReceiver.correctedTimestamp(watchTimestampMs)
-
     /** Current low-battery alert tier from the watch's last-known battery level. */
     fun watchBatteryAlert(): WatchBatteryAlert = watchReceiver.currentBatteryAlert()
 

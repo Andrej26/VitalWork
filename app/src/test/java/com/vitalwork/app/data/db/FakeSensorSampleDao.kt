@@ -17,4 +17,13 @@ class FakeSensorSampleDao : SensorSampleDao {
     override suspend fun deleteAllForScenario(scenarioId: Long) {
         samples.removeAll { it.scenarioId == scenarioId }
     }
+
+    private val watchTypes = setOf(SensorType.WATCH_HR, SensorType.WATCH_IBI, SensorType.WATCH_EDA)
+
+    override suspend fun countWatchSamplesForScenarios(scenarioIds: List<Long>): Int =
+        samples.count { it.scenarioId in scenarioIds && it.sensorType in watchTypes }
+
+    override suspend fun deleteWatchSamplesForScenarios(scenarioIds: List<Long>) {
+        samples.removeAll { it.scenarioId in scenarioIds && it.sensorType in watchTypes }
+    }
 }
