@@ -15,5 +15,7 @@ data class ScenarioMetadata(
     val heartRateSampleCount: Int = 0,
     val respirationSampleCount: Int = 0,
     val esenseRrIntervalSampleCount: Int = 0,
-    val edaSampleCount: Int = 0
+    val edaSampleCount: Int = 0,
+    val watchHrSampleCount: Int = 0,
+    val watchIbiSampleCount: Int = 0
 )

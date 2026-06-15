@@ -23,6 +23,7 @@ import com.vitalwork.app.data.sensor.watch.WatchBatteryAlert
 import com.vitalwork.app.data.sensor.watch.WatchBatteryThresholds
 import com.vitalwork.app.data.sensor.watch.WatchFlushState
 import com.vitalwork.app.data.sensor.watch.WatchLinkStatus
+import com.vitalwork.app.data.sensor.watch.model.WatchReading
 import com.vitalwork.app.presentation.components.BleDialogState
 import com.vitalwork.app.presentation.components.DialogAction
 import com.vitalwork.app.presentation.components.gattStatusToString
@@ -115,6 +116,15 @@ class SessionControlViewModel @Inject constructor(
 
     /** Latest Galaxy Watch EDA value (µS), null until first reading */
     val watchEda: StateFlow<Float?> = connectionRepository.watchEda
+
+    /** Latest Galaxy Watch heart rate (BPM), null until first reading */
+    val watchHeartRate: StateFlow<Int?> = connectionRepository.watchHeartRate
+
+    /** Latest Galaxy Watch IBI reading (value + timestamp) for freshness-gated display, null until first */
+    val watchIbi: StateFlow<WatchReading?> = connectionRepository.watchIbi
+
+    /** Galaxy Watch finer link state (LIVE / DOZING / DISCONNECTED) for the group header label */
+    val watchLinkStatus: StateFlow<WatchLinkStatus> = connectionRepository.watchLinkStatus
 
     /** Galaxy Watch battery level (0-100), null until first reading */
     val watchBatteryLevel: StateFlow<Int?> = connectionRepository.watchBatteryLevel
@@ -264,6 +274,8 @@ class SessionControlViewModel @Inject constructor(
             respirationSampleCount = metadata?.respirationSampleCount ?: 0,
             esenseRrIntervalSampleCount = metadata?.esenseRrIntervalSampleCount ?: 0,
             edaSampleCount = metadata?.edaSampleCount ?: 0,
+            watchHrSampleCount = metadata?.watchHrSampleCount ?: 0,
+            watchIbiSampleCount = metadata?.watchIbiSampleCount ?: 0,
             scenarioIdentifier = metadata?.scenarioIdentifier,
             isRecording = state == DataRecordingState.RECORDING,
             heartRateWasEnabled = metadata?.heartRateRecording ?: false,

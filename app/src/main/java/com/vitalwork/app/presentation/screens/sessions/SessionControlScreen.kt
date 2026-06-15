@@ -84,6 +84,7 @@ import com.vitalwork.app.data.model.ConnectionState
 import com.vitalwork.app.data.recording.model.DataRecordingState
 import com.vitalwork.app.data.sensor.ble.model.BleDevice
 import com.vitalwork.app.data.sensor.watch.WatchBatteryAlert
+import com.vitalwork.app.data.sensor.watch.WatchLinkStatus
 import com.vitalwork.app.data.system.SessionPrerequisite
 import com.vitalwork.app.presentation.components.ReadinessWarningCard
 import com.vitalwork.app.presentation.components.onPermissionDenied
@@ -128,6 +129,9 @@ fun SessionControlScreen(
     val respirationRate by viewModel.respirationRate.collectAsState()
     val pulseLatestRr by viewModel.pulseLatestRr.collectAsState()
     val watchEda by viewModel.watchEda.collectAsState()
+    val watchHeartRate by viewModel.watchHeartRate.collectAsState()
+    val watchIbi by viewModel.watchIbi.collectAsState()
+    val watchLinkStatus by viewModel.watchLinkStatus.collectAsState()
     val watchBatteryLevel by viewModel.watchBatteryLevel.collectAsState()
     val watchBatteryAlert by viewModel.watchBatteryAlert.collectAsState()
     val endSessionPhase by viewModel.endSessionPhase.collectAsState()
@@ -579,17 +583,48 @@ fun SessionControlScreen(
                 )
             }
 
-            // Galaxy Watch 8 device group — live EDA (µS). Phone-side recording wiring; the watch
-            // streams EDA over the Data Layer and is captured/sliced into scenarios on the tablet.
+            // Galaxy Watch 8 device group — live HR (BPM) + EDA (µS) cards with an IBI footer. The watch
+            // streams HR/IBI/EDA over the Data Layer; all three are captured/sliced into scenarios on the
+            // tablet. Header label reflects the finer link status so an expected Doze gap reads as
+            // "buffering", not "Disconnected" (consistent with the Sensors → Galaxy Watch screen).
+            // IBI capture pauses while the wearer moves, so its footer value is gated on freshness.
+            val watchConnected = watchConnectionState == ConnectionState.CONNECTED
+            val ibiFresh = watchIbi?.let {
+                System.currentTimeMillis() - it.timestampMs < WATCH_IBI_STALE_MS
+            } == true
             DeviceSensorGroup(
                 deviceName = "Galaxy Watch 8",
                 connectionState = watchConnectionState,
-                batteryLevel = watchBatteryLevel
+                batteryLevel = watchBatteryLevel,
+                statusLabel = watchLinkStatusLabel(watchConnectionState, watchLinkStatus),
+                footer = {
+                    PulseRrRow(
+                        label = "IBI",
+                        latestValue = if (watchConnected && ibiFresh) watchIbi?.value?.toInt() else null,
+                        sampleCount = recordingUiState.watchIbiSampleCount,
+                        connectionState = watchConnectionState
+                    )
+                }
             ) {
+                LiveSensorCard(
+                    icon = Icons.Default.FavoriteBorder,
+                    label = "Heart Rate",
+                    value = when {
+                        watchConnected && watchHeartRate != null -> watchHeartRate.toString()
+                        watchConnected -> "..."
+                        else -> "--"
+                    },
+                    unit = "BPM",
+                    connectionState = watchConnectionState,
+                    sampleCount = recordingUiState.watchHrSampleCount,
+                    animate = watchConnected && (watchHeartRate ?: 0) > 0,
+                    batteryLevel = watchBatteryLevel,
+                    modifier = Modifier.weight(1f)
+                )
                 LiveSensorCard(
                     icon = Icons.Default.Watch,
                     label = "EDA",
-                    value = if (watchConnectionState == ConnectionState.CONNECTED && watchEda != null)
+                    value = if (watchConnected && watchEda != null)
                         String.format(java.util.Locale.US, "%.2f", watchEda)
                     else "--",
                     unit = "µS",
@@ -688,13 +723,15 @@ fun SessionControlScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Galaxy Watch EDA",
+                            text = "Galaxy Watch",
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f)
                         )
                         Text(
                             text = if (watchConnectionState == ConnectionState.CONNECTED)
-                                "${recordingUiState.edaSampleCount} samples"
+                                "${recordingUiState.edaSampleCount} EDA · " +
+                                    "${recordingUiState.watchHrSampleCount} HR · " +
+                                    "${recordingUiState.watchIbiSampleCount} IBI"
                             else "Not connected",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1165,7 +1202,7 @@ private fun WatchLinkLostBanner() {
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "EDA keeps buffering on the watch — turn its Bluetooth back on to recover it",
+                    text = "Sensor data keeps buffering on the watch — turn its Bluetooth back on to recover it",
                     color = MaterialTheme.colorScheme.onErrorContainer,
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -1221,6 +1258,7 @@ private fun PulseRrRow(
     latestValue: Int?,
     sampleCount: Int,
     connectionState: ConnectionState,
+    label: String = "R-R",
     modifier: Modifier = Modifier
 ) {
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -1236,7 +1274,7 @@ private fun PulseRrRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = "R-R",
+                text = label,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
                 color = if (connectionState == ConnectionState.CONNECTED)
@@ -1270,6 +1308,32 @@ private fun PulseRrRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+    }
+}
+
+/**
+ * IBI capture pauses while the wearer moves (HR/EDA keep flowing), so a last-seen IBI older than this is
+ * treated as stale and the footer shows "Waiting" rather than a frozen value. Generous so a small
+ * watch↔phone clock skew can't cause false staleness.
+ */
+private const val WATCH_IBI_STALE_MS = 5_000L
+
+/**
+ * Status text for the Galaxy Watch group header. Prefers the finer [WatchLinkStatus] so an expected
+ * screen-off/Doze gap reads as "buffering" rather than a scary "Disconnected" — kept verbatim in sync
+ * with the Sensors → Galaxy Watch screen (`WatchSensorScreen`). The coarse [ConnectionState] only
+ * supplies CONNECTING/ERROR, which the link status doesn't model.
+ */
+private fun watchLinkStatusLabel(
+    connectionState: ConnectionState,
+    linkStatus: WatchLinkStatus
+): String = when (connectionState) {
+    ConnectionState.CONNECTING -> "Connecting…"
+    ConnectionState.ERROR -> "Error"
+    else -> when (linkStatus) {
+        WatchLinkStatus.LIVE -> "Connected"
+        WatchLinkStatus.DOZING -> "Watch dozing — buffering"
+        WatchLinkStatus.DISCONNECTED -> "Disconnected"
     }
 }
 

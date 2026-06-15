@@ -82,6 +82,8 @@ class ScenarioRecordingRepositoryImplTest {
     }
 
     private fun hr(t: Long, v: Float = 70f) = WatchReading("WATCH_HR", v, 1, t)
+    private fun ibi(t: Long, v: Float = 830f) = WatchReading("WATCH_IBI", v, 0, t)
+    private fun eda(t: Long, v: Float = 1.5f) = WatchReading("WATCH_EDA", v, 0, t)
 
     /** Pre-seeds a scenario row so the buffering layer has something to write samples against. */
     private fun seedScenario(id: Long = 1L): ScenarioEntity {
@@ -279,6 +281,33 @@ class ScenarioRecordingRepositoryImplTest {
         assertNull(report) // not verified
         // Fallback path must NOT delete the provisional live row.
         assertEquals(1, fakeSensorSampleDao.samples.count { it.sensorType == SensorType.WATCH_HR })
+    }
+
+    // --- Live watch path: per-type sample counts drive the session UI badges (EDA card/HR card/IBI footer) ---
+
+    @Test
+    fun liveWatchReadings_incrementPerTypeSampleCounts() = runTest(testDispatcher) {
+        val sut = createSut()
+        val scenario = seedScenario()
+        // A reading marks the watch CONNECTED so startRecording sets edaRecording and the live target.
+        watchReceiver.onReading(eda(System.currentTimeMillis()))
+        assertEquals(ConnectionState.CONNECTED, watchReceiver.connectionState.value)
+
+        sut.startWatchEdaSession()
+        sut.startRecording(scenarioId = scenario.id, scenarioIdentifier = "BMX-X-A1")
+
+        // Timestamps comfortably after scenario start so the live path writes them (tc >= scenarioStart).
+        val base = sut.recordingMetadata.value!!.startTimestampMs + 1_000L
+        watchReceiver.onReading(hr(base))
+        watchReceiver.onReading(hr(base + 100))
+        watchReceiver.onReading(ibi(base + 200))
+        watchReceiver.onReading(eda(base + 300))
+
+        val metadata = sut.recordingMetadata.value!!
+        assertEquals(2, metadata.watchHrSampleCount)
+        assertEquals(1, metadata.watchIbiSampleCount)
+        // One EDA pre-start (before the live target) + one in-window → only the in-window one is counted.
+        assertEquals(1, metadata.edaSampleCount)
     }
 
     @Test

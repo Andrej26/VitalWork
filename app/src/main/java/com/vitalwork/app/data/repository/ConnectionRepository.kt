@@ -11,6 +11,7 @@ import com.vitalwork.app.data.sensor.ble.BleManager
 import com.vitalwork.app.data.sensor.ble.model.BleDevice
 import com.vitalwork.app.data.sensor.watch.WatchBatteryAlert
 import com.vitalwork.app.data.sensor.watch.WatchSensorReceiver
+import com.vitalwork.app.data.sensor.watch.model.WatchReading
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -62,6 +63,20 @@ class ConnectionRepository @Inject constructor(
     /** Latest EDA value (µS) from the Galaxy Watch for live display, null until first reading. */
     val watchEda: StateFlow<Float?> = watchReceiver.latestByType
         .map { it["WATCH_EDA"]?.value }
+        .stateIn(repoScope, SharingStarted.Eagerly, null)
+
+    /** Latest heart rate (BPM) from the Galaxy Watch for live display, null until first reading. */
+    val watchHeartRate: StateFlow<Int?> = watchReceiver.latestByType
+        .map { it["WATCH_HR"]?.value?.toInt() }
+        .stateIn(repoScope, SharingStarted.Eagerly, null)
+
+    /**
+     * Latest IBI reading from the Galaxy Watch — the whole [WatchReading] (value + timestamp), so the UI
+     * can detect staleness. IBI capture pauses while the wearer moves (HR/EDA keep flowing), so the last
+     * IBI must not be shown as if it were live; consumers gate it on reading freshness.
+     */
+    val watchIbi: StateFlow<WatchReading?> = watchReceiver.latestByType
+        .map { it["WATCH_IBI"] }
         .stateIn(repoScope, SharingStarted.Eagerly, null)
 
     /** Galaxy Watch battery level percentage (0-100), null until first reading. */

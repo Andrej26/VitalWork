@@ -269,10 +269,14 @@ class ScenarioRecordingRepositoryImpl(
                 )
                 // Advance the per-(scenario, type) high-water mark (de-dup boundary for the drain).
                 watchHighWaterMarks.merge(WatchSessionDrainer.HwmKey(scenarioId, sensorType), tc, ::maxOf)
-                // EDA sample count drives the existing live metadata badge; keep that behavior.
-                if (sensorType == SensorType.WATCH_EDA) {
-                    _recordingMetadata.value = _recordingMetadata.value?.let {
-                        if (it.scenarioId == scenarioId) it.copy(edaSampleCount = it.edaSampleCount + 1) else it
+                // Per-type live sample counts drive the session UI badges (EDA card + HR card + IBI footer).
+                _recordingMetadata.value = _recordingMetadata.value?.let {
+                    if (it.scenarioId != scenarioId) return@let it
+                    when (sensorType) {
+                        SensorType.WATCH_EDA -> it.copy(edaSampleCount = it.edaSampleCount + 1)
+                        SensorType.WATCH_HR -> it.copy(watchHrSampleCount = it.watchHrSampleCount + 1)
+                        SensorType.WATCH_IBI -> it.copy(watchIbiSampleCount = it.watchIbiSampleCount + 1)
+                        else -> it
                     }
                 }
             }

@@ -46,6 +46,7 @@ fun DeviceSensorGroup(
     connectionState: ConnectionState,
     modifier: Modifier = Modifier,
     batteryLevel: Int? = null,
+    statusLabel: String? = null,
     footer: (@Composable ColumnScope.() -> Unit)? = null,
     content: @Composable RowScope.() -> Unit
 ) {
@@ -101,7 +102,7 @@ fun DeviceSensorGroup(
                         Spacer(Modifier.width(8.dp))
                     }
                 }
-                ConnectionStatusBadge(state = connectionState)
+                ConnectionStatusBadge(state = connectionState, label = statusLabel)
             }
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
