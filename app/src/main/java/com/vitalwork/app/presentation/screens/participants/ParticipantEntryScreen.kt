@@ -155,7 +155,7 @@ fun ParticipantEntryScreen(
                         // Age stepper
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(
-                                text = "Age (optional)",
+                                text = "Age (18 to 80 years old)",
                                 style = MaterialTheme.typography.labelLarge
                             )
                             AgeStepper(
