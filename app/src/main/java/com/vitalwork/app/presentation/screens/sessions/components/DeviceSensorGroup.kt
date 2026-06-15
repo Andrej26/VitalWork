@@ -3,6 +3,7 @@
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -47,9 +48,16 @@ fun DeviceSensorGroup(
     modifier: Modifier = Modifier,
     batteryLevel: Int? = null,
     statusLabel: String? = null,
+    onClick: (() -> Unit)? = null,
+    clickHint: String? = null,
     footer: (@Composable ColumnScope.() -> Unit)? = null,
     content: @Composable RowScope.() -> Unit
 ) {
+    // Tappable while not connected (mirrors the eSense Pulse card): a tap drives the
+    // connect/enable-Bluetooth action supplied by the caller. A live or buffering watch maps to
+    // CONNECTED, so the tap target lines up with "not actually connected".
+    val isClickable = onClick != null &&
+            (connectionState == ConnectionState.DISCONNECTED || connectionState == ConnectionState.ERROR)
     val borderColor by animateColorAsState(
         targetValue = when (connectionState) {
             ConnectionState.CONNECTED -> Color(0xFF4CAF50)
@@ -63,7 +71,12 @@ fun DeviceSensorGroup(
     )
 
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .then(
+                if (isClickable) Modifier.clickable { onClick?.invoke() }
+                else Modifier
+            ),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
@@ -113,6 +126,14 @@ fun DeviceSensorGroup(
                 content = content
             )
             footer?.invoke(this)
+
+            if (isClickable && clickHint != null) {
+                Text(
+                    text = clickHint,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                )
+            }
         }
     }
 }

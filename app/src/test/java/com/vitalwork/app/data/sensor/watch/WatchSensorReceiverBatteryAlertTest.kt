@@ -24,35 +24,35 @@ class WatchSensorReceiverBatteryAlertTest {
 
     @Test
     fun aboveWarning_isNone() {
-        assertEquals(WatchBatteryAlert.NONE, receiverWithBattery(31).currentBatteryAlert())
+        assertEquals(WatchBatteryAlert.NONE, receiverWithBattery(21).currentBatteryAlert())
     }
 
     @Test
     fun exactlyWarningThreshold_isWarning() {
-        // 30% boundary: <= 30 → WARNING.
-        assertEquals(WatchBatteryAlert.WARNING, receiverWithBattery(30).currentBatteryAlert())
+         // 20% boundary: <= 20 → WARNING.
+        assertEquals(WatchBatteryAlert.WARNING, receiverWithBattery(20).currentBatteryAlert())
     }
 
     @Test
     fun midWarningBand_isWarning() {
-        assertEquals(WatchBatteryAlert.WARNING, receiverWithBattery(25).currentBatteryAlert())
+        assertEquals(WatchBatteryAlert.WARNING, receiverWithBattery(15).currentBatteryAlert())
     }
 
     @Test
     fun justAboveCritical_isWarning() {
-        assertEquals(WatchBatteryAlert.WARNING, receiverWithBattery(21).currentBatteryAlert())
+         assertEquals(WatchBatteryAlert.WARNING, receiverWithBattery(11).currentBatteryAlert())
     }
 
     @Test
     fun exactlyCriticalThreshold_isCritical() {
-        // 20% boundary: <= 20 → CRITICAL (precedence over WARNING). Raised from 16 to stay clear of
-        // the low-battery Power-Saving range where the watch stops sampling screen-off (data loss).
-        assertEquals(WatchBatteryAlert.CRITICAL, receiverWithBattery(20).currentBatteryAlert())
+        // 10% boundary: <= 10 → CRITICAL (precedence over WARNING). By this point the watch can enter
+        // low-battery Power Saving and stop sampling screen-off (data loss).
+        assertEquals(WatchBatteryAlert.CRITICAL, receiverWithBattery(10).currentBatteryAlert())
     }
 
     @Test
     fun belowCritical_isCritical() {
-        assertEquals(WatchBatteryAlert.CRITICAL, receiverWithBattery(12).currentBatteryAlert())
+        assertEquals(WatchBatteryAlert.CRITICAL, receiverWithBattery(5).currentBatteryAlert())
     }
 
     @Test

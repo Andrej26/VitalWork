@@ -69,6 +69,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -109,6 +110,7 @@ import com.vitalwork.app.presentation.screens.sessions.components.EndSessionWatc
 import com.vitalwork.app.presentation.screens.sessions.components.LiveSensorCard
 import com.vitalwork.app.presentation.screens.sessions.components.SessionNotesField
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -201,6 +203,7 @@ fun SessionControlScreen(
 
     // Snackbar
     val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     // Dialog states
     var showBackDialog by remember { mutableStateOf(false) }
@@ -597,6 +600,25 @@ fun SessionControlScreen(
                 connectionState = watchConnectionState,
                 batteryLevel = watchBatteryLevel,
                 statusLabel = watchLinkStatusLabel(watchConnectionState, watchLinkStatus),
+                // The watch needs no pairing (the Wave app manages that) — it only needs the phone's
+                // Bluetooth on for the Data Layer to run over direct BT. So a tap anywhere on the group
+                // enables Bluetooth when it's off, otherwise nudges the operator to start tracking.
+                onClick = {
+                    if (!bluetoothEnabled) {
+                        @Suppress("DEPRECATION")
+                        enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+                    } else {
+                        scope.launch {
+                            snackbarHostState.showSnackbar(
+                                message = "Bluetooth is on. Make sure the watch's Wave app is " +
+                                    "running and tracking.",
+                                duration = SnackbarDuration.Short
+                            )
+                        }
+                    }
+                },
+                clickHint = if (!bluetoothEnabled) "Tap to enable Bluetooth"
+                            else "Tap for connection help",
                 footer = {
                     PulseRrRow(
                         label = "IBI",
