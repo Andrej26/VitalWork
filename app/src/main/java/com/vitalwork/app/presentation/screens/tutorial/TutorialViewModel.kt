@@ -14,6 +14,8 @@ import com.vitalwork.app.data.sensor.DeviceState
 import com.vitalwork.app.data.sensor.SensorDevice
 import com.vitalwork.app.data.sensor.ble.BleManager
 import com.vitalwork.app.data.sensor.ble.model.BleDevice
+import com.vitalwork.app.data.sensor.watch.WatchLinkStatus
+import com.vitalwork.app.data.sensor.watch.WatchSensorReceiver
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,22 +37,27 @@ data class TutorialUiState(
     val locationEnabled: Boolean = true,
     // Respiration
     val respirationState: DeviceState = DeviceState.Disconnected,
-    val audioPermissionGranted: Boolean = false
+    val audioPermissionGranted: Boolean = false,
+    // Galaxy Watch (passive — the watch companion app pushes data; the tablet only receives)
+    val watchLinkStatus: WatchLinkStatus = WatchLinkStatus.DISCONNECTED,
+    val watchBatteryLevel: Int? = null
 )
 
 @HiltViewModel
 class TutorialViewModel @Inject constructor(
     private val bleManager: BleManager,
     @Named("respiration") private val respirationSensor: SensorDevice,
+    private val watchSensorReceiver: WatchSensorReceiver,
     private val tutorialPreferences: TutorialPreferencesRepository,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     /**
      * Total tutorial slides — must match the slide list in TutorialScreen (1 welcome + 3 heart-rate
-     * + 4 respiration + 1 complete = 9). Used to bound step navigation. The VR phase was removed.
+     * + 4 respiration + 4 galaxy-watch + 1 complete = 13). Used to bound step navigation. The VR phase
+     * was removed.
      */
-    val totalSteps: Int = 9
+    val totalSteps: Int = 13
 
     private val _uiState = MutableStateFlow(TutorialUiState())
     val uiState: StateFlow<TutorialUiState> = _uiState.asStateFlow()
@@ -71,6 +78,7 @@ class TutorialViewModel @Inject constructor(
         )
         observeBleState()
         observeRespirationState()
+        observeWatchState()
     }
 
     private fun observeBleState() {
@@ -100,6 +108,26 @@ class TutorialViewModel @Inject constructor(
         viewModelScope.launch {
             respirationSensor.state.collect { state ->
                 _uiState.update { it.copy(respirationState = state) }
+            }
+        }
+    }
+
+    /**
+     * Observe the Galaxy Watch link. Unlike the eSense sensors there is no tablet-side connect — the
+     * watch companion app pushes readings and the tablet infers the link state in [WatchSensorReceiver].
+     * The tutorial step just mirrors that inferred status (LIVE/DOZING/DISCONNECTED) + battery so the
+     * operator can confirm the watch is actually streaming. The phone-Bluetooth warning reuses the same
+     * [TutorialUiState.bluetoothEnabled] flag already driven by the heart-rate step.
+     */
+    private fun observeWatchState() {
+        viewModelScope.launch {
+            watchSensorReceiver.linkStatus.collect { status ->
+                _uiState.update { it.copy(watchLinkStatus = status) }
+            }
+        }
+        viewModelScope.launch {
+            watchSensorReceiver.batteryLevel.collect { battery ->
+                _uiState.update { it.copy(watchBatteryLevel = battery) }
             }
         }
     }
