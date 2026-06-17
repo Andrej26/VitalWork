@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class SessionExport(
-    val version: String = "2.0.0",
+    val version: String = "2.1.0",
     val exportedAt: String,
     val participant: ParticipantExport,
     val session: SessionInfo,
@@ -34,7 +34,9 @@ data class SessionStatistics(
     val hrSampleCount: Int,
     val respirationSampleCount: Int,
     val rrIntervalSampleCount: Int,
-    val edaSampleCount: Int
+    val edaSampleCount: Int,
+    val watchHrSampleCount: Int,
+    val watchIbiSampleCount: Int
 )
 
 @Serializable

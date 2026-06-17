@@ -118,23 +118,57 @@ class SessionExportMapperTest {
     }
 
     @Test
-    fun buildExportData_statisticsReflectSession() = runTest {
+        fun buildExportData_statisticsDerivedFromExportedSamples() = runTest {
         val participant = participant()
+        // Stored counters are deliberately wrong/stale — statistics must ignore them and count the
+        // samples actually being exported instead.
         val session = session(
-            scenarioCount = 3,
-            hrSampleCount = 100,
-            respirationSampleCount = 50,
-            rrIntervalSampleCount = 80,
-            edaSampleCount = 12
+            scenarioCount = 99,
+            hrSampleCount = 0,
+            respirationSampleCount = 0,
+            rrIntervalSampleCount = 0,
+            edaSampleCount = 0
         )
+        val scenario = scenario(id = 7L)
+        fakeSensorSampleDao.samples.addAll(listOf(
+            sample(scenario.id, SensorType.ESENSE_HEART_RATE),
+            sample(scenario.id, SensorType.ESENSE_HEART_RATE),
+            sample(scenario.id, SensorType.RESPIRATION),
+            sample(scenario.id, SensorType.ESENSE_RR_INTERVAL),
+            sample(scenario.id, SensorType.WATCH_EDA),
+            sample(scenario.id, SensorType.WATCH_HR),
+            sample(scenario.id, SensorType.WATCH_HR),
+            sample(scenario.id, SensorType.WATCH_HR),
+            sample(scenario.id, SensorType.WATCH_IBI)
+        ))
 
-        val result = mapper.buildExportData(participant, session, emptyList())
+        val result = mapper.buildExportData(participant, session, listOf(scenario))
 
-        assertEquals(3, result.session.statistics.scenarioCount)
-        assertEquals(100, result.session.statistics.hrSampleCount)
-        assertEquals(50, result.session.statistics.respirationSampleCount)
-        assertEquals(80, result.session.statistics.rrIntervalSampleCount)
-        assertEquals(12, result.session.statistics.edaSampleCount)
+        assertEquals(1, result.session.statistics.scenarioCount)
+        assertEquals(2, result.session.statistics.hrSampleCount)
+        assertEquals(1, result.session.statistics.respirationSampleCount)
+        assertEquals(1, result.session.statistics.rrIntervalSampleCount)
+        assertEquals(1, result.session.statistics.edaSampleCount)
+        assertEquals(3, result.session.statistics.watchHrSampleCount)
+        assertEquals(1, result.session.statistics.watchIbiSampleCount)
+    }
+
+    @Test
+    fun buildExportData_statisticsCountUnfinishedScenarios() = runTest {
+        val participant = participant()
+        val session = session()
+        // A scenario that ended abnormally (endedAt == null) — its samples must still be counted.
+        val unfinished = scenario(id = 8L, endedAt = null)
+        fakeSensorSampleDao.samples.addAll(listOf(
+            sample(unfinished.id, SensorType.ESENSE_HEART_RATE),
+            sample(unfinished.id, SensorType.WATCH_HR)
+        ))
+
+        val result = mapper.buildExportData(participant, session, listOf(unfinished))
+
+        assertEquals(1, result.session.statistics.scenarioCount)
+        assertEquals(1, result.session.statistics.hrSampleCount)
+        assertEquals(1, result.session.statistics.watchHrSampleCount)
     }
 
     @Test
@@ -180,7 +214,7 @@ class SessionExportMapperTest {
         assertEquals("VW-260528-143012", result.session.sessionCode)
         assertEquals("UPLOADED", result.session.status)
         assertEquals("WiFi dropped at min 7", result.session.notes)
-        assertEquals("2.0.0", result.version)
+        assertEquals("2.1.0", result.version)
     }
 
     // -- Helpers --
@@ -221,7 +255,8 @@ class SessionExportMapperTest {
         sessionId: Long = 1L,
         code: ScenarioCode = ScenarioCode.FALLING_PALLET,
         eventTimestampMs: Long? = null,
-        reactionTimestampMs: Long? = null
+        reactionTimestampMs: Long? = null,
+        endedAt: Long? = 1_060_000L
     ): ScenarioEntity {
         val actualId = id ?: nextScenarioId++
         return ScenarioEntity(
@@ -230,7 +265,7 @@ class SessionExportMapperTest {
             scenarioCode = code,
             scenarioCategory = code.category,
             startedAt = 1_000_000L,
-            endedAt = 1_060_000L,
+            endedAt = endedAt,
             eventTimestampMs = eventTimestampMs,
             reactionTimestampMs = reactionTimestampMs
         )
