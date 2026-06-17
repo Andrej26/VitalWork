@@ -155,7 +155,7 @@ class ScenarioRecordingRepositoryImpl(
         // Start sensor collectors
         if (shouldRecordHr) {
             collectorJobs += collectSensor(
-                bleManager.heartRateSampleFlow, SensorType.ESENSE_HEART_RATE
+                bleManager.heartRateSampleFlow, SensorType.ESENSE_HEART_RATE, dedupSameMillis = true
             ) { it.copy(heartRateSampleCount = it.heartRateSampleCount + 1) }
 
             collectorJobs += collectSensor(
@@ -205,10 +205,20 @@ class ScenarioRecordingRepositoryImpl(
     private fun collectSensor(
         flow: SharedFlow<Float>,
         sensorType: SensorType,
+        dedupSameMillis: Boolean = false,
         updateMetadata: (ScenarioMetadata) -> ScenarioMetadata
     ): Job = scope.launch {
+        // For sensors that report one value per instant (HR), drop a reading stamped with the same
+        // millisecond as the previous write. The eSense Pulse occasionally bursts two HR notifications
+        // into the same millisecond; both get the same timeProvider.nowMs(), producing byte-identical
+        // duplicate rows (~8% of HR samples). NOT used for RR intervals, where several DISTINCT
+        // intervals legitimately arrive in one notification and share a timestamp (see
+        // BleManagerImpl.handleHeartRateData) — deduping those would discard real beat data.
+        var lastWrittenMs = Long.MIN_VALUE
         flow.collect { value ->
             val now = timeProvider.nowMs()
+            if (dedupSameMillis && now == lastWrittenMs) return@collect
+            lastWrittenMs = now
             writeChannel.send(
                 SensorSampleEntity(
                     scenarioId = currentScenarioId,
