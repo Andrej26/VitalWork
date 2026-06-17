@@ -13,6 +13,7 @@ import com.vitalwork.app.data.sensor.ble.BleManager
 import com.vitalwork.app.data.sensor.watch.WatchFlushState
 import com.vitalwork.app.data.sensor.watch.WatchSensorReceiver
 import com.vitalwork.app.data.time.TimeProvider
+import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -84,6 +85,7 @@ class ScenarioRecordingRepositoryImpl(
     override suspend fun startRecording(scenarioId: Long, scenarioIdentifier: String) {
         if (_recordingState.value == DataRecordingState.RECORDING) return
 
+        Log.i(TAG, "startRecording scenarioId=$scenarioId ($scenarioIdentifier)")
         startTimeMs = timeProvider.nowMs()
         currentScenarioId = scenarioId
 
@@ -176,6 +178,7 @@ class ScenarioRecordingRepositoryImpl(
     override suspend fun stopRecording() {
         if (_recordingState.value != DataRecordingState.RECORDING) return
 
+        Log.i(TAG, "stopRecording scenarioId=$currentScenarioId (clean close)")
         // Cancel collectors
         collectorJobs.forEach { it.cancel() }
         collectorJobs.clear()
@@ -345,5 +348,9 @@ class ScenarioRecordingRepositoryImpl(
             watchHighWaterMarks.clear()
             activeWatchTarget = null
         }
+    }
+
+    private companion object {
+        private const val TAG = "VitalWorkLifecycle"
     }
 }

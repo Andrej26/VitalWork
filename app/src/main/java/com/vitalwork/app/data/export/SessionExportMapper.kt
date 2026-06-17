@@ -71,7 +71,9 @@ class SessionExportMapper @Inject constructor(
                     hrSampleCount = session.hrSampleCount,
                     respirationSampleCount = session.respirationSampleCount,
                     rrIntervalSampleCount = session.rrIntervalSampleCount,
-                    edaSampleCount = session.edaSampleCount
+                    edaSampleCount = session.edaSampleCount,
+                    watchHrSampleCount = session.watchHrSampleCount,
+                    watchIbiSampleCount = session.watchIbiSampleCount
                 )
             ),
             scenarios = scenarioExports
