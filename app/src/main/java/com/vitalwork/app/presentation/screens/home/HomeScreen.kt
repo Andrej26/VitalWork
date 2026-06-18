@@ -11,7 +11,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.WifiFind
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -247,22 +246,18 @@ fun HomeScreen(
                     )
                 }
 
-                PrimaryActionButton(
-                    title = "Change Mode",
-                    subtitle = if (deviceMode == PeerRole.SERVER) "Currently: Server"
-                        else if (deviceMode == PeerRole.CLIENT) "Currently: Client"
-                        else "Pick Server or Client",
-                    onClick = onNavigateToModeSelection,
-                    icon = Icons.Default.SwapHoriz,
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                )
+                HorizontalDivider()
 
-                // The Sensors/Tutorial/Settings row belongs to the operator (client) home only.
-                if (deviceMode != PeerRole.SERVER) {
-                    HorizontalDivider()
-
+                // Change Mode lives in the small-icon row alongside Sensors/Tutorial/Settings.
+                // Those three are operator-only, so in Server mode the row carries just Change Mode
+                // (still the way back out of the bare Server home).
+                if (deviceMode == PeerRole.SERVER) {
                     SecondaryNavRow(
+                        onChangeMode = onNavigateToModeSelection
+                    )
+                } else {
+                    SecondaryNavRow(
+                        onChangeMode = onNavigateToModeSelection,
                         onSensors = onNavigateToSensors,
                         onTutorial = onNavigateToTutorial,
                         onSettings = onNavigateToSettings
