@@ -90,17 +90,16 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.kotlinx.serialization.json)
 
-    // VR link: embedded HTTP server (tablet receives the Quest's scenario-event POSTs)
-    implementation(libs.ktor.server.core)
-    implementation(libs.ktor.server.cio)
-    implementation(libs.ktor.server.content.negotiation)
-    implementation(libs.ktor.serialization.kotlinx.json)
     implementation(files("libs/eSense_sdk_2_lib.jar"))
 
     // Session upload: HTTP client (tablet POSTs completed sessions to the VitalWork server)
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.cio)
     implementation(libs.ktor.client.content.negotiation)
+    implementation(libs.ktor.serialization.kotlinx.json)
+
+    // Device-to-device link: WebSocket server + client (peer pairing, later WebRTC signaling)
+    implementation(libs.java.websocket)
 
     // Wearable Data Layer (receive Galaxy Watch sensor stream over ChannelClient)
     implementation(libs.play.services.wearable)

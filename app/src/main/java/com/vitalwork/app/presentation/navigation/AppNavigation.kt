@@ -8,6 +8,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.vitalwork.app.presentation.screens.home.HomeScreen
+import com.vitalwork.app.presentation.screens.link.PeerLinkScreen
 import com.vitalwork.app.presentation.screens.participants.ParticipantEntryScreen
 import com.vitalwork.app.presentation.screens.sensors.SensorDetailScreen
 import com.vitalwork.app.presentation.screens.sensors.SensorsScreen
@@ -34,6 +35,9 @@ sealed class Route(val route: String) {
     }
     data object Tutorial : Route("tutorial")
     data object Settings : Route("settings")
+    data object PeerLink : Route("link/{role}") {
+        fun createRoute(role: String) = "link/$role"
+    }
 }
 
 @Composable
@@ -58,7 +62,22 @@ fun AppNavigation(
                 },
                 onNavigateToSessionReview = { sessionId ->
                     navController.navigate(Route.SessionReview.createRoute(sessionId))
+                },
+                onNavigateToLinkServer = {
+                    navController.navigate(Route.PeerLink.createRoute("server"))
+                },
+                onNavigateToLinkClient = {
+                    navController.navigate(Route.PeerLink.createRoute("client"))
                 }
+            )
+        }
+
+        composable(
+            route = Route.PeerLink.route,
+            arguments = listOf(navArgument("role") { type = NavType.StringType })
+        ) {
+            PeerLinkScreen(
+                onNavigateBack = { navController.popBackStack() }
             )
         }
 

@@ -11,6 +11,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.WifiFind
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -57,6 +59,8 @@ fun HomeScreen(
     onNavigateToParticipantEntry: () -> Unit,
     onNavigateToSessionActive: (Long) -> Unit,
     @Suppress("UNUSED_PARAMETER") onNavigateToSessionReview: (Long) -> Unit,
+    onNavigateToLinkServer: () -> Unit,
+    onNavigateToLinkClient: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val activeSession by viewModel.activeSession.collectAsState()
@@ -187,6 +191,24 @@ fun HomeScreen(
                             )
                         }
                     }
+                )
+
+                PrimaryActionButton(
+                    title = "Connect as Server",
+                    subtitle = "Host the device link (other device connects)",
+                    onClick = onNavigateToLinkServer,
+                    icon = Icons.Default.Wifi,
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                )
+
+                PrimaryActionButton(
+                    title = "Connect as Client",
+                    subtitle = "Find and connect to a hosting device",
+                    onClick = onNavigateToLinkClient,
+                    icon = Icons.Default.WifiFind,
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
                 )
 
                 PrimaryActionButton(

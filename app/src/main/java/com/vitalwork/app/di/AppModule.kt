@@ -67,6 +67,12 @@ abstract class AppBindsModule {
     abstract fun bindWatchCommandSender(
         impl: com.vitalwork.app.data.sensor.watch.WatchCommandSenderImpl
     ): com.vitalwork.app.data.sensor.watch.WatchCommandSender
+
+    @Binds
+    @Singleton
+    abstract fun bindPeerLinkManager(
+        impl: com.vitalwork.app.data.link.PeerLinkManagerImpl
+    ): com.vitalwork.app.data.link.PeerLinkManager
 }
 
 @Module
