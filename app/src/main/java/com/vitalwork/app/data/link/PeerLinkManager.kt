@@ -15,6 +15,14 @@ import kotlinx.coroutines.flow.StateFlow
 interface PeerLinkManager {
     val connectionState: StateFlow<ConnectionState>
 
+    /** True while a persistent link is up (server hosting, or client connected) — drives the
+     *  foreground service and whether [com.vitalwork.app.presentation.screens.link.PeerLinkViewModel]
+     *  should preserve the link when its screen closes. False while merely discovering. */
+    val isActive: StateFlow<Boolean>
+
+    /** The role of the active link, or null when none is active. */
+    val activeRole: StateFlow<PeerRole?>
+
     /** Discovered peers (client role). Empty in server role. */
     val discoveredDevices: StateFlow<List<PeerDevice>>
 

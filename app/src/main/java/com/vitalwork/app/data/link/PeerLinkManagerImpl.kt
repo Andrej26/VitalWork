@@ -5,6 +5,8 @@ import android.util.Log
 import com.vitalwork.app.data.link.model.PeerDevice
 import com.vitalwork.app.data.link.model.PeerMessage
 import com.vitalwork.app.data.model.ConnectionState
+import com.vitalwork.app.data.system.KeepAliveCoordinator
+import com.vitalwork.app.data.system.KeepAliveReason
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -35,7 +37,8 @@ import javax.inject.Singleton
  */
 @Singleton
 class PeerLinkManagerImpl @Inject constructor(
-    private val mdns: PeerMdnsService
+    private val mdns: PeerMdnsService,
+    private val keepAlive: KeepAliveCoordinator
 ) : PeerLinkManager {
 
     companion object {
@@ -43,6 +46,9 @@ class PeerLinkManagerImpl @Inject constructor(
         const val PORT = 9090
         private const val MAX_LOG_LINES = 200
         private const val STOP_TIMEOUT_MS = 1000
+        // Periodic WebSocket ping interval: keeps NAT/AP idle timers from dropping a backgrounded
+        // socket, and detects a dead peer (→ onClose → terminal teardown).
+        private const val CONNECTION_LOST_TIMEOUT_S = 30
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -59,6 +65,12 @@ class PeerLinkManagerImpl @Inject constructor(
 
     private val _peerLabel = MutableStateFlow<String?>(null)
     override val peerLabel: StateFlow<String?> = _peerLabel.asStateFlow()
+
+    private val _isActive = MutableStateFlow(false)
+    override val isActive: StateFlow<Boolean> = _isActive.asStateFlow()
+
+    private val _activeRole = MutableStateFlow<PeerRole?>(null)
+    override val activeRole: StateFlow<PeerRole?> = _activeRole.asStateFlow()
 
     private var server: WebSocketServer? = null
     private var serverConn: WebSocket? = null
@@ -101,11 +113,13 @@ class PeerLinkManagerImpl @Inject constructor(
             }
         }
         s.isReuseAddr = true
+        s.connectionLostTimeout = CONNECTION_LOST_TIMEOUT_S
         server = s
         try {
             s.start()
             mdns.register(deviceName, PORT)
             _connectionState.value = ConnectionState.CONNECTING
+            markActive(PeerRole.SERVER)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start server", e)
             log("Failed to start server: ${e.message}")
@@ -139,23 +153,46 @@ class PeerLinkManagerImpl @Inject constructor(
 
             override fun onClose(code: Int, reason: String?, remote: Boolean) {
                 log("Disconnected (code=$code ${reason.orEmpty()})")
-                _connectionState.value = ConnectionState.DISCONNECTED
+                // The server shut down / the link dropped — terminate the client's own connection.
+                terminateClientLink()
             }
 
             override fun onError(ex: Exception?) {
                 Log.e(TAG, "Client error", ex)
                 log("Client error: ${ex?.message}")
-                _connectionState.value = ConnectionState.ERROR
+                terminateClientLink()
             }
         }
+        c.connectionLostTimeout = CONNECTION_LOST_TIMEOUT_S
         client = c
+        markActive(PeerRole.CLIENT)
         try {
             c.connect()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to connect", e)
             log("Failed to connect: ${e.message}")
-            _connectionState.value = ConnectionState.ERROR
+            terminateClientLink()
         }
+    }
+
+    /**
+     * Fully tears down the client side when its link drops (server gone, network lost, error): closes
+     * the socket, clears the connected peer, releases keep-alive (so the foreground service stops),
+     * and returns to a clean discovery state — `stopDiscovery`/`startDiscovery` drop the stale peer
+     * list so the dead server doesn't linger, and rescan so the user can reconnect.
+     *
+     * Idempotent and skips the manual-disconnect path: [stop] nulls `client` first, so the follow-up
+     * `onClose` finds it already cleared and returns without rescanning.
+     */
+    private fun terminateClientLink() {
+        val old = client ?: return
+        client = null
+        _peerLabel.value = null
+        _connectionState.value = ConnectionState.DISCONNECTED
+        clearActive()
+        scope.launch { runCatching { old.close() } }
+        mdns.startDiscovery()
+        log("Link lost — rescanning for peers")
     }
 
     override fun sendMessage(text: String) {
@@ -178,12 +215,28 @@ class PeerLinkManagerImpl @Inject constructor(
         client = null
         _connectionState.value = ConnectionState.DISCONNECTED
         _peerLabel.value = null
+        clearActive()
         // server.stop() blocks up to the timeout — never on the caller's (possibly main) thread.
         scope.launch {
             runCatching { oldServerConn?.close() }
             runCatching { oldClient?.close() }
             runCatching { oldServer?.stop(STOP_TIMEOUT_MS) }
         }
+    }
+
+    /** Mark a persistent link active and acquire the app-wide keep-alive (starts the FGS). */
+    private fun markActive(role: PeerRole) {
+        _activeRole.value = role
+        _isActive.value = true
+        keepAlive.acquire(KeepAliveReason.LINK)
+    }
+
+    /** Clear active state and release keep-alive (lets the FGS stop if nothing else needs it). */
+    private fun clearActive() {
+        if (!_isActive.value && _activeRole.value == null) return
+        _isActive.value = false
+        _activeRole.value = null
+        keepAlive.release(KeepAliveReason.LINK)
     }
 
     private fun greeting() =

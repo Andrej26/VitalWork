@@ -76,9 +76,10 @@
             </intent-filter>
         </activity>
 
-        <!-- Keeps the process alive (and mic/BLE/network legal) while a session is recording -->
+        <!-- Single app-wide foreground service: keeps the process (sensors + device link) alive and
+             mic/BLE/network legal while any session or connection is active. -->
         <service
-            android:name=".service.SessionRecordingService"
+            android:name=".service.BackgroundConnectionService"
             android:exported="false"
             android:foregroundServiceType="microphone|connectedDevice|dataSync" />
 

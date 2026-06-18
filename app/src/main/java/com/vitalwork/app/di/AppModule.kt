@@ -7,6 +7,7 @@ import com.vitalwork.app.data.db.ParticipantDao
 import com.vitalwork.app.data.db.ScenarioDao
 import com.vitalwork.app.data.db.SensorSampleDao
 import com.vitalwork.app.data.db.SessionDao
+import com.vitalwork.app.data.db.SessionEntity
 import com.vitalwork.app.data.export.SessionExportService
 import com.vitalwork.app.data.export.SessionExporter
 import com.vitalwork.app.data.export.SessionUploader
@@ -14,6 +15,9 @@ import com.vitalwork.app.data.export.upload.SessionHttpUploader
 import com.vitalwork.app.data.recording.ScenarioRecordingRepository
 import com.vitalwork.app.data.recording.ScenarioRecordingRepositoryImpl
 import com.vitalwork.app.data.repository.ScenarioRepository
+import com.vitalwork.app.data.repository.SessionRepository
+import com.vitalwork.app.data.system.ForegroundServiceLauncher
+import com.vitalwork.app.data.system.ForegroundServiceLauncherImpl
 import com.vitalwork.app.data.sensor.SensorDevice
 import com.vitalwork.app.data.sensor.audio.MindfieldRespiration
 import com.vitalwork.app.data.sensor.ble.BleManager
@@ -35,6 +39,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Named
 import javax.inject.Singleton
@@ -73,6 +78,12 @@ abstract class AppBindsModule {
     abstract fun bindPeerLinkManager(
         impl: com.vitalwork.app.data.link.PeerLinkManagerImpl
     ): com.vitalwork.app.data.link.PeerLinkManager
+
+    @Binds
+    @Singleton
+    abstract fun bindForegroundServiceLauncher(
+        impl: ForegroundServiceLauncherImpl
+    ): ForegroundServiceLauncher
 }
 
 @Module
@@ -84,6 +95,14 @@ object AppModule {
     @Named("lanAvailable")
     fun provideLanAvailableFlow(networkChecker: NetworkChecker): StateFlow<Boolean> =
         networkChecker.lanAvailable
+
+    /** The active-session flow, injected into [com.vitalwork.app.data.system.KeepAliveCoordinator]
+     *  so its reason-set logic stays decoupled from the repository (and host-JVM testable). */
+    @Provides
+    @Singleton
+    @Named("activeSession")
+    fun provideActiveSessionFlow(sessionRepository: SessionRepository): Flow<SessionEntity?> =
+        sessionRepository.activeSession
 
     /**
      * NTP clock used for offset correction (never sets the system clock). [TimeProvider] wraps this;

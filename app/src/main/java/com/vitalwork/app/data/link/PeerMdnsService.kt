@@ -146,6 +146,10 @@ class PeerMdnsService @Inject constructor(
     }
 
     fun stopDiscovery() {
+        // Always drop the discovered list so a stale peer never lingers after the link ends — even if
+        // discovery was already stopped (e.g. it's stopped at connect time, then the link drops).
+        _discoveredDevices.value = emptyList()
+        pendingResolves.clear()
         val listener = discoveryListener ?: return
         discoveryListener = null
         try {
@@ -153,7 +157,6 @@ class PeerMdnsService @Inject constructor(
         } catch (e: Exception) {
             Log.e(TAG, "Failed to stop discovery", e)
         }
-        pendingResolves.clear()
         releaseLockIfIdle()
     }
 

@@ -3,6 +3,9 @@ package com.vitalwork.app.presentation.screens.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.vitalwork.app.data.db.SessionEntity
+import com.vitalwork.app.data.link.PeerLinkManager
+import com.vitalwork.app.data.link.PeerRole
+import com.vitalwork.app.data.model.ConnectionState
 import com.vitalwork.app.data.prefs.TutorialPreferencesRepository
 import com.vitalwork.app.data.repository.SessionRepository
 import com.vitalwork.app.data.sensor.watch.WatchBatteryAlert
@@ -26,8 +29,14 @@ class HomeViewModel @Inject constructor(
     private val sessionRepository: SessionRepository,
     private val tutorialPreferences: TutorialPreferencesRepository,
     private val readinessChecker: SystemReadinessChecker,
-    private val watchReceiver: WatchSensorReceiver
+    private val watchReceiver: WatchSensorReceiver,
+    linkManager: PeerLinkManager
 ) : ViewModel() {
+
+    /** Device-link status for the Home dots: CONNECTED/etc. for the active role, DISCONNECTED for
+     *  the other (a link runs in only one role at a time). */
+    val linkConnectionState: StateFlow<ConnectionState> = linkManager.connectionState
+    val linkActiveRole: StateFlow<PeerRole?> = linkManager.activeRole
 
     /**
      * Session prerequisites currently missing. Re-derived from live OS state via [refresh] on

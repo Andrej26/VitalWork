@@ -40,9 +40,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import android.Manifest
+import com.vitalwork.app.data.link.PeerRole
+import com.vitalwork.app.data.model.ConnectionState
 import com.vitalwork.app.data.system.SessionPrerequisite
 import com.vitalwork.app.data.system.SystemReadinessChecker
 import com.vitalwork.app.presentation.components.ReadinessWarningCard
+import com.vitalwork.app.presentation.components.connectionStatusColor
 import com.vitalwork.app.presentation.components.WatchBatteryWarningCard
 import com.vitalwork.app.presentation.components.onPermissionDenied
 import com.vitalwork.app.service.BatteryOptimizationHelper
@@ -69,6 +72,8 @@ fun HomeScreen(
     val missingPrerequisites by viewModel.missingPrerequisites.collectAsState()
     val watchBatteryAlert by viewModel.watchBatteryAlert.collectAsState()
     val watchBatteryLevel by viewModel.watchBatteryLevel.collectAsState()
+    val linkConnectionState by viewModel.linkConnectionState.collectAsState()
+    val linkActiveRole by viewModel.linkActiveRole.collectAsState()
 
     val context = LocalContext.current
 
@@ -193,13 +198,23 @@ fun HomeScreen(
                     }
                 )
 
+                // A link runs in one role at a time: show the live status dot on that role's button,
+                // gray on the other. Same gray/green indicator the sensors use.
+                val serverDotColor = connectionStatusColor(
+                    if (linkActiveRole == PeerRole.SERVER) linkConnectionState else ConnectionState.DISCONNECTED
+                )
+                val clientDotColor = connectionStatusColor(
+                    if (linkActiveRole == PeerRole.CLIENT) linkConnectionState else ConnectionState.DISCONNECTED
+                )
+
                 PrimaryActionButton(
                     title = "Connect as Server",
                     subtitle = "Host the device link (other device connects)",
                     onClick = onNavigateToLinkServer,
                     icon = Icons.Default.Wifi,
                     containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                    trailingDotColor = serverDotColor
                 )
 
                 PrimaryActionButton(
@@ -208,7 +223,8 @@ fun HomeScreen(
                     onClick = onNavigateToLinkClient,
                     icon = Icons.Default.WifiFind,
                     containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                    trailingDotColor = clientDotColor
                 )
 
                 PrimaryActionButton(

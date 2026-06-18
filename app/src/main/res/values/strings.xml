@@ -1,10 +1,13 @@
 <resources>
     <string name="app_name">VitalWork</string>
 
-    <!-- Recording foreground service -->
-    <string name="recording_channel_name">Recording sessions</string>
-    <string name="recording_channel_description">Keeps sensor recording and the VR connection alive while a session is in progress.</string>
-    <string name="recording_notification_title">VitalWork session active</string>
+    <!-- Background foreground service (sessions + device link) -->
+    <string name="background_channel_name">Background activity</string>
+    <string name="background_channel_description">Keeps recording sessions and device links alive while the screen is off.</string>
+    <string name="background_notification_title">VitalWork running</string>
     <string name="recording_notification_idle">Session active — ready to record</string>
     <string name="recording_notification_recording">Recording — %1$s</string>
+    <string name="link_notification_connected">Device link connected (%1$s)</string>
+    <string name="link_notification_hosting">Device link active</string>
+    <string name="notification_disconnect">Disconnect</string>
 </resources>

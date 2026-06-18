@@ -80,7 +80,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.vitalwork.app.data.db.SessionStatus
 import com.vitalwork.app.data.model.ConnectionState
 import com.vitalwork.app.data.recording.model.DataRecordingState
 import com.vitalwork.app.data.sensor.ble.model.BleDevice
@@ -90,7 +89,6 @@ import com.vitalwork.app.data.system.SessionPrerequisite
 import com.vitalwork.app.presentation.components.ReadinessWarningCard
 import com.vitalwork.app.presentation.components.onPermissionDenied
 import com.vitalwork.app.service.BatteryOptimizationHelper
-import com.vitalwork.app.service.SessionRecordingService
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.vitalwork.app.data.sensor.audio.LowSignalWarning
@@ -216,15 +214,9 @@ fun SessionControlScreen(
         viewModel.setupNotesAutoSave()
     }
 
-    // Keep the process alive (and mic/BLE/network legal) while the session is ACTIVE, so the
-    // operator can lock the screen mid-session. Started from this foreground screen; the service
-    // self-stops once the session is ended or discarded. Keyed on status because `session` loads
-    // asynchronously and re-entry into a pre-existing active session must also start it.
-    LaunchedEffect(session?.status) {
-        if (session?.status == SessionStatus.ACTIVE) {
-            SessionRecordingService.start(context)
-        }
-    }
+    // The single BackgroundConnectionService keeps the process alive (and mic/BLE/network legal)
+    // while a session is ACTIVE, so the operator can lock the screen mid-session. It's driven
+    // app-wide by KeepAliveCoordinator observing the active session — no explicit start needed here.
 
     // Check BLE permissions on entry
     LaunchedEffect(Unit) {
