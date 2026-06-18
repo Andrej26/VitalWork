@@ -4,7 +4,9 @@
 
 Two Android devices on the **same Wi-Fi**. One ("server"/operator) watches the live screen of the
 other ("client"/monitored device). Video flows **peer-to-peer over the LAN** via WebRTC — no media
-server, no cloud, no recurring cost. A small WebSocket carries only the setup messages.
+server, no cloud, no recurring cost (it's free to run all day; only battery/heat and local Wi-Fi
+bandwidth are consumed — see [webrtc_screen_share.md](webrtc_screen_share.md#cost-free-to-run)). A
+small WebSocket carries only the setup messages.
 
 ```
 Signaling (tiny text over WebSocket)        Media (video over WebRTC/UDP, P2P)

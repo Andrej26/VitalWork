@@ -27,6 +27,34 @@ Server ⇄  WebSocket  ⇄ Client    Server ⇄ WebRTC P2P (UDP) ⇄ Client
 
 ---
 
+## Cost: free to run
+
+Screen mirroring carries **no monetary cost** — no subscription, no per-minute/per-session fee, no
+metered backend. It runs entirely on your own hardware over your own network, so you can mirror
+continuously (all day) without paying anyone:
+
+- **Peer-to-peer over local Wi-Fi.** The two devices talk directly; the video never routes through a
+  paid cloud service, media server, or third-party relay.
+- **No API/service fees.** It uses Android's own MediaProjection (screen capture) + a WebRTC peer
+  connection. Nothing here bills per use (no Anthropic/cloud charges, no streaming service).
+- **No internet data transfer.** Because the media stays on the LAN, it doesn't consume cellular data
+  or metered ISP bandwidth. The only external call is to Google's **free public STUN** server, used
+  once to discover LAN addresses (a few tiny packets) — see [Network Scope](#network-scope-lan-only-no-turn).
+
+The only real costs are physical, not financial:
+
+- **Battery & heat.** Continuous screen capture + video encoding + radio is power-hungry; the sharing
+  (client) device drains and warms up faster.
+- **Local Wi-Fi bandwidth.** It uses your local network capacity, which can affect other devices on
+  the same Wi-Fi — but that's not a charge.
+
+**Caveat — this holds only for the on-device, LAN setup described here.** If the link were ever routed
+through a hosted **TURN** relay (for off-LAN use), a cloud streaming service, or over cellular data,
+*those* could cost money. The one piece that isn't free at scale is TURN, which this configuration does
+**not** use (see [Network Scope](#network-scope-lan-only-no-turn)).
+
+---
+
 ## Roles
 
 | Role | WebRTC role | Responsibility |

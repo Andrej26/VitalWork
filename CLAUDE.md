@@ -72,11 +72,14 @@ MainActivity (entry point)
 
 ## Application Purpose
 
-The app has three main responsibilities:
+The app has four main responsibilities:
 
 1. **VR Control** — embedded HTTP server (Ktor) that the Meta Quest VR app POSTs scenario events to over local Wi-Fi; the tablet advertises itself via a UDP presence beacon (Unreal Engine has no mDNS). The tablet stamps each event's arrival time (tablet clock only; no device sync)
 2. **Sensor Data Collection** — Gather physiological data (heart rate, RR intervals, ECG, respiration) from BLE and audio jack sensors
 3. **Test Management** — Organize anonymous clinical test sessions with recordings, SUDS scores, local storage, and JSON/CSV export
+4. **Device-to-Device Link + Screen Mirroring** — a direct tablet↔tablet/phone link over local Wi-Fi (server hosts, client connects; mDNS discovery + a WebSocket on port 9090) that also carries WebRTC signaling so the operator (server) can watch the monitored device's (client) live screen, peer-to-peer with no media server or cloud cost. See **Device-to-Device Link** below.
+
+**Device mode (launch picker):** on first launch the app asks whether this device is **Server** or **Client** (`ModeSelectionScreen`); the choice is persisted (`DeviceModePreferencesRepository`) so later launches skip straight to Home. Home is mode-aware: in **Server** mode it shows only **Connect as Server** plus a **Change Mode** button; in **Client** mode it shows the full operator home (sessions, sensors, etc.) minus **Connect as Server**. The mode can be changed any time via **Change Mode** on Home.
 
 **Target devices:** Android tablet and phone
 
@@ -140,6 +143,27 @@ miss the command) with the manual tap as fallback — but data is never lost (th
 acked). See [doc/sensor_galaxy_watch.md](doc/sensor_galaxy_watch.md) for the full rationale (incl. why
 FCM/Wi-Fi were rejected, and what does *not* work).
 
+## Device-to-Device Link & Screen Mirroring
+
+A direct tablet↔tablet/phone link over local Wi-Fi, separate from the VR link. One device is the
+**server** (host) and the other the **client**; the server opens a `WebSocketServer` on **port 9090**
+(advertised via mDNS), the client discovers and connects. The same WebSocket carries (a) pairing +
+a free-text diagnostics log and (b) **WebRTC signaling** (offer/answer/ICE) for **screen mirroring** —
+the operator (server) watches the monitored device's (client) live screen. The video itself flows
+**peer-to-peer over WebRTC/UDP**, not through the WebSocket. Screen mirroring is **free to run** (no
+media server, no cloud relay, no recurring cost — only Google's free public STUN for LAN address
+discovery); the only real costs are battery/heat and local Wi-Fi bandwidth. Off-LAN use would need a
+TURN relay (not used here).
+
+The link runs in **one role at a time** (`PeerLinkManager.activeRole`), kept alive across sleep by a
+foreground `BackgroundConnectionService`. Cleartext is allowed only for the LAN
+(`network_security_config.xml`); screen capture needs `FOREGROUND_SERVICE_MEDIA_PROJECTION` +
+`POST_NOTIFICATIONS`.
+
+Docs (in [doc/](doc/)): [peer_link_websocket.md](doc/peer_link_websocket.md) (link reference),
+[webrtc_screen_share.md](doc/webrtc_screen_share.md) (screen-mirror reference + cost analysis),
+[screen_share_reproduction.md](doc/screen_share_reproduction.md) (step-by-step recipe).
+
 ## Package Structure
 
 ```
@@ -170,8 +194,21 @@ com.vitalwork.app/
 │   │   └── ConnectionState.kt
 │   ├── network/
 │   │   └── NetworkChecker.kt               # LAN connectivity checker
+│   ├── link/                               # Device-to-device peer link (WebSocket on :9090 + mDNS)
+│   │   ├── PeerLinkManager.kt              # interface: start server/client, connection state, activeRole
+│   │   ├── PeerLinkManagerImpl.kt           # Java-WebSocket server/client + WebRTC signaling relay
+│   │   ├── PeerRole.kt                     # SERVER | CLIENT
+│   │   ├── PeerMdnsService.kt              # advertise/discover the peer over mDNS
+│   │   ├── LanAddress.kt                   # local LAN IP helper
+│   │   └── model/
+│   │       ├── PeerDevice.kt
+│   │       └── PeerMessage.kt              # @Serializable link envelope (greeting/test-msg/signaling)
+│   ├── webrtc/                             # Screen mirroring (server views client's screen, P2P)
+│   │   ├── WebRtcEngine.kt                 # libwebrtc (stream-webrtc-android) peer connection
+│   │   └── ScreenShareController.kt         # MediaProjection capture + offer/answer/ICE driving
 │   ├── prefs/
 │   │   ├── TutorialPreferencesRepository.kt
+│   │   ├── DeviceModePreferencesRepository.kt # Persisted Server/Client launch mode (SharedPrefs)
 │   │   └── SettingsRepository.kt            # Device prefix (A/B/C/D) for code generation; interface + SharedPrefs impl
 │   ├── recording/
 │   │   ├── GapDetector.kt                  # Sensor data gap detection
@@ -224,8 +261,17 @@ com.vitalwork.app/
 │   │   └── AppNavigation.kt
 │   └── screens/
 │       ├── home/
-│       │   ├── HomeScreen.kt
-│       │   └── HomeViewModel.kt
+│       │   ├── HomeScreen.kt               # Mode-aware dashboard (Server vs Client layout)
+│       │   ├── HomeViewModel.kt
+│       │   └── components/
+│       │       ├── PrimaryActionButton.kt
+│       │       └── SecondaryNavRow.kt
+│       ├── mode/                           # First-launch Server/Client picker (+ Change Mode)
+│       │   ├── ModeSelectionScreen.kt
+│       │   └── ModeSelectionViewModel.kt
+│       ├── link/                           # Peer-link diagnostics + screen-mirror controls
+│       │   ├── PeerLinkScreen.kt
+│       │   └── PeerLinkViewModel.kt
 │       ├── sensors/
 │       │   ├── SensorDetailScreen.kt        # Router to vendor-specific screens
 │       │   ├── SensorsScreen.kt
@@ -273,6 +319,9 @@ com.vitalwork.app/
 │       └── vr/
 │           ├── VRConnectionScreen.kt
 │           └── VRConnectionViewModel.kt
+├── service/
+│   ├── BackgroundConnectionService.kt       # Foreground service keeping link + screen-share alive
+│   └── BatteryOptimizationHelper.kt         # Prompts Doze exemption so the link survives sleep
 └── ui/theme/
     ├── Color.kt
     ├── Theme.kt
@@ -294,10 +343,14 @@ com.vitalwork.wear/
 
 ## Navigation Routes
 
+**Start destination** is chosen in `MainActivity` from the persisted device mode: `mode` (the picker) if no mode is set yet, otherwise `home`.
+
 | Route | Screen | Description |
 |-------|--------|-------------|
+| `mode` | ModeSelectionScreen | First-launch Server/Client picker; also reachable from Home via **Change Mode** |
 | `tutorial` | TutorialScreen | First-launch onboarding |
-| `home` | HomeScreen | Main dashboard with navigation cards |
+| `home` | HomeScreen | Mode-aware dashboard (Server shows only Connect-as-Server + Change Mode; Client shows the full home) |
+| `link/{role}` | PeerLinkScreen | Device-to-device link (`server`/`client`): pairing, diagnostics, and screen-mirror controls |
 | `vr_control` | VRConnectionScreen | VR link diagnostics (tablet IP/port + live received-event log) |
 | `settings` | SettingsScreen | Device prefix (A/B/C/D) tagging participant + session codes so parallel tablets don't collide |
 | `sensors` | SensorsScreen | List of available sensors |
@@ -346,6 +399,9 @@ eSense Pulse  ◄────BLE──────► BleManager ─────
 eSense Resp.  ◄────Audio────► MindfieldRespiration ► EsenseRespirationViewModel ► UI
 
 All sensors ──► ScenarioRecordingRepository ──► Room DB ──► SessionExportService ──► JSON/CSV
+
+Server (operator) ⇄ WebSocket :9090 (signaling) ⇄ Client (monitored)   via PeerLinkManager
+Server (viewer)   ◄── WebRTC P2P/UDP (live screen video) ── Client (sharer)   via WebRtcEngine/ScreenShareController
 ```
 
 ## Required Permissions
@@ -375,6 +431,16 @@ All sensors ──► ScenarioRecordingRepository ──► Room DB ──► Se
 
 <!-- Storage (legacy export, API <29 only) -->
 <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+
+<!-- Foreground services (peer link kept alive + screen mirroring) -->
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+
+<!-- Notifications (foreground-service notification; Android 13+) -->
+<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 ```
 
 ## Unit Tests
