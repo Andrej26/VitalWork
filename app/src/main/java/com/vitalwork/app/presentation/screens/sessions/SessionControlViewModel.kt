@@ -102,6 +102,13 @@ class SessionControlViewModel @Inject constructor(
 
     val sessionId: Long = savedStateHandle.get<Long>("sessionId") ?: -1L
 
+    /**
+     * Scenario number (1..5) picked on the scenario-selection screen, or 0 when the session was
+     * opened without a pick (e.g. resumed from the sessions list). Maps to a [ScenarioCode] for
+     * manual recording so the chosen scenario is what gets recorded.
+     */
+    private val selectedScenarioNumber: Int = savedStateHandle.get<Int>("scenario") ?: 0
+
     private val _session = MutableStateFlow<SessionEntity?>(null)
     val session: StateFlow<SessionEntity?> = _session.asStateFlow()
 
@@ -414,7 +421,7 @@ class SessionControlViewModel @Inject constructor(
             if (session.status != com.vitalwork.app.data.db.SessionStatus.ACTIVE) return@launch
             if (!anySensorConnected()) return@launch
 
-            val scenarioCode = com.vitalwork.app.data.db.ScenarioCode.FALLING_PALLET
+            val scenarioCode = scenarioCodeForSelection()
             val scenario = scenarioRepository.createScenario(
                 sessionId = session.id,
                 scenarioCode = scenarioCode
@@ -422,6 +429,17 @@ class SessionControlViewModel @Inject constructor(
             val scenarioIdentifier = "${session.sessionCode}-${scenarioCode.officialCode}"
             sensorRecordingRepository.startRecording(scenario.id, scenarioIdentifier)
         }
+    }
+
+    /**
+     * Resolve the [ScenarioCode] for the scenario picked on the selection screen. Numbers 1..5 map to
+     * the first five [ScenarioCode] entries (in declaration order); 0 / out-of-range falls back to the
+     * first entry so resuming a session from the list still records something sensible.
+     */
+    private fun scenarioCodeForSelection(): com.vitalwork.app.data.db.ScenarioCode {
+        val codes = com.vitalwork.app.data.db.ScenarioCode.entries
+        val index = (selectedScenarioNumber - 1).coerceIn(0, codes.lastIndex)
+        return codes[index]
     }
 
     /** Stop sensor capture and finalize the scenario row. */

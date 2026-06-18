@@ -115,6 +115,7 @@ import kotlinx.coroutines.launch
 fun SessionControlScreen(
     sessionId: Long,
     onNavigateBack: () -> Unit,
+    onCountdownFinished: () -> Unit,
     onSessionEnded: (sessionId: Long) -> Unit,
     viewModel: SessionControlViewModel = hiltViewModel()
 ) {
@@ -144,7 +145,6 @@ fun SessionControlScreen(
     val session by viewModel.session.collectAsState()
     val notes by viewModel.notes.collectAsState()
     val notesSaveStatus by viewModel.notesSaveStatus.collectAsState()
-    val isEndingSession by viewModel.isEndingSession.collectAsState()
     val endSessionResult by viewModel.endSessionResult.collectAsState()
 
     // BLE scan state
@@ -206,7 +206,6 @@ fun SessionControlScreen(
     // Dialog states
     var showBackDialog by remember { mutableStateOf(false) }
     var showDiscardConfirmation by remember { mutableStateOf(false) }
-    var showEndSessionConfirmation by remember { mutableStateOf(false) }
 
 
     // Setup auto-save for notes
@@ -333,31 +332,11 @@ fun SessionControlScreen(
         )
     }
 
-    // End session confirmation
-    if (showEndSessionConfirmation) {
-        AlertDialog(
-            onDismissRequest = { showEndSessionConfirmation = false },
-            title = { Text("End session?") },
-            text = { Text("Are you sure you want to end this session?") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showEndSessionConfirmation = false
-                    viewModel.requestEndSession()
-                }) {
-                    Text("End Session")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showEndSessionConfirmation = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
-
     // End-Session watch handshake: wake the watch → receive its stored data ("reconnecting" spinner) →
     // green check → auto-finalize. The watch store is only truncated after the data is persisted, so a
     // slow/partial transfer never loses data; "End without watch data" always escapes (keeps the store).
+    // End Session itself now lives on the scenario-selection hub; this dialog stays here only to drive
+    // the handshake/navigation if a finalize is already in flight when this screen is shown.
     EndSessionWatchDialog(
         phase = endSessionPhase,
         onEndWithoutWatchData = { viewModel.endWithoutWatchData() },
@@ -791,27 +770,67 @@ fun SessionControlScreen(
                 saveStatus = notesSaveStatus
             )
 
-            // End Session button
-            Button(
-                onClick = { showEndSessionConfirmation = true },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !isEndingSession
-            ) {
-                if (isEndingSession) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                }
-                Text("End Session & Save")
-            }
+            // Auto-return countdown: after 10 s this screen hands back to the scenario-selection hub.
+            ReturnCountdown(
+                seconds = 10,
+                onFinished = onCountdownFinished,
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .padding(top = 8.dp)
+            )
 
             Spacer(modifier = Modifier.height(16.dp))
         }
     }
     } // Box
+}
+
+/**
+ * A round [seconds]-second countdown: a circular ring that drains as time passes, with the remaining
+ * whole seconds shown in the center. Calls [onFinished] once when it reaches zero. Restarts whenever
+ * [seconds] changes (and on first composition).
+ */
+@Composable
+private fun ReturnCountdown(
+    seconds: Int,
+    onFinished: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var remainingMs by remember(seconds) { mutableStateOf(seconds * 1000L) }
+
+    LaunchedEffect(seconds) {
+        val totalMs = seconds * 1000L
+        val startedAt = System.currentTimeMillis()
+        while (true) {
+            val elapsed = System.currentTimeMillis() - startedAt
+            remainingMs = (totalMs - elapsed).coerceAtLeast(0L)
+            if (remainingMs == 0L) break
+            delay(50L)
+        }
+        onFinished()
+    }
+
+    val progress = (remainingMs.toFloat() / (seconds * 1000f)).coerceIn(0f, 1f)
+    val secondsLeft = ((remainingMs + 999L) / 1000L).toInt() // ceil so it shows 10..1 then fires
+
+    Box(
+        modifier = modifier.size(96.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        CircularProgressIndicator(
+            progress = { progress },
+            modifier = Modifier.fillMaxSize(),
+            strokeWidth = 6.dp,
+            color = MaterialTheme.colorScheme.primary,
+            trackColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+        Text(
+            text = secondsLeft.toString(),
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
 }
 
 @Composable

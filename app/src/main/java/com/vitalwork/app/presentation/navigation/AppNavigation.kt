@@ -13,6 +13,7 @@ import com.vitalwork.app.presentation.screens.mode.ModeSelectionScreen
 import com.vitalwork.app.presentation.screens.participants.ParticipantEntryScreen
 import com.vitalwork.app.presentation.screens.sensors.SensorDetailScreen
 import com.vitalwork.app.presentation.screens.sensors.SensorsScreen
+import com.vitalwork.app.presentation.screens.sessions.ScenarioSelectionScreen
 import com.vitalwork.app.presentation.screens.sessions.SessionControlScreen
 import com.vitalwork.app.presentation.screens.sessions.SessionDetailScreen
 import com.vitalwork.app.presentation.screens.sessions.SessionsScreen
@@ -27,8 +28,12 @@ sealed class Route(val route: String) {
     }
     data object Sessions : Route("sessions")
     data object ParticipantEntry : Route("participants/new")
-    data object SessionActive : Route("sessions/active/{sessionId}") {
-        fun createRoute(sessionId: Long) = "sessions/active/$sessionId"
+    data object ScenarioSelection : Route("sessions/scenario-select/{sessionId}") {
+        fun createRoute(sessionId: Long) = "sessions/scenario-select/$sessionId"
+    }
+    data object SessionActive : Route("sessions/active/{sessionId}?scenario={scenario}") {
+        fun createRoute(sessionId: Long, scenario: Int = 0) =
+            "sessions/active/$sessionId?scenario=$scenario"
     }
     data object SessionReview : Route("sessions/review/{sessionId}?showCsvSaved={showCsvSaved}") {
         fun createRoute(sessionId: Long, showCsvSaved: Boolean = false) =
@@ -152,7 +157,31 @@ fun AppNavigation(
             ParticipantEntryScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onSessionStarted = { sessionId ->
-                    navController.navigate(Route.SessionActive.createRoute(sessionId)) {
+                    navController.navigate(Route.ScenarioSelection.createRoute(sessionId)) {
+                        popUpTo(Route.Home.route)
+                    }
+                }
+            )
+        }
+
+        composable(
+            route = Route.ScenarioSelection.route,
+            arguments = listOf(
+                navArgument("sessionId") { type = NavType.LongType }
+            )
+        ) { backStackEntry ->
+            val sessionId = backStackEntry.arguments?.getLong("sessionId") ?: -1L
+            ScenarioSelectionScreen(
+                sessionId = sessionId,
+                onScenarioSelected = { scenarioNumber ->
+                    navController.navigate(
+                        Route.SessionActive.createRoute(sessionId, scenarioNumber)
+                    )
+                },
+                onSessionEnded = { endedSessionId ->
+                    navController.navigate(
+                        Route.SessionReview.createRoute(endedSessionId, showCsvSaved = true)
+                    ) {
                         popUpTo(Route.Home.route)
                     }
                 }
@@ -162,13 +191,30 @@ fun AppNavigation(
         composable(
             route = Route.SessionActive.route,
             arguments = listOf(
-                navArgument("sessionId") { type = NavType.LongType }
+                navArgument("sessionId") { type = NavType.LongType },
+                navArgument("scenario") {
+                    type = NavType.IntType
+                    defaultValue = 0
+                }
             )
         ) { backStackEntry ->
             val sessionId = backStackEntry.arguments?.getLong("sessionId") ?: -1L
             SessionControlScreen(
                 sessionId = sessionId,
                 onNavigateBack = { navController.popBackStack() },
+                onCountdownFinished = {
+                    // Return to the scenario-selection hub. If it's still on the back stack just
+                    // pop to it; otherwise navigate fresh (e.g. session resumed from the list).
+                    val popped = navController.popBackStack(
+                        Route.ScenarioSelection.createRoute(sessionId),
+                        inclusive = false
+                    )
+                    if (!popped) {
+                        navController.navigate(Route.ScenarioSelection.createRoute(sessionId)) {
+                            popUpTo(Route.Home.route)
+                        }
+                    }
+                },
                 onSessionEnded = { endedSessionId ->
                     navController.navigate(Route.SessionReview.createRoute(endedSessionId, showCsvSaved = true)) {
                         popUpTo(Route.Home.route)
