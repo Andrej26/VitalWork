@@ -38,10 +38,20 @@ class SessionExportMapper @Inject constructor(
         session: SessionEntity,
         scenarios: List<ScenarioEntity>
     ): SessionExport {
-        val scenarioExports = scenarios.map { scenario ->
-            val samples = scenarioRepository.getSamplesForScenario(scenario.id)
+        // Pull each scenario's samples once, then derive both the per-scenario export and the
+        // session statistics from the SAME data. Computing the header counts here (rather than
+        // reading SessionEntity's stored counters) keeps the JSON summary in lockstep with the
+        // file's contents — including scenarios that ended abnormally with a null `endedAt`, which
+        // the stored counters exclude (they only sum scenarios with endedAt != null).
+        val scenarioSamples = scenarios.map { scenario ->
+            scenario to scenarioRepository.getSamplesForScenario(scenario.id)
+        }
+        val scenarioExports = scenarioSamples.map { (scenario, samples) ->
             buildScenarioExport(scenario, samples)
         }
+
+        val allSamples = scenarioSamples.flatMap { it.second }
+        fun countOf(type: SensorType) = allSamples.count { it.sensorType == type }
 
         return SessionExport(
             exportedAt = isoFormat.format(Date(timeProvider.nowMs())),
@@ -61,7 +71,9 @@ class SessionExportMapper @Inject constructor(
                     hrSampleCount = session.hrSampleCount,
                     respirationSampleCount = session.respirationSampleCount,
                     rrIntervalSampleCount = session.rrIntervalSampleCount,
-                    edaSampleCount = session.edaSampleCount
+                    edaSampleCount = session.edaSampleCount,
+                    watchHrSampleCount = session.watchHrSampleCount,
+                    watchIbiSampleCount = session.watchIbiSampleCount
                 )
             ),
             scenarios = scenarioExports

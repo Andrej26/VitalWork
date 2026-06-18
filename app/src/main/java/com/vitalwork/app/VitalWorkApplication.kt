@@ -4,12 +4,14 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
+import android.util.Log
 import com.lyft.kronos.KronosClock
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.android.HiltAndroidApp
 import dagger.hilt.components.SingletonComponent
+import java.util.UUID
 
 @HiltAndroidApp
 class VitalWorkApplication : Application() {
@@ -23,6 +25,10 @@ class VitalWorkApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // A fresh process-instance id on each cold start. If this id changes mid-session (e.g. after
+        // backgrounding while another app filmed video), the OS killed and recreated our process —
+        // the root cause behind sensors dropping + scenarios left open (see SessionRecordingService).
+        Log.i(TAG, "process start id=${UUID.randomUUID().toString().take(8)}")
         // Kick off NTP sync at startup so persisted timestamps land on true UTC (see TimeProvider).
         // Non-blocking; falls back to the device clock until the first sync completes.
         EntryPointAccessors.fromApplication(this, ClockEntryPoint::class.java)
@@ -48,6 +54,7 @@ class VitalWorkApplication : Application() {
     }
 
     companion object {
+        private const val TAG = "VitalWorkLifecycle"
         const val RECORDING_CHANNEL_ID = "session_recording"
     }
 }

@@ -50,13 +50,15 @@ class ScenarioRecordingRepositoryImplTest {
         watchReceiver = WatchSensorReceiver(TimeProvider.system())
     }
 
-    private fun TestScope.createSut() = ScenarioRecordingRepositoryImpl(
-        bleManager = bleManager,
-        respirationDevice = respirationDevice,
-        scenarioRepository = scenarioRepository,
-        watchReceiver = watchReceiver,
-        scope = backgroundScope
-    )
+    private fun TestScope.createSut(timeProvider: TimeProvider = TimeProvider.system()) =
+        ScenarioRecordingRepositoryImpl(
+            bleManager = bleManager,
+            respirationDevice = respirationDevice,
+            scenarioRepository = scenarioRepository,
+            watchReceiver = watchReceiver,
+            timeProvider = timeProvider,
+            scope = backgroundScope
+        )
 
     /** Seed a closed scenario window (has endedAt) so the watch drain can attribute readings to it. */
     private fun seedClosedScenario(id: Long, startedAt: Long, endedAt: Long): ScenarioEntity {
@@ -82,6 +84,8 @@ class ScenarioRecordingRepositoryImplTest {
     }
 
     private fun hr(t: Long, v: Float = 70f) = WatchReading("WATCH_HR", v, 1, t)
+    private fun ibi(t: Long, v: Float = 830f) = WatchReading("WATCH_IBI", v, 0, t)
+    private fun eda(t: Long, v: Float = 1.5f) = WatchReading("WATCH_EDA", v, 0, t)
 
     /** Pre-seeds a scenario row so the buffering layer has something to write samples against. */
     private fun seedScenario(id: Long = 1L): ScenarioEntity {
@@ -180,6 +184,51 @@ class ScenarioRecordingRepositoryImplTest {
     }
 
     @Test
+    fun esenseHr_sameMillisecond_duplicateDropped_sameValueLaterMsKept() = runTest(testDispatcher) {
+        var clock = 5_000L
+        val sut = createSut(TimeProvider { clock })
+        val scenario = seedScenario()
+        connectEsensePulse()
+        sut.startRecording(scenario.id, "VW-X-A1")
+
+        // Two HR readings stamped in the SAME millisecond → the second is a byte-identical duplicate.
+        bleManager.heartRateSampleFlow.emit(72f)
+        bleManager.heartRateSampleFlow.emit(72f)
+        // The SAME value in a NEW millisecond is a legitimate reading and must be kept.
+        clock = 5_001L
+        bleManager.heartRateSampleFlow.emit(72f)
+
+        // The dropped duplicate must not be counted either, so the badge matches the stored rows
+        // (read before stopRecording, which clears the metadata).
+        assertEquals(2, sut.recordingMetadata.value!!.heartRateSampleCount)
+
+        sut.stopRecording()
+
+        val hr = fakeSensorSampleDao.samples.filter { it.sensorType == SensorType.ESENSE_HEART_RATE }
+        assertEquals(2, hr.size)
+        assertEquals(listOf(5_000L, 5_001L), hr.map { it.timestampMs })
+    }
+
+    @Test
+    fun esenseRr_sameMillisecond_distinctIntervalsKept() = runTest(testDispatcher) {
+        val sut = createSut(TimeProvider { 5_000L })
+        val scenario = seedScenario()
+        connectEsensePulse()
+        sut.startRecording(scenario.id, "VW-X-A1")
+
+        // Several RR intervals arrive from one BLE notification: distinct measurements that share a
+        // timestamp. They must NOT be deduped (unlike HR), or real beat-interval data is lost.
+        bleManager.rrIntervalSampleFlow.emit(820f)
+        bleManager.rrIntervalSampleFlow.emit(835f)
+
+        sut.stopRecording()
+
+        val rr = fakeSensorSampleDao.samples.filter { it.sensorType == SensorType.ESENSE_RR_INTERVAL }
+        assertEquals(2, rr.size)
+        assertEquals(listOf(820f, 835f), rr.map { it.value })
+    }
+
+    @Test
     fun stopRecording_marksScenarioEnded() = runTest(testDispatcher) {
         val sut = createSut()
         val scenario = seedScenario()
@@ -215,12 +264,15 @@ class ScenarioRecordingRepositoryImplTest {
 
     @Test
     fun manySamples_flushedInBatchesBeforeStop() = runTest(testDispatcher) {
-        val sut = createSut()
+        var clock = 5_000L
+        val sut = createSut(TimeProvider { clock })
         val scenario = seedScenario()
         connectEsensePulse()
         sut.startRecording(scenario.id, "VW-X-A1")
 
-        repeat(55) { bleManager.heartRateSampleFlow.emit(72f + it) }
+        // Advance the clock per reading so each lands in a distinct millisecond (as real HR does);
+        // otherwise same-millisecond dedup would collapse them.
+        repeat(55) { clock = 5_000L + it; bleManager.heartRateSampleFlow.emit(72f + it) }
 
         assertTrue(
             "Expected >=50 samples flushed by batch-size trigger, got ${fakeSensorSampleDao.samples.size}",
@@ -279,6 +331,33 @@ class ScenarioRecordingRepositoryImplTest {
         assertNull(report) // not verified
         // Fallback path must NOT delete the provisional live row.
         assertEquals(1, fakeSensorSampleDao.samples.count { it.sensorType == SensorType.WATCH_HR })
+    }
+
+    // --- Live watch path: per-type sample counts drive the session UI badges (EDA card/HR card/IBI footer) ---
+
+    @Test
+    fun liveWatchReadings_incrementPerTypeSampleCounts() = runTest(testDispatcher) {
+        val sut = createSut()
+        val scenario = seedScenario()
+        // A reading marks the watch CONNECTED so startRecording sets edaRecording and the live target.
+        watchReceiver.onReading(eda(System.currentTimeMillis()))
+        assertEquals(ConnectionState.CONNECTED, watchReceiver.connectionState.value)
+
+        sut.startWatchEdaSession()
+        sut.startRecording(scenarioId = scenario.id, scenarioIdentifier = "BMX-X-A1")
+
+        // Timestamps comfortably after scenario start so the live path writes them (tc >= scenarioStart).
+        val base = sut.recordingMetadata.value!!.startTimestampMs + 1_000L
+        watchReceiver.onReading(hr(base))
+        watchReceiver.onReading(hr(base + 100))
+        watchReceiver.onReading(ibi(base + 200))
+        watchReceiver.onReading(eda(base + 300))
+
+        val metadata = sut.recordingMetadata.value!!
+        assertEquals(2, metadata.watchHrSampleCount)
+        assertEquals(1, metadata.watchIbiSampleCount)
+        // One EDA pre-start (before the live target) + one in-window → only the in-window one is counted.
+        assertEquals(1, metadata.edaSampleCount)
     }
 
     @Test

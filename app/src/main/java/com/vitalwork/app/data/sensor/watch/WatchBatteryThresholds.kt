@@ -6,24 +6,23 @@ package com.vitalwork.app.data.sensor.watch
  * during a running scenario — so the warning never injects a stimulus that could contaminate
  * reaction-time data.
  *
- * [WARNING_PCT] matches the eSense Pulse low-battery threshold so the two sensors behave
- * consistently. [CRITICAL_PCT] is set above Samsung's Power-Saving auto-trigger range because on a
- * low battery the watch enables Power Saving / "Limit health features", which **turns off background
- * sensor sampling** — verified on-device 2026-06-12: at 7% the watch left a ~99 s hole in the
- * screen-off data (lost), while at full battery it recorded gaplessly through deep Doze. So below
- * this level a screen-off session can silently lose data, which the critical banner now spells out.
- * Kept here so they can be retuned in one place after a measured full-length session.
+ * The real risk to screen-off recording is the watch enabling Power Saving / "Limit health
+ * features", which **turns off background sensor sampling** — not a fixed battery percentage.
+ * Measured 2026-06-15: with Power Saving off the watch recorded gaplessly all the way down to 4%,
+ * but an earlier run with Power Saving (auto-)on lost screen-off data around 7%. The thresholds are
+ * therefore an operator nudge to charge before the battery gets low enough for Power Saving to kick
+ * in, kept here so they can be retuned in one place.
  */
 object WatchBatteryThresholds {
     /** At or below this level: amber "charge as soon as possible" banner. */
-    const val WARNING_PCT = 30
+    const val WARNING_PCT = 20
 
     /**
      * At or below this level: red "may stop recording / lose data — charge before a new session"
-     * banner. Set to 20 (not 16) to stay clear of the low-battery Power-Saving range where the watch
-     * stops sampling screen-off (see class doc).
+     * banner. By this point the watch can enter low-battery Power Saving and stop sampling
+     * screen-off (see class doc), so a new session should not be started without charging.
      */
-    const val CRITICAL_PCT = 20
+    const val CRITICAL_PCT = 10
 }
 
 /** Severity tier derived from the watch's last-known battery level. */

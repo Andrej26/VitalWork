@@ -62,6 +62,7 @@ import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Watch
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -104,6 +105,7 @@ import com.vitalwork.app.R
 import com.vitalwork.app.data.model.ConnectionState
 import com.vitalwork.app.data.sensor.DeviceState
 import com.vitalwork.app.data.sensor.ble.model.BleDevice
+import com.vitalwork.app.data.sensor.watch.WatchLinkStatus
 import com.vitalwork.app.presentation.screens.sensors.components.BleDeviceItem
 import android.media.MediaPlayer
 import android.view.SurfaceHolder
@@ -115,11 +117,11 @@ import androidx.compose.ui.viewinterop.AndroidView
 // ─────────────────────────────────────────────────────────────────────────────
 
 private enum class SlideType {
-    WELCOME, INFO, INTERACTIVE_BLE, INTERACTIVE_RESP, COMPLETE
+    WELCOME, INFO, INTERACTIVE_BLE, INTERACTIVE_RESP, INTERACTIVE_WATCH, COMPLETE
 }
 
 private enum class SlidePhase {
-    WELCOME, HEART_RATE, RESPIRATION, COMPLETE
+    WELCOME, HEART_RATE, RESPIRATION, GALAXY_WATCH, COMPLETE
 }
 
 private data class TutorialSlide(
@@ -196,6 +198,38 @@ private val TUTORIAL_SLIDES = listOf(
         body = "Connect to the eSense Respiration sensor via the audio jack."
     ),
 
+    // ── Galaxy Watch — 4 slides ────────────────────────────────────────────────
+    TutorialSlide(
+        type = SlideType.INFO,
+        phase = SlidePhase.GALAXY_WATCH,
+        title = "Put on the Galaxy Watch",
+        body = "Make sure the VitalWork Watch app is installed on the watch, then fasten the watch snugly on the patient's wrist, a finger's width above the wrist bone. A loose fit lets the sensors lose skin contact, giving noisy heart-rate and skin-conductance readings.",
+        imageRes = R.drawable.tutorial_watch_wear_position,
+        imageCaption = "Watch snug, a finger above the wrist bone"
+    ),
+    TutorialSlide(
+        type = SlideType.INFO,
+        phase = SlidePhase.GALAXY_WATCH,
+        title = "Turn on the Tablet's Bluetooth",
+        body = "You need to pair the watch with your mobile device and connect it via Bluetooth. Turn on Bluetooth on the mobile device where you have the app, and pair the watch using the Galaxy Wearable app, which you’ll also need to download.",
+        imageRes = R.drawable.tutorial_watch_bluetooth_pair,
+        imageCaption = "Tablet Bluetooth on, watch paired"
+    ),
+    TutorialSlide(
+        type = SlideType.INFO,
+        phase = SlidePhase.GALAXY_WATCH,
+        title = "Start Tracking on the Watch",
+        body = "Open the VitalWork app on the watch and tap Start. The first time, allow Body Sensors \"all the time\". The watch then streams heart rate, inter-beat interval, and skin conductance to this tablet.",
+        imageRes = R.drawable.tutorial_watch_start_tracking,
+        imageCaption = "Tap Start in the VitalWork watch app"
+    ),
+    TutorialSlide(
+        type = SlideType.INTERACTIVE_WATCH,
+        phase = SlidePhase.GALAXY_WATCH,
+        title = "Confirm the Watch Link",
+        body = "Check that the tablet is receiving data from the watch."
+    ),
+
     // ── Complete ──────────────────────────────────────────────────────────────
     TutorialSlide(
         type = SlideType.COMPLETE,
@@ -211,11 +245,13 @@ private val TUTORIAL_SLIDES = listOf(
 
 private val PhaseColorHR      = Color(0xFFE57373)   // Red 300        — Heart Rate
 private val PhaseColorResp    = Color(0xFF4DB6AC)   // Teal 300       — Respiration
+private val PhaseColorWatch   = Color(0xFF64B5F6)   // Blue 300       — Galaxy Watch
 private val PhaseColorDefault = Color(0xFF9575CD)   // Deep Purple 300 — Welcome / Complete
 
 private fun phaseAccentColor(phase: SlidePhase): Color = when (phase) {
     SlidePhase.HEART_RATE      -> PhaseColorHR
     SlidePhase.RESPIRATION     -> PhaseColorResp
+    SlidePhase.GALAXY_WATCH    -> PhaseColorWatch
     SlidePhase.WELCOME, SlidePhase.COMPLETE -> PhaseColorDefault
 }
 
@@ -360,6 +396,14 @@ fun TutorialScreen(
                         },
                         onToggle = viewModel::toggleRespirationConnection
                     )
+                    SlideType.INTERACTIVE_WATCH -> TutorialWatchConnectStep(
+                        linkStatus = uiState.watchLinkStatus,
+                        batteryLevel = uiState.watchBatteryLevel,
+                        bluetoothEnabled = uiState.bluetoothEnabled,
+                        onEnableBluetooth = {
+                            enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+                        }
+                    )
                     SlideType.COMPLETE -> TutorialCompleteStep(onGoToTests = onNavigateToSessions)
                 }
             }
@@ -367,7 +411,7 @@ fun TutorialScreen(
             // Bottom navigation bar
             val currentSlide = slides.getOrNull(uiState.currentStep)
             val isConnectionStep = currentSlide?.type in setOf(
-                SlideType.INTERACTIVE_BLE, SlideType.INTERACTIVE_RESP
+                SlideType.INTERACTIVE_BLE, SlideType.INTERACTIVE_RESP, SlideType.INTERACTIVE_WATCH
             )
             TutorialNavigationBar(
                 currentStep = uiState.currentStep,
@@ -405,6 +449,7 @@ private fun PhaseProgressHeader(
         SlidePhase.WELCOME         -> "Overview"
         SlidePhase.HEART_RATE      -> "Heart Rate Sensor"
         SlidePhase.RESPIRATION     -> "Breathing Sensor"
+        SlidePhase.GALAXY_WATCH    -> "Galaxy Watch"
         SlidePhase.COMPLETE        -> "Complete"
     }
     val phaseIcon = when (currentPhase) {
@@ -418,7 +463,7 @@ private fun PhaseProgressHeader(
     val positionInPhase = phaseSlidesIndices.indexOf(currentStep)
     val phaseSize = phaseSlidesIndices.size
     val isInteractive = currentSlide?.type in setOf(
-        SlideType.INTERACTIVE_BLE, SlideType.INTERACTIVE_RESP
+        SlideType.INTERACTIVE_BLE, SlideType.INTERACTIVE_RESP, SlideType.INTERACTIVE_WATCH
     )
     val phaseStepLabel = when {
         currentPhase == SlidePhase.WELCOME || currentPhase == SlidePhase.COMPLETE -> ""
@@ -644,7 +689,7 @@ private fun TutorialWelcomeStep() {
                 number = "1",
                 icon = Icons.Default.Sensors,
                 label = "Prepare & connect biosensors",
-                detail = "eSense Pulse and eSense Respiration"
+                detail = "eSense Pulse, eSense Respiration, and the Galaxy Watch"
             )
             SessionOverviewItem(
                 number = "2",
@@ -1210,6 +1255,187 @@ private fun TutorialRespirationConnectStep(
                 Text(
                     text = "Breathing sensor connected. You can proceed to the next step.",
                     style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Step 6 – Confirm Galaxy Watch link (passive — no tablet-side connect)
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun TutorialWatchConnectStep(
+    linkStatus: WatchLinkStatus,
+    batteryLevel: Int?,
+    bluetoothEnabled: Boolean,
+    onEnableBluetooth: () -> Unit
+) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val pad = if (maxWidth < 600.dp) 16.dp else 24.dp
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(pad),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = "Confirm the Watch Link",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+
+            WatchStatusCard(linkStatus = linkStatus, batteryLevel = batteryLevel)
+
+            // Bluetooth disabled warning — the watch link runs over direct Bluetooth; without it the
+            // link falls back to a cloud relay that can't deliver to a sleeping tablet. Same card and
+            // behaviour as the heart-rate step.
+            if (!bluetoothEnabled) {
+                Card(
+                    onClick = onEnableBluetooth,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.BluetoothDisabled,
+                            contentDescription = null,
+                            modifier = Modifier.size(32.dp),
+                            tint = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Bluetooth Disabled",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            Text(
+                                text = "Turn on Bluetooth so the watch can stream over the direct link.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+            }
+
+            when (linkStatus) {
+                WatchLinkStatus.LIVE -> Text(
+                    text = "The watch is connected and streaming. You can proceed to the next step.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                WatchLinkStatus.DOZING -> Text(
+                    text = "Connected but dozing — readings are buffering and will catch up. Normal when the watch screen is off.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                WatchLinkStatus.DISCONNECTED -> Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "There's no connect button here — open the VitalWork app on the watch and tap Start, and readings will arrive automatically.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        Text(
+                            text = "Listening for the watch…",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Watch link status card — mirrors [DeviceStatusCard] but renders the three-way LIVE/DOZING/gone state. */
+@Composable
+private fun WatchStatusCard(
+    linkStatus: WatchLinkStatus,
+    batteryLevel: Int?
+) {
+    val statusText = when (linkStatus) {
+        WatchLinkStatus.LIVE -> "Connected"
+        WatchLinkStatus.DOZING -> "Dozing — buffering"
+        WatchLinkStatus.DISCONNECTED -> "Waiting for data…"
+    }
+    val dotColor by animateColorAsState(
+        targetValue = when (linkStatus) {
+            WatchLinkStatus.LIVE -> Color(0xFF4CAF50)
+            WatchLinkStatus.DOZING -> Color(0xFFFFA000)
+            WatchLinkStatus.DISCONNECTED -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+        },
+        animationSpec = tween(300),
+        label = "watch_dot_color"
+    )
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .background(dotColor, CircleShape)
+                )
+                Icon(
+                    imageVector = Icons.Default.Watch,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "Galaxy Watch",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = statusText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            batteryLevel?.let {
+                Text(
+                    text = "Watch battery: $it%",
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }

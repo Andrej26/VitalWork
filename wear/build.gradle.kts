@@ -33,6 +33,12 @@ android {
     buildFeatures {
         compose = true
     }
+    lint {
+        // False positive: registerForActivityResult is called on a Compose
+        // ComponentActivity, not a FragmentActivity, so the Fragment 1.3.0
+        // requirement does not apply. Suppress only this rule.
+        disable += "InvalidFragmentVersionForActivityResult"
+    }
 }
 
 kotlin {

@@ -70,6 +70,30 @@ class ScenarioRepository @Inject constructor(
         scenarioDao.update(scenario.copy(endedAt = timeProvider.nowMs()))
     }
 
+    /**
+     * Closes any scenario in the session left open (`endedAt == null`) — e.g. after the app process
+     * was killed mid-recording (background / OEM battery management), so [endScenario] never ran.
+     *
+     * Each open scenario is closed to its **last persisted sample's `timestampMs`** (the sample list
+     * is already sorted ascending), falling back to `startedAt` when it has no samples. Last-sample —
+     * not `nowMs()` — is deliberate: `now()` would stretch the window across the gap and overlap the
+     * next scenario, mis-attributing the watch drain. The last-sample bound is tight and provably
+     * non-overlapping (recording is single-active, so the next scenario only starts after this one's
+     * samples stop), which lets [com.vitalwork.app.data.recording.WatchSessionDrainer] file the
+     * session's stored EDA/HR/IBI into the recovered windows instead of dropping them.
+     *
+     * Idempotent (already-closed scenarios are skipped). Returns the number of scenarios closed.
+     */
+    suspend fun closeDanglingScenarios(sessionId: Long): Int {
+        val open = scenarioDao.getScenariosForSessionOnce(sessionId).filter { it.endedAt == null }
+        for (scenario in open) {
+            val lastSampleMs = sensorSampleDao.getSamplesForScenario(scenario.id)
+                .lastOrNull()?.timestampMs
+            scenarioDao.update(scenario.copy(endedAt = lastSampleMs ?: scenario.startedAt))
+        }
+        return open.size
+    }
+
     /** Inserts a batch of sensor samples. Called by the recording layer. */
     suspend fun addSamples(samples: List<SensorSampleEntity>) {
         sensorSampleDao.insertAll(samples)

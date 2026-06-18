@@ -11,6 +11,7 @@ import android.content.pm.ServiceInfo
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -61,10 +62,12 @@ class SessionRecordingService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        Log.i(TAG, "SessionRecordingService.onCreate")
         acquireWifiLock()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.i(TAG, "SessionRecordingService.onStartCommand")
         // Promote to foreground immediately (must be within ~5s of start). Safe to call again
         // on an already-running service, e.g. after a START_STICKY null-intent restart.
         startForegroundWithType(buildNotification(isRecording = false, durationMs = 0L))
@@ -162,6 +165,7 @@ class SessionRecordingService : Service() {
     }
 
     private fun stopForegroundAndSelf() {
+        Log.i(TAG, "SessionRecordingService.stopForegroundAndSelf (session ended/discarded)")
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -201,6 +205,9 @@ class SessionRecordingService : Service() {
     }
 
     override fun onDestroy() {
+        // A clean stop logs stopForegroundAndSelf → onDestroy. If onDestroy appears WITHOUT it
+        // mid-session, the OS killed the service/process (the failure mode under investigation).
+        Log.i(TAG, "SessionRecordingService.onDestroy")
         observerJob?.cancel()
         observerJob = null
         scope.cancel()
@@ -209,6 +216,7 @@ class SessionRecordingService : Service() {
     }
 
     companion object {
+        private const val TAG = "VitalWorkLifecycle"
         private const val NOTIFICATION_ID = 1001
         private const val WIFI_LOCK_TAG = "VitalWork:SessionRecording"
 

@@ -13,6 +13,7 @@ import com.vitalwork.app.data.sensor.ble.BleManager
 import com.vitalwork.app.data.sensor.watch.WatchFlushState
 import com.vitalwork.app.data.sensor.watch.WatchSensorReceiver
 import com.vitalwork.app.data.time.TimeProvider
+import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -84,6 +85,7 @@ class ScenarioRecordingRepositoryImpl(
     override suspend fun startRecording(scenarioId: Long, scenarioIdentifier: String) {
         if (_recordingState.value == DataRecordingState.RECORDING) return
 
+        Log.i(TAG, "startRecording scenarioId=$scenarioId ($scenarioIdentifier)")
         startTimeMs = timeProvider.nowMs()
         currentScenarioId = scenarioId
 
@@ -153,7 +155,7 @@ class ScenarioRecordingRepositoryImpl(
         // Start sensor collectors
         if (shouldRecordHr) {
             collectorJobs += collectSensor(
-                bleManager.heartRateSampleFlow, SensorType.ESENSE_HEART_RATE
+                bleManager.heartRateSampleFlow, SensorType.ESENSE_HEART_RATE, dedupSameMillis = true
             ) { it.copy(heartRateSampleCount = it.heartRateSampleCount + 1) }
 
             collectorJobs += collectSensor(
@@ -176,6 +178,7 @@ class ScenarioRecordingRepositoryImpl(
     override suspend fun stopRecording() {
         if (_recordingState.value != DataRecordingState.RECORDING) return
 
+        Log.i(TAG, "stopRecording scenarioId=$currentScenarioId (clean close)")
         // Cancel collectors
         collectorJobs.forEach { it.cancel() }
         collectorJobs.clear()
@@ -202,10 +205,20 @@ class ScenarioRecordingRepositoryImpl(
     private fun collectSensor(
         flow: SharedFlow<Float>,
         sensorType: SensorType,
+        dedupSameMillis: Boolean = false,
         updateMetadata: (ScenarioMetadata) -> ScenarioMetadata
     ): Job = scope.launch {
+        // For sensors that report one value per instant (HR), drop a reading stamped with the same
+        // millisecond as the previous write. The eSense Pulse occasionally bursts two HR notifications
+        // into the same millisecond; both get the same timeProvider.nowMs(), producing byte-identical
+        // duplicate rows (~8% of HR samples). NOT used for RR intervals, where several DISTINCT
+        // intervals legitimately arrive in one notification and share a timestamp (see
+        // BleManagerImpl.handleHeartRateData) — deduping those would discard real beat data.
+        var lastWrittenMs = Long.MIN_VALUE
         flow.collect { value ->
             val now = timeProvider.nowMs()
+            if (dedupSameMillis && now == lastWrittenMs) return@collect
+            lastWrittenMs = now
             writeChannel.send(
                 SensorSampleEntity(
                     scenarioId = currentScenarioId,
@@ -269,10 +282,14 @@ class ScenarioRecordingRepositoryImpl(
                 )
                 // Advance the per-(scenario, type) high-water mark (de-dup boundary for the drain).
                 watchHighWaterMarks.merge(WatchSessionDrainer.HwmKey(scenarioId, sensorType), tc, ::maxOf)
-                // EDA sample count drives the existing live metadata badge; keep that behavior.
-                if (sensorType == SensorType.WATCH_EDA) {
-                    _recordingMetadata.value = _recordingMetadata.value?.let {
-                        if (it.scenarioId == scenarioId) it.copy(edaSampleCount = it.edaSampleCount + 1) else it
+                // Per-type live sample counts drive the session UI badges (EDA card + HR card + IBI footer).
+                _recordingMetadata.value = _recordingMetadata.value?.let {
+                    if (it.scenarioId != scenarioId) return@let it
+                    when (sensorType) {
+                        SensorType.WATCH_EDA -> it.copy(edaSampleCount = it.edaSampleCount + 1)
+                        SensorType.WATCH_HR -> it.copy(watchHrSampleCount = it.watchHrSampleCount + 1)
+                        SensorType.WATCH_IBI -> it.copy(watchIbiSampleCount = it.watchIbiSampleCount + 1)
+                        else -> it
                     }
                 }
             }
@@ -341,5 +358,9 @@ class ScenarioRecordingRepositoryImpl(
             watchHighWaterMarks.clear()
             activeWatchTarget = null
         }
+    }
+
+    private companion object {
+        private const val TAG = "VitalWorkLifecycle"
     }
 }
