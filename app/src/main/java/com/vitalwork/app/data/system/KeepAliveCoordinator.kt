@@ -14,7 +14,7 @@ import javax.inject.Named
 import javax.inject.Singleton
 
 /** Why the app must stay alive in the background. Add a value per new long-lived connection. */
-enum class KeepAliveReason { SESSION, LINK }
+enum class KeepAliveReason { SESSION, LINK, SCREEN_SHARE }
 
 /**
  * The single source of truth for app-wide backgrounding. Subsystems [acquire]/[release] a

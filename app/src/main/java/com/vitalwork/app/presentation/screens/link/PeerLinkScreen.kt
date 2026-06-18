@@ -1,8 +1,13 @@
 package com.vitalwork.app.presentation.screens.link
 
+import android.app.Activity
+import android.media.projection.MediaProjectionManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -13,6 +18,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LinkOff
+import androidx.compose.material.icons.filled.ScreenShare
+import androidx.compose.material.icons.filled.StopScreenShare
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -28,19 +35,28 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.vitalwork.app.data.link.PeerRole
 import com.vitalwork.app.data.link.model.PeerDevice
 import com.vitalwork.app.data.model.ConnectionState
+import com.vitalwork.app.data.webrtc.model.ShareState
 import com.vitalwork.app.presentation.components.ConnectionStatusBadge
 import com.vitalwork.app.service.BatteryOptimizationHelper
+import org.webrtc.EglBase
+import org.webrtc.RendererCommon
+import org.webrtc.SurfaceViewRenderer
+import org.webrtc.VideoTrack
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,9 +70,34 @@ fun PeerLinkScreen(
     val logLines by viewModel.logLines.collectAsState()
     val peerLabel by viewModel.peerLabel.collectAsState()
     val isActive by viewModel.isActive.collectAsState()
+    val shareState by viewModel.shareState.collectAsState()
+    val remoteVideoTrack by viewModel.remoteVideoTrack.collectAsState()
 
     val context = LocalContext.current
     val batteryExempt = BatteryOptimizationHelper.isIgnoringBatteryOptimizations(context)
+
+    // Client: when the server requests this device's screen, launch Android's consent dialog.
+    if (role == PeerRole.CLIENT) {
+        val projectionManager = remember {
+            context.getSystemService(MediaProjectionManager::class.java)
+        }
+        val consentLauncher = rememberLauncherForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            val data = result.data
+            if (result.resultCode == Activity.RESULT_OK && data != null) {
+                viewModel.onScreenConsent(result.resultCode, data)
+            } else {
+                viewModel.onScreenConsentDenied()
+            }
+        }
+        LaunchedEffect(Unit) {
+            viewModel.screenRequested.collect {
+                viewModel.consumeScreenRequest()
+                consentLauncher.launch(projectionManager.createScreenCaptureIntent())
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -92,6 +133,19 @@ fun PeerLinkScreen(
             }
 
             StatusCard(role = role, connectionState = connectionState, peerLabel = peerLabel)
+
+            if (role == PeerRole.SERVER) {
+                ScreenMonitorCard(
+                    connected = connectionState == ConnectionState.CONNECTED,
+                    shareState = shareState,
+                    remoteVideoTrack = remoteVideoTrack,
+                    eglBase = viewModel.eglBase,
+                    onView = viewModel::requestScreen,
+                    onStop = viewModel::stopShare
+                )
+            } else if (shareState == ShareState.SHARING) {
+                SharingCard(onStop = viewModel::stopShare)
+            }
 
             if (role == PeerRole.CLIENT && connectionState != ConnectionState.CONNECTED) {
                 DiscoveredDevicesCard(devices = devices, onSelect = viewModel::onDeviceSelected)
@@ -174,6 +228,124 @@ private fun BatteryReminderCard(onAllow: () -> Unit) {
             )
             Button(onClick = onAllow) { Text("Allow") }
         }
+    }
+}
+
+@Composable
+private fun ScreenMonitorCard(
+    connected: Boolean,
+    shareState: ShareState,
+    remoteVideoTrack: VideoTrack?,
+    eglBase: EglBase,
+    onView: () -> Unit,
+    onStop: () -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = "Screen monitor",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+
+            if (remoteVideoTrack != null) {
+                ScreenVideoView(
+                    track = remoteVideoTrack,
+                    eglBase = eglBase,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(16f / 9f)
+                )
+            } else {
+                Text(
+                    text = when (shareState) {
+                        ShareState.REQUESTING -> "Waiting for the other device to allow screen sharing…"
+                        ShareState.ERROR -> "Screen sharing failed."
+                        else -> "Not viewing. Tap \"View screen\" to monitor the connected device."
+                    },
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+
+            if (shareState == ShareState.IDLE || shareState == ShareState.ERROR) {
+                Button(
+                    onClick = onView,
+                    enabled = connected,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.ScreenShare, contentDescription = null)
+                    Text("  View screen")
+                }
+            } else {
+                OutlinedButton(
+                    onClick = onStop,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Icon(Icons.Default.StopScreenShare, contentDescription = null)
+                    Text("  Stop viewing")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SharingCard(onStop: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = "Sharing your screen",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onTertiaryContainer
+            )
+            Text(
+                text = "The operator can see this device's screen.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onTertiaryContainer
+            )
+            OutlinedButton(
+                onClick = onStop,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error
+                )
+            ) {
+                Icon(Icons.Default.StopScreenShare, contentDescription = null)
+                Text("  Stop sharing")
+            }
+        }
+    }
+}
+
+/** Renders a remote [VideoTrack] in a WebRTC [SurfaceViewRenderer]; keyed on the track so a new
+ *  session recreates the surface, and the sink is removed + the renderer released on dispose. */
+@Composable
+private fun ScreenVideoView(track: VideoTrack, eglBase: EglBase, modifier: Modifier = Modifier) {
+    key(track) {
+        AndroidView(
+            modifier = modifier,
+            factory = { ctx ->
+                SurfaceViewRenderer(ctx).apply {
+                    init(eglBase.eglBaseContext, null)
+                    setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
+                    setEnableHardwareScaler(true)
+                    track.addSink(this)
+                }
+            },
+            onRelease = { renderer ->
+                runCatching { track.removeSink(renderer) }
+                renderer.release()
+            }
+        )
     }
 }
 

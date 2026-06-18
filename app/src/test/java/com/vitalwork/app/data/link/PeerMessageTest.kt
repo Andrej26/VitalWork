@@ -31,4 +31,35 @@ class PeerMessageTest {
 
         assertEquals(PeerMessage(type = "hello", text = "hi", ts = 42L), decoded)
     }
+
+    @Test
+    fun `signaling offer round-trips its sdp`() {
+        val original = PeerMessage(type = "offer", sdp = "v=0\r\no=- 123 2 IN IP4 0.0.0.0\r\n")
+
+        val decoded = json.decodeFromString(
+            PeerMessage.serializer(),
+            json.encodeToString(PeerMessage.serializer(), original)
+        )
+
+        assertEquals(original, decoded)
+        assertEquals("offer", decoded.type)
+        assertEquals(original.sdp, decoded.sdp)
+    }
+
+    @Test
+    fun `signaling ice round-trips candidate fields`() {
+        val original = PeerMessage(
+            type = "ice",
+            sdpMid = "0",
+            sdpMLineIndex = 0,
+            candidate = "candidate:1 1 udp 2122260223 192.168.1.5 54321 typ host"
+        )
+
+        val decoded = json.decodeFromString(
+            PeerMessage.serializer(),
+            json.encodeToString(PeerMessage.serializer(), original)
+        )
+
+        assertEquals(original, decoded)
+    }
 }

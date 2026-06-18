@@ -17,6 +17,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
 
     <!-- Required to hold the Wi-Fi lock that keeps network access alive under Doze -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -81,7 +82,7 @@
         <service
             android:name=".service.BackgroundConnectionService"
             android:exported="false"
-            android:foregroundServiceType="microphone|connectedDevice|dataSync" />
+            android:foregroundServiceType="microphone|connectedDevice|dataSync|mediaProjection" />
 
         <!-- Receives the Galaxy Watch sensor readings as Data Layer messages, AND the historical
              store flush as DataItems (DATA_CHANGED). Both auto-start the app on a matching event even

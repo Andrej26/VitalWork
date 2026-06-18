@@ -1,6 +1,7 @@
 package com.vitalwork.app.service
 
 import android.Manifest
+import android.app.Activity
 import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
@@ -15,6 +16,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.IntentCompat
 import com.vitalwork.app.MainActivity
 import com.vitalwork.app.R
 import com.vitalwork.app.VitalWorkApplication.Companion.BACKGROUND_CHANNEL_ID
@@ -24,6 +26,7 @@ import com.vitalwork.app.data.recording.ScenarioRecordingRepository
 import com.vitalwork.app.data.recording.model.DataRecordingState
 import com.vitalwork.app.data.system.KeepAliveCoordinator
 import com.vitalwork.app.data.system.KeepAliveReason
+import com.vitalwork.app.data.webrtc.ScreenShareController
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -52,6 +55,7 @@ class BackgroundConnectionService : Service() {
     @Inject lateinit var coordinator: KeepAliveCoordinator
     @Inject lateinit var recordingRepository: ScenarioRecordingRepository
     @Inject lateinit var linkManager: PeerLinkManager
+    @Inject lateinit var screenShareController: ScreenShareController
 
     private val scope = CoroutineScope(Dispatchers.Main.immediate)
     private var observerJob: Job? = null
@@ -71,13 +75,34 @@ class BackgroundConnectionService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.i(TAG, "BackgroundConnectionService.onStartCommand action=${intent?.action}")
-        if (intent?.action == ACTION_DISCONNECT_LINK) {
-            // Manual disconnect from the notification — releases LINK; the observer self-stops if no
-            // other reason remains.
-            linkManager.stop()
+        when (intent?.action) {
+            ACTION_DISCONNECT_LINK ->
+                // Manual disconnect from the notification — releases LINK; the observer self-stops
+                // if no other reason remains.
+                linkManager.stop()
+            ACTION_START_SCREEN ->
+                // Acquire BEFORE startForeground so the synchronous promotion below already includes
+                // the mediaProjection type (Android requires it before creating the projection).
+                coordinator.acquire(KeepAliveReason.SCREEN_SHARE)
         }
-        // Promote to foreground immediately (must be within ~5s of start).
-        startForegroundFromState(snapshot())
+
+        val startingScreenShare = intent?.action == ACTION_START_SCREEN
+        // Promote to foreground immediately (must be within ~5s of start). For the screen-share path,
+        // force the mediaProjection type into the snapshot explicitly so this promotion always carries
+        // it — `snapshot()` reads the coordinator's reason set, which may not yet reflect the just-made
+        // acquire, and a missing mediaProjection type makes MediaProjection.startCapture() throw.
+        startForegroundFromState(snapshot(), forceScreenShare = startingScreenShare)
+
+        if (startingScreenShare) {
+            val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, Activity.RESULT_CANCELED)
+            val data = IntentCompat.getParcelableExtra(intent, EXTRA_DATA, Intent::class.java)
+            if (data != null) {
+                screenShareController.beginCapture(resultCode, data)
+            } else {
+                coordinator.release(KeepAliveReason.SCREEN_SHARE)
+            }
+        }
+
         startObserving()
         startRestartWatchdog()
         return START_STICKY
@@ -137,12 +162,12 @@ class BackgroundConnectionService : Service() {
         }
     }
 
-    private fun startForegroundFromState(state: State) {
+    private fun startForegroundFromState(state: State, forceScreenShare: Boolean = false) {
         ServiceCompat.startForeground(
             this,
             NOTIFICATION_ID,
             buildNotification(state),
-            computeForegroundType(state.reasons)
+            computeForegroundType(state.reasons, forceScreenShare)
         )
     }
 
@@ -151,7 +176,7 @@ class BackgroundConnectionService : Service() {
      * active AND RECORD_AUDIO is granted — on API 34+ a mic-typed FGS throws without the permission,
      * and a link-only service must not claim a mic type it never uses.
      */
-    private fun computeForegroundType(reasons: Set<KeepAliveReason>): Int {
+    private fun computeForegroundType(reasons: Set<KeepAliveReason>, forceScreenShare: Boolean = false): Int {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return 0
         var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
@@ -160,6 +185,11 @@ class BackgroundConnectionService : Service() {
         ) == PackageManager.PERMISSION_GRANTED
         if (KeepAliveReason.SESSION in reasons && micGranted) {
             type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        }
+        // `forceScreenShare` covers the ACTION_START_SCREEN promotion, where the coordinator's reason
+        // set may not yet observably contain SCREEN_SHARE but the mediaProjection type must be present.
+        if (forceScreenShare || KeepAliveReason.SCREEN_SHARE in reasons) {
+            type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
         }
         return type
     }
@@ -174,6 +204,9 @@ class BackgroundConnectionService : Service() {
                         getString(R.string.recording_notification_idle)
                     }
                 )
+            }
+            if (KeepAliveReason.SCREEN_SHARE in state.reasons) {
+                add(getString(R.string.screen_share_notification))
             }
             if (KeepAliveReason.LINK in state.reasons) {
                 add(
@@ -273,5 +306,22 @@ class BackgroundConnectionService : Service() {
         private const val WIFI_LOCK_TAG = "VitalWork:BackgroundConnection"
         private const val RESTART_GRACE_MS = 5000L
         const val ACTION_DISCONNECT_LINK = "com.vitalwork.app.action.DISCONNECT_LINK"
+        const val ACTION_START_SCREEN = "com.vitalwork.app.action.START_SCREEN"
+        private const val EXTRA_RESULT_CODE = "result_code"
+        private const val EXTRA_DATA = "data"
+
+        /**
+         * Promote the service to a `mediaProjection` foreground service and start screen capture with
+         * the consent result. Must be called from a foreground context (right after the consent
+         * dialog) so the background-FGS-start restriction doesn't apply.
+         */
+        fun startScreenShare(context: Context, resultCode: Int, data: Intent) {
+            val intent = Intent(context, BackgroundConnectionService::class.java).apply {
+                action = ACTION_START_SCREEN
+                putExtra(EXTRA_RESULT_CODE, resultCode)
+                putExtra(EXTRA_DATA, data)
+            }
+            ContextCompat.startForegroundService(context, intent)
+        }
     }
 }

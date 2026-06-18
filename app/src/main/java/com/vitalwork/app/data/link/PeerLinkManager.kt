@@ -1,6 +1,7 @@
 package com.vitalwork.app.data.link
 
 import com.vitalwork.app.data.link.model.PeerDevice
+import com.vitalwork.app.data.link.model.PeerMessage
 import com.vitalwork.app.data.model.ConnectionState
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -28,6 +29,15 @@ interface PeerLinkManager {
 
     /** Human-readable log of sent/received/lifecycle lines for the UI. */
     val logLines: StateFlow<List<String>>
+
+    /** Incoming WebRTC signaling messages (request_screen/offer/answer/ice/stop_screen). */
+    val signals: SharedFlow<PeerMessage>
+
+    /** Send a WebRTC signaling message to the connected peer. */
+    fun sendSignal(message: PeerMessage)
+
+    /** Append a line to the visible on-screen log (used by the screen-share controller for tracing). */
+    fun logExternal(line: String)
 
     /** Address being advertised (server) or the connected peer (client), for display. */
     val peerLabel: StateFlow<String?>

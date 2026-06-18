@@ -10,8 +10,11 @@ import com.vitalwork.app.data.system.KeepAliveReason
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -62,6 +65,10 @@ class PeerLinkManagerImpl @Inject constructor(
 
     private val _logLines = MutableStateFlow<List<String>>(emptyList())
     override val logLines: StateFlow<List<String>> = _logLines.asStateFlow()
+
+    // Buffered + non-suspending (handleIncoming runs on a Java-WebSocket thread → must use tryEmit).
+    private val _signals = MutableSharedFlow<PeerMessage>(replay = 0, extraBufferCapacity = 16)
+    override val signals: SharedFlow<PeerMessage> = _signals.asSharedFlow()
 
     private val _peerLabel = MutableStateFlow<String?>(null)
     override val peerLabel: StateFlow<String?> = _peerLabel.asStateFlow()
@@ -260,8 +267,19 @@ class PeerLinkManagerImpl @Inject constructor(
             log("Recv (unparsed): $message")
             return
         }
-        log("Peer: ${parsed.text}")
+        when (parsed.type) {
+            "hello", "log" -> log("Peer: ${parsed.text}")
+            else -> {
+                // WebRTC signaling — hand off to the ScreenShareController via the signals flow.
+                log("Signal: ${parsed.type}")
+                _signals.tryEmit(parsed)
+            }
+        }
     }
+
+    override fun sendSignal(message: PeerMessage) = sendInternal(message)
+
+    override fun logExternal(line: String) = log(line)
 
     private fun log(line: String) {
         Log.d(TAG, line)

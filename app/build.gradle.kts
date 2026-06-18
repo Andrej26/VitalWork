@@ -98,8 +98,11 @@ dependencies {
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.ktor.serialization.kotlinx.json)
 
-    // Device-to-device link: WebSocket server + client (peer pairing, later WebRTC signaling)
+    // Device-to-device link: WebSocket server + client (peer pairing + WebRTC signaling)
     implementation(libs.java.websocket)
+
+    // WebRTC: screen-share video from the monitored device to the operator (P2P over LAN)
+    implementation(libs.stream.webrtc.android)
 
     // Wearable Data Layer (receive Galaxy Watch sensor stream over ChannelClient)
     implementation(libs.play.services.wearable)
