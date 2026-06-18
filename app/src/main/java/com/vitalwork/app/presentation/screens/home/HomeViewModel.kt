@@ -6,6 +6,7 @@ import com.vitalwork.app.data.db.SessionEntity
 import com.vitalwork.app.data.link.PeerLinkManager
 import com.vitalwork.app.data.link.PeerRole
 import com.vitalwork.app.data.model.ConnectionState
+import com.vitalwork.app.data.prefs.DeviceModePreferencesRepository
 import com.vitalwork.app.data.prefs.TutorialPreferencesRepository
 import com.vitalwork.app.data.repository.SessionRepository
 import com.vitalwork.app.data.sensor.watch.WatchBatteryAlert
@@ -28,10 +29,16 @@ import javax.inject.Inject
 class HomeViewModel @Inject constructor(
     private val sessionRepository: SessionRepository,
     private val tutorialPreferences: TutorialPreferencesRepository,
+    private val deviceModePreferences: DeviceModePreferencesRepository,
     private val readinessChecker: SystemReadinessChecker,
     private val watchReceiver: WatchSensorReceiver,
     linkManager: PeerLinkManager
 ) : ViewModel() {
+
+    /** Persisted device-link role; decides which connect button Home shows. Re-read on [refresh]
+     *  so a change made from the mode screen is reflected when Home resumes. */
+    private val _deviceMode = MutableStateFlow(deviceModePreferences.getMode())
+    val deviceMode: StateFlow<PeerRole?> = _deviceMode.asStateFlow()
 
     /** Device-link status for the Home dots: CONNECTED/etc. for the active role, DISCONNECTED for
      *  the other (a link runs in only one role at a time). */
@@ -67,6 +74,7 @@ class HomeViewModel @Inject constructor(
      */
     fun refresh() {
         _missingPrerequisites.value = readinessChecker.missingPrerequisites()
+        _deviceMode.value = deviceModePreferences.getMode()
         // Watch battery is a live push value (no settings-lag like OS permissions), so read it once
         // here and leave it out of the delayed re-check loop below.
         _watchBatteryAlert.value = watchReceiver.currentBatteryAlert()

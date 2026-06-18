@@ -9,6 +9,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.vitalwork.app.presentation.screens.home.HomeScreen
 import com.vitalwork.app.presentation.screens.link.PeerLinkScreen
+import com.vitalwork.app.presentation.screens.mode.ModeSelectionScreen
 import com.vitalwork.app.presentation.screens.participants.ParticipantEntryScreen
 import com.vitalwork.app.presentation.screens.sensors.SensorDetailScreen
 import com.vitalwork.app.presentation.screens.sensors.SensorsScreen
@@ -35,6 +36,7 @@ sealed class Route(val route: String) {
     }
     data object Tutorial : Route("tutorial")
     data object Settings : Route("settings")
+    data object ModeSelection : Route("mode")
     data object PeerLink : Route("link/{role}") {
         fun createRoute(role: String) = "link/$role"
     }
@@ -42,12 +44,25 @@ sealed class Route(val route: String) {
 
 @Composable
 fun AppNavigation(
-    navController: NavHostController = rememberNavController()
+    navController: NavHostController = rememberNavController(),
+    /** Where to land at launch: the mode picker until a mode is chosen, otherwise Home. */
+    startDestination: String = Route.Home.route
 ) {
     NavHost(
         navController = navController,
-        startDestination = Route.Home.route
+        startDestination = startDestination
     ) {
+        composable(Route.ModeSelection.route) {
+            ModeSelectionScreen(
+                onModeSelected = {
+                    navController.navigate(Route.Home.route) {
+                        // Picking a mode replaces the picker so Back doesn't return to it.
+                        popUpTo(Route.ModeSelection.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+
         composable(Route.Home.route) {
             HomeScreen(
                 onNavigateToTutorial = { navController.navigate(Route.Tutorial.route) },
@@ -68,6 +83,9 @@ fun AppNavigation(
                 },
                 onNavigateToLinkClient = {
                     navController.navigate(Route.PeerLink.createRoute("client"))
+                },
+                onNavigateToModeSelection = {
+                    navController.navigate(Route.ModeSelection.route)
                 }
             )
         }
