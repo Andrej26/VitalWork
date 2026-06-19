@@ -62,6 +62,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -73,7 +74,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -92,11 +96,15 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.vitalwork.app.data.sensor.audio.LowSignalWarning
 import android.Manifest
+import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Settings
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.vitalwork.app.presentation.components.BleDialogState
 import com.vitalwork.app.presentation.components.DialogAction
 import com.vitalwork.app.presentation.components.LowSignalWarningBanner
@@ -658,7 +666,56 @@ fun SessionControlScreen(
             Spacer(modifier = Modifier.height(8.dp))
         }
     }
+    // While a scenario is recording (the auto-return countdown), make the phone safe to pocket:
+    // hide the system bars and swallow every touch so accidental taps do nothing. The screen stays
+    // on (dimmed) so the operator keeps seeing it mirrored. Drawn last → sits on top of the Scaffold.
+    RecordingTouchLock(active = isRecording, modifier = Modifier.matchParentSize())
     } // Box
+}
+
+/**
+ * Pocket-safe lock used during a scenario's auto-return countdown. While [active]:
+ *  - hides the status/navigation bars (immersive, transient-on-swipe) so a pocket touch can't pull the
+ *    shade or hit nav buttons, and
+ *  - overlays a transparent layer that consumes every pointer event (Initial pass, before any child
+ *    sees it), so accidental taps on the app do nothing.
+ *
+ * It does NOT (and on stock Android cannot) block system gestures or hardware buttons — that needs
+ * kiosk/device-owner provisioning. For pocketing a phone during a fixed countdown this is sufficient.
+ * The system bars are always restored when this leaves composition (e.g. navigating away mid-record).
+ */
+@Composable
+private fun RecordingTouchLock(active: Boolean, modifier: Modifier = Modifier) {
+    val view = LocalView.current
+    DisposableEffect(active) {
+        (view.context as? Activity)?.window?.let { window ->
+            val controller = WindowCompat.getInsetsController(window, view)
+            if (active) {
+                controller.systemBarsBehavior =
+                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                controller.hide(WindowInsetsCompat.Type.systemBars())
+            } else {
+                controller.show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+        onDispose {
+            (view.context as? Activity)?.window?.let { window ->
+                WindowCompat.getInsetsController(window, view)
+                    .show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+    }
+    if (active) {
+        Box(
+            modifier = modifier.pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+                    }
+                }
+            }
+        )
+    }
 }
 
 /**
