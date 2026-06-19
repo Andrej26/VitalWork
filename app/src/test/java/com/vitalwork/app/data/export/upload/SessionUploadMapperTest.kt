@@ -41,7 +41,14 @@ class SessionUploadMapperTest {
         sessionCode = "VW-A-260101-120000",
         startedAt = 1_790_509_812_000L,
         endedAt = 1_790_510_412_000L,
-        status = SessionStatus.COMPLETED
+        status = SessionStatus.COMPLETED,
+        scenarioCount = 3,
+        hrSampleCount = 120,
+        respirationSampleCount = 60,
+        rrIntervalSampleCount = 118,
+        edaSampleCount = 40,
+        watchHrSampleCount = 110,
+        watchIbiSampleCount = 105
     )
 
     @Test
@@ -56,6 +63,20 @@ class SessionUploadMapperTest {
         assertEquals(1_790_509_812_000L, request.session.startedAt)
         assertEquals(1_790_510_412_000L, request.session.endedAt)
         assertEquals("COMPLETED", request.session.status)
+    }
+
+    @Test
+    fun session_sendsStoredSampleCounters() = runTest {
+        val request = mapper.buildUploadRequest(participant(), session(), emptyList())
+        val stats = request.session.statistics
+
+        assertEquals(3, stats.scenarioCount)
+        assertEquals(120, stats.hrSampleCount)
+        assertEquals(60, stats.respirationSampleCount)
+        assertEquals(118, stats.rrIntervalSampleCount)
+        assertEquals(40, stats.edaSampleCount)
+        assertEquals(110, stats.watchHrSampleCount)
+        assertEquals(105, stats.watchIbiSampleCount)
     }
 
     @Test

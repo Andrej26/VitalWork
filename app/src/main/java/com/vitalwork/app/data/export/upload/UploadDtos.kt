@@ -32,7 +32,24 @@ data class SessionUpload(
     val sessionCode: String,
     val startedAt: Long,
     val endedAt: Long? = null,
-    val status: String
+    val status: String,
+    val statistics: SessionStatisticsUpload
+)
+
+/**
+ * Per-session aggregate sample counters (doc §4.2). Copied straight off [SessionEntity]'s stored
+ * counters — the same source the local export uses — so the server's count columns match the export
+ * instead of defaulting to 0.
+ */
+@Serializable
+data class SessionStatisticsUpload(
+    val scenarioCount: Int,
+    val hrSampleCount: Int,
+    val respirationSampleCount: Int,
+    val rrIntervalSampleCount: Int,
+    val edaSampleCount: Int,
+    val watchHrSampleCount: Int,
+    val watchIbiSampleCount: Int
 )
 
 @Serializable
