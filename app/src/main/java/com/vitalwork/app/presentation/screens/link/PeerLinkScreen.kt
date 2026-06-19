@@ -5,11 +5,13 @@ import android.media.projection.MediaProjectionManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -39,7 +41,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
@@ -249,13 +254,19 @@ private fun ScreenMonitorCard(
             )
 
             if (remoteVideoTrack != null) {
-                ScreenVideoView(
-                    track = remoteVideoTrack,
-                    eglBase = eglBase,
+                // Bounded area; the renderer sizes itself to the *real* incoming frame aspect
+                // (portrait phone → tall rectangle) and is centered, so the whole screen shows.
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .aspectRatio(16f / 9f)
-                )
+                        .height(420.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    ScreenVideoView(
+                        track = remoteVideoTrack,
+                        eglBase = eglBase
+                    )
+                }
             } else {
                 Text(
                     text = when (shareState) {
@@ -330,12 +341,25 @@ private fun SharingCard(onStop: () -> Unit) {
  *  session recreates the surface, and the sink is removed + the renderer released on dispose. */
 @Composable
 private fun ScreenVideoView(track: VideoTrack, eglBase: EglBase, modifier: Modifier = Modifier) {
+    // Aspect ratio (w/h) of the incoming stream. Starts at 9:16 portrait (the common phone case) and
+    // is corrected from the first frame's real resolution, so the renderer matches the phone's shape
+    // exactly — combined with SCALE_ASPECT_FIT the entire screen is shown with no crop.
+    var videoAspect by remember(track) { mutableFloatStateOf(9f / 16f) }
     key(track) {
         AndroidView(
-            modifier = modifier,
+            modifier = modifier.aspectRatio(videoAspect),
             factory = { ctx ->
                 SurfaceViewRenderer(ctx).apply {
-                    init(eglBase.eglBaseContext, null)
+                    init(eglBase.eglBaseContext, object : RendererCommon.RendererEvents {
+                        override fun onFirstFrameRendered() {}
+                        override fun onFrameResolutionChanged(width: Int, height: Int, rotation: Int) {
+                            // rotation 90/270 means the frame is delivered sideways — swap to get the
+                            // displayed dimensions.
+                            val w = if (rotation % 180 == 0) width else height
+                            val h = if (rotation % 180 == 0) height else width
+                            if (w > 0 && h > 0) videoAspect = w.toFloat() / h.toFloat()
+                        }
+                    })
                     setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
                     setEnableHardwareScaler(true)
                     track.addSink(this)
