@@ -65,7 +65,6 @@ class SessionExportMapper @Inject constructor(
                 startedAt = isoFormat.format(Date(session.startedAt)),
                 endedAt = session.endedAt?.let { isoFormat.format(Date(it)) },
                 status = session.status.name,
-                notes = session.notes,
                 statistics = SessionStatistics(
                     scenarioCount = session.scenarioCount,
                     hrSampleCount = session.hrSampleCount,
@@ -114,22 +113,10 @@ class SessionExportMapper @Inject constructor(
             )
         }
 
-        val reactionTimeMs = if (
-            scenario.eventTimestampMs != null && scenario.reactionTimestampMs != null
-        ) {
-            scenario.reactionTimestampMs - scenario.eventTimestampMs
-        } else {
-            null
-        }
-
         return ScenarioExport(
             scenarioCode = scenario.scenarioCode.name,
-            scenarioCategory = scenario.scenarioCategory.name,
             startedAt = isoFormat.format(Date(scenario.startedAt)),
             endedAt = scenario.endedAt?.let { isoFormat.format(Date(it)) },
-            eventTimestampMs = scenario.eventTimestampMs,
-            reactionTimestampMs = scenario.reactionTimestampMs,
-            reactionTimeMs = reactionTimeMs,
             gaps = gaps,
             samples = sampleExports
         )

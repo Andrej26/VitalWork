@@ -32,8 +32,7 @@ data class SessionUpload(
     val sessionCode: String,
     val startedAtMs: Long,
     val endedAtMs: Long? = null,
-    val status: String,
-    val notes: String = ""
+    val status: String
 )
 
 @Serializable
@@ -41,8 +40,6 @@ data class ScenarioUpload(
     val scenarioCode: String,
     val startedAtMs: Long,
     val endedAtMs: Long? = null,
-    val eventTimestampMs: Long? = null,
-    val reactionTimestampMs: Long? = null,
     val samples: List<SampleUpload>
 )
 

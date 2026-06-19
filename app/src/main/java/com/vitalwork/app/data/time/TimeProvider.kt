@@ -10,10 +10,9 @@ import javax.inject.Singleton
  *
  * An Android app cannot set the OS system clock, so this does not change the device time: it returns
  * `System.currentTimeMillis()` plus the NTP offset that [KronosClock] computed at startup (see
- * [com.vitalwork.app.VitalWorkApplication]). Routing every persisted stamp through here
- * puts the tablet's data on true UTC, the same timeline the Quest stamps its `eventTimestampMs` /
- * `reactionTimestampMs` on after its own NTP sync — so the two streams align without any
- * device-to-device handshake.
+ * [com.vitalwork.app.VitalWorkApplication]). Routing every persisted stamp through here puts the
+ * tablet's data on a single, NTP-corrected UTC timeline so all sensor streams align without any
+ * device-to-device clock handshake.
  *
  * The primary constructor takes a raw `() -> Long` so tests can inject a fixed clock; the [Inject]
  * constructor wires the real Kronos-backed source. Production code always receives the Kronos-backed

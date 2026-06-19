@@ -83,7 +83,6 @@ class SessionDetailViewModelTest {
                 id = id,
                 sessionId = sessionId,
                 scenarioCode = code,
-                scenarioCategory = code.category,
                 startedAt = 2_000L + id
             )
         )

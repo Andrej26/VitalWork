@@ -21,7 +21,6 @@ import com.vitalwork.app.data.db.ScenarioCode
 import com.vitalwork.app.data.system.FakeLocationChecker
 import com.vitalwork.app.data.system.FakeSystemReadinessChecker
 import com.vitalwork.app.presentation.components.BleDialogState
-import com.vitalwork.app.presentation.screens.sessions.components.NotesSaveStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -356,28 +355,6 @@ class SessionControlViewModelTest {
 
         assertEquals(1, fakeScenarioRecordingRepo.stopRecordingCallCount)
         assertTrue("Session should be deleted", fakeSessionDao.sessions.isEmpty())
-    }
-
-    @Test
-    fun updateNotes_debounces500ms_thenSavesToDb() = runTest {
-        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        seedActiveSession()
-
-        val vm = createVm()
-        advanceUntilIdle()
-        vm.setupNotesAutoSave()
-
-        vm.updateNotes("hello")
-        assertEquals(NotesSaveStatus.Saving, vm.notesSaveStatus.value)
-
-        advanceTimeBy(400)
-        runCurrent()
-        assertEquals("", fakeSessionDao.sessions[0].notes)
-
-        advanceTimeBy(200)
-        runCurrent()
-        assertEquals("hello", fakeSessionDao.sessions[0].notes)
-        assertEquals(NotesSaveStatus.Saved, vm.notesSaveStatus.value)
     }
 
     @Test

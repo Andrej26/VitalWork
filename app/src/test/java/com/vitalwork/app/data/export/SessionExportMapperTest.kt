@@ -3,7 +3,6 @@ package com.vitalwork.app.data.export
 import com.vitalwork.app.data.db.FakeScenarioDao
 import com.vitalwork.app.data.db.FakeSensorSampleDao
 import com.vitalwork.app.data.db.ParticipantEntity
-import com.vitalwork.app.data.db.ScenarioCategory
 import com.vitalwork.app.data.db.ScenarioCode
 import com.vitalwork.app.data.db.ScenarioEntity
 import com.vitalwork.app.data.db.SensorSampleEntity
@@ -56,36 +55,12 @@ class SessionExportMapperTest {
     }
 
     @Test
-    fun buildScenarioExport_categoryEmittedAsString() {
+    fun buildScenarioExport_scenarioCodeEmittedAsString() {
         val scenario = scenario(code = ScenarioCode.MACHINE_JAM)
 
         val result = mapper.buildScenarioExport(scenario, emptyList())
 
         assertEquals("MACHINE_JAM", result.scenarioCode)
-        assertEquals("B", result.scenarioCategory)
-    }
-
-    @Test
-    fun buildScenarioExport_reactionTimeDerived() {
-        val scenario = scenario(
-            eventTimestampMs = 10_000L,
-            reactionTimestampMs = 10_612L
-        )
-
-        val result = mapper.buildScenarioExport(scenario, emptyList())
-
-        assertEquals(10_000L, result.eventTimestampMs)
-        assertEquals(10_612L, result.reactionTimestampMs)
-        assertEquals(612L, result.reactionTimeMs)
-    }
-
-    @Test
-    fun buildScenarioExport_reactionTimeNullWhenEventMissing() {
-        val scenario = scenario(eventTimestampMs = null, reactionTimestampMs = null)
-
-        val result = mapper.buildScenarioExport(scenario, emptyList())
-
-        assertNull(result.reactionTimeMs)
     }
 
     @Test
@@ -205,15 +180,13 @@ class SessionExportMapperTest {
         val participant = participant()
         val session = session(
             sessionCode = "VW-260528-143012",
-            status = SessionStatus.UPLOADED,
-            notes = "WiFi dropped at min 7"
+            status = SessionStatus.UPLOADED
         )
 
         val result = mapper.buildExportData(participant, session, emptyList())
 
         assertEquals("VW-260528-143012", result.session.sessionCode)
         assertEquals("UPLOADED", result.session.status)
-        assertEquals("WiFi dropped at min 7", result.session.notes)
         assertEquals("2.1.0", result.version)
     }
 
@@ -228,7 +201,6 @@ class SessionExportMapperTest {
     private fun session(
         sessionCode: String = "VW-260528-143012",
         status: SessionStatus = SessionStatus.COMPLETED,
-        notes: String = "",
         scenarioCount: Int = 0,
         hrSampleCount: Int = 0,
         respirationSampleCount: Int = 0,
@@ -241,7 +213,6 @@ class SessionExportMapperTest {
         startedAt = 1_000_000L,
         endedAt = 1_060_000L,
         status = status,
-        notes = notes,
         hrSampleCount = hrSampleCount,
         respirationSampleCount = respirationSampleCount,
         rrIntervalSampleCount = rrIntervalSampleCount,
@@ -254,8 +225,6 @@ class SessionExportMapperTest {
         id: Long? = null,
         sessionId: Long = 1L,
         code: ScenarioCode = ScenarioCode.FALLING_PALLET,
-        eventTimestampMs: Long? = null,
-        reactionTimestampMs: Long? = null,
         endedAt: Long? = 1_060_000L
     ): ScenarioEntity {
         val actualId = id ?: nextScenarioId++
@@ -263,16 +232,10 @@ class SessionExportMapperTest {
             id = actualId,
             sessionId = sessionId,
             scenarioCode = code,
-            scenarioCategory = code.category,
             startedAt = 1_000_000L,
-            endedAt = endedAt,
-            eventTimestampMs = eventTimestampMs,
-            reactionTimestampMs = reactionTimestampMs
+            endedAt = endedAt
         )
     }
-
-    @Suppress("UNUSED_PARAMETER")
-    private fun ScenarioCategory.unused() = Unit
 
     private fun sample(
         scenarioId: Long,

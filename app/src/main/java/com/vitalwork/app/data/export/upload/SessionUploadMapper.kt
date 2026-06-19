@@ -41,8 +41,7 @@ class SessionUploadMapper @Inject constructor(
                 sessionCode = session.sessionCode,
                 startedAtMs = session.startedAt,
                 endedAtMs = session.endedAt,
-                status = session.status.name,
-                notes = session.notes
+                status = session.status.name
             ),
             scenarios = scenarioUploads
         )
@@ -55,8 +54,6 @@ class SessionUploadMapper @Inject constructor(
         scenarioCode = scenario.scenarioCode.name,
         startedAtMs = scenario.startedAt,
         endedAtMs = scenario.endedAt,
-        eventTimestampMs = scenario.eventTimestampMs,
-        reactionTimestampMs = scenario.reactionTimestampMs,
         samples = samples.map { sample ->
             SampleUpload(
                 // Enum NAME, not the lowercase label used by the local CSV export.

@@ -27,7 +27,6 @@ import com.vitalwork.app.data.sensor.watch.model.WatchReading
 import com.vitalwork.app.presentation.components.BleDialogState
 import com.vitalwork.app.presentation.components.DialogAction
 import com.vitalwork.app.presentation.components.gattStatusToString
-import com.vitalwork.app.presentation.screens.sessions.components.NotesSaveStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.FlowPreview
@@ -171,16 +170,6 @@ class SessionControlViewModel @Inject constructor(
     val respirationDisconnectReason: StateFlow<String?> =
         connectionRepository.respirationDisconnectReason
 
-    /** Notes text */
-    private val _notes = MutableStateFlow("")
-    val notes: StateFlow<String> = _notes.asStateFlow()
-
-    /** Notes auto-save status indicator */
-    private val _notesSaveStatus = MutableStateFlow(NotesSaveStatus.Idle)
-    val notesSaveStatus: StateFlow<NotesSaveStatus> = _notesSaveStatus.asStateFlow()
-    private var userHasEditedNotes = false
-    private var savedDismissJob: Job? = null
-
     /**
      * Drives the End-Session dialog state machine: prompt to wake the watch (if dozing/gone) → show a
      * "Receiving data from watch…" spinner while the durable store flushes → green check → auto-finalize.
@@ -290,15 +279,11 @@ class SessionControlViewModel @Inject constructor(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ScenarioRecordingUiState())
 
-    private var notesDebounceJob: Job? = null
-
     init {
         // Load session data
         if (sessionId > 0) {
             viewModelScope.launch {
-                val session = sessionRepository.getSessionById(sessionId)
-                _session.value = session
-                _notes.value = session?.notes ?: ""
+                _session.value = sessionRepository.getSessionById(sessionId)
             }
             // Begin continuous Galaxy Watch EDA capture for the whole session. Idempotent: the watch
             // streams independently of scenarios and buffers in Doze, so we accumulate session-wide
@@ -449,36 +434,6 @@ class SessionControlViewModel @Inject constructor(
                 sensorRecordingRepository.stopRecording()
             }
         }
-    }
-
-    @OptIn(FlowPreview::class)
-    fun setupNotesAutoSave() {
-        notesDebounceJob?.cancel()
-        notesDebounceJob = viewModelScope.launch {
-            _notes
-                .debounce(500)
-                .distinctUntilChanged()
-                .collect { text ->
-                    if (sessionId > 0) {
-                        sessionRepository.updateNotes(sessionId, text)
-                        if (userHasEditedNotes) {
-                            _notesSaveStatus.value = NotesSaveStatus.Saved
-                            savedDismissJob?.cancel()
-                            savedDismissJob = viewModelScope.launch {
-                                delay(2000)
-                                _notesSaveStatus.value = NotesSaveStatus.Idle
-                            }
-                        }
-                    }
-                }
-        }
-    }
-
-    fun updateNotes(text: String) {
-        userHasEditedNotes = true
-        savedDismissJob?.cancel()
-        _notesSaveStatus.value = NotesSaveStatus.Saving
-        _notes.value = text
     }
 
     /**

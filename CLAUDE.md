@@ -362,15 +362,19 @@ com.vitalwork.wear/
 
 ## Database Schema
 
-Room database (version 2) with 4 entities. Cascade-delete on all foreign keys. Uses
-`fallbackToDestructiveMigration` (enums are stored as strings), so adding a `SensorType` value is a
-version bump with no hand-written `Migration` (v2 added `WATCH_IBI`).
+Room database (version 5) with 4 entities. Cascade-delete on all foreign keys. Uses
+`fallbackToDestructiveMigration` (enums are stored as strings), so adding/removing a `SensorType`
+value or column is a version bump with no hand-written `Migration` — the destructive fallback wipes
+old local rows (sessions are already exported/uploaded). History: v2 added `WATCH_IBI`; v3 split
+per-device sensor types; v4 added the watch sample counters; **v5** dropped the reaction-time/VR
+fields (`scenarioCategory`, `eventTimestampMs`, `reactionTimestampMs`) and `sessions.notes` for the
+biofeedback-only pivot.
 
 | Entity | Table | Purpose |
 |--------|-------|---------|
 | ParticipantEntity | `participants` | Anonymized test subjects (unique `participantCode`) |
-| SessionEntity | `sessions` | Per-participant session run (FK → participants; status: ACTIVE, COMPLETED, UPLOADED) |
-| ScenarioEntity | `scenarios` | One VR scenario run within a session (FK → sessions; scenarioCode + scenarioCategory + event/reaction timestamps) |
+| SessionEntity | `sessions` | Per-participant session run (FK → participants; status: ACTIVE, COMPLETED, UPLOADED; per-type sample counters) |
+| ScenarioEntity | `scenarios` | One scenario run within a session (FK → sessions; `scenarioCode` + `startedAt`/`endedAt`) |
 | SensorSampleEntity | `sensor_samples` | Time-series sensor data (FK → scenarios; carries `timestampMs` + `elapsedMs`) |
 
 **Enums**
@@ -378,13 +382,15 @@ version bump with no hand-written `Migration` (v2 added `WATCH_IBI`).
 | Enum | Stored values |
 |------|---------------|
 | `SessionStatus` | `ACTIVE`, `COMPLETED`, `UPLOADED` |
-| `ScenarioCategory` | `A`, `B`, `C` |
 | `ScenarioCode` | `FALLING_PALLET`, `BLIND_CORNER`, `EQUIPMENT_COLLISION`, `FLOOR_OBSTACLE`, `MACHINE_JAM`, `CONVEYOR_ACCELERATION`, `MEDIUM_LEAKAGE`, `ELECTRICAL_SHORT`, `SLING_FAILURE` |
-| `SensorType` | `HEART_RATE`, `RESPIRATION`, `ESENSE_RR_INTERVAL`, `EDA`, `WATCH_IBI` |
+| `SensorType` | `ESENSE_HEART_RATE`, `RESPIRATION`, `ESENSE_RR_INTERVAL`, `WATCH_HR`, `WATCH_IBI`, `WATCH_EDA` |
 
-`ScenarioCode` carries the official short code (e.g. `A1`) and display label as enum properties — they're stored descriptively in the DB so renumbering doesn't break old rows.
+`ScenarioCode` carries the official short code (e.g. `A1`) and display label as enum properties —
+they're stored descriptively in the DB so renumbering doesn't break old rows. (The `ScenarioCategory`
+concept and the `scenarioCategory` column were removed in v5.)
 
-Reaction time is **derived** at export from `reactionTimestampMs − eventTimestampMs`; not stored. Session duration is derived from `endedAt − startedAt`. All timestamps come from Android's `System.currentTimeMillis()` so cross-stream alignment needs no clock-sync.
+Session duration is derived from `endedAt − startedAt`. All timestamps come from an NTP-corrected
+clock (`TimeProvider`) on the same UTC timeline, so cross-stream alignment needs no clock-sync.
 
 **Device prefix (multi-tablet testing):** each tablet picks a one-time prefix (A/B/C/D) under **Settings** (`SettingsRepository`, SharedPreferences, default `A`). The prefix tags both the generated participant code (`A-001`) and session code (`VW-A-yyMMdd-HHmmss`), so several tablets testing in parallel never mint colliding codes that would look like one duplicated participant after the server merge. The participant-code field is read-only (auto-generated) to keep the scheme typo-proof; participant numbering is counted **per prefix** (`ParticipantDao.getParticipantCountByPrefix`). Operators must agree beforehand which device owns which letter — collisions are only prevented across devices with *distinct* letters.
 
@@ -460,7 +466,7 @@ Unit tests live under `app/src/test/` and run on the host JVM (no device/emulato
 | `data/vr/VrEventReceiverTest.kt` | `VrEventReceiver.kt` | Event/reaction persistence + accept, reject when no active scenario, first-write-wins, late-reaction grace window, heartbeat-less liveness watchdog |
 | `data/repository/ParticipantRepositoryTest.kt` | `ParticipantRepository.kt` | Code generation (`A-001`…, per-device-prefix scoped), uniqueness validation, fetch by ID/code |
 | `data/repository/SessionRepositoryTest.kt` | `SessionRepository.kt` | Session lifecycle: `sessionCode` format (VW-{prefix}-yyMMdd-HHmmss), participant FK, sample-count aggregation from scenarios at end, status transitions, notes persistence, deletion |
-| `data/repository/ScenarioRepositoryTest.kt` | `ScenarioRepository.kt` | Scenario lifecycle: create with derived `scenarioCategory`, event/reaction timestamp updates, end (sets `endedAt`), batch sample insert |
+| `data/repository/ScenarioRepositoryTest.kt` | `ScenarioRepository.kt` | Scenario lifecycle: create, end (sets `endedAt`), close dangling scenarios, batch sample insert |
 | `data/export/SessionExportMapperTest.kt` | `SessionExportMapper.kt` | Export data transformation (Section 7 shape): participant + session + scenarios + samples; sensor type mapping, gap detection per scenario, derived reaction time |
 | `data/recording/ScenarioRecordingRepositoryImplTest.kt` | `ScenarioRecordingRepositoryImpl.kt` | Start/stop state machine, sensor detection, sample buffering + flushing, scenario-end finalization |
 | `data/sensor/audio/MindfieldRespirationTest.kt` | `MindfieldRespiration.kt` | Zero-crossing breathing rate algorithm and signal verification logic |

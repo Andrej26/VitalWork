@@ -40,8 +40,6 @@ data class SessionEntity(
 
     val status: SessionStatus = SessionStatus.ACTIVE,
 
-    val notes: String = "",
-
     val hrSampleCount: Int = 0,
 
     val respirationSampleCount: Int = 0,

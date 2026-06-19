@@ -2,7 +2,6 @@ package com.vitalwork.app.data.recording
 
 import com.vitalwork.app.data.db.FakeScenarioDao
 import com.vitalwork.app.data.db.FakeSensorSampleDao
-import com.vitalwork.app.data.db.ScenarioCategory
 import com.vitalwork.app.data.db.ScenarioCode
 import com.vitalwork.app.data.db.ScenarioEntity
 import com.vitalwork.app.data.db.SensorSampleEntity
@@ -66,7 +65,6 @@ class ScenarioRecordingRepositoryImplTest {
             id = id,
             sessionId = 1L,
             scenarioCode = ScenarioCode.FALLING_PALLET,
-            scenarioCategory = ScenarioCategory.A,
             startedAt = startedAt,
             endedAt = endedAt
         )
@@ -93,7 +91,6 @@ class ScenarioRecordingRepositoryImplTest {
             id = id,
             sessionId = 1L,
             scenarioCode = ScenarioCode.FALLING_PALLET,
-            scenarioCategory = ScenarioCategory.A,
             startedAt = System.currentTimeMillis()
         )
         fakeScenarioDao.scenarios.add(s)

@@ -106,7 +106,6 @@ import com.vitalwork.app.presentation.screens.sensors.toConnectionState
 import com.vitalwork.app.presentation.screens.sessions.components.DeviceSensorGroup
 import com.vitalwork.app.presentation.screens.sessions.components.EndSessionWatchDialog
 import com.vitalwork.app.presentation.screens.sessions.components.LiveSensorCard
-import com.vitalwork.app.presentation.screens.sessions.components.SessionNotesField
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -143,8 +142,6 @@ fun SessionControlScreen(
 
     // Session state
     val session by viewModel.session.collectAsState()
-    val notes by viewModel.notes.collectAsState()
-    val notesSaveStatus by viewModel.notesSaveStatus.collectAsState()
     val endSessionResult by viewModel.endSessionResult.collectAsState()
 
     // BLE scan state
@@ -207,11 +204,6 @@ fun SessionControlScreen(
     var showBackDialog by remember { mutableStateOf(false) }
     var showDiscardConfirmation by remember { mutableStateOf(false) }
 
-
-    // Setup auto-save for notes
-    LaunchedEffect(Unit) {
-        viewModel.setupNotesAutoSave()
-    }
 
     // The single BackgroundConnectionService keeps the process alive (and mic/BLE/network legal)
     // while a session is ACTIVE, so the operator can lock the screen mid-session. It's driven
@@ -762,13 +754,6 @@ fun SessionControlScreen(
                     }
                 }
             }
-
-            // Notes section
-            SessionNotesField(
-                notes = notes,
-                onNotesChange = { viewModel.updateNotes(it) },
-                saveStatus = notesSaveStatus
-            )
 
             // Auto-return countdown: after 10 s this screen hands back to the scenario-selection hub.
             ReturnCountdown(

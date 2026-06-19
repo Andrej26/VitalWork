@@ -106,19 +106,9 @@ class SessionExportService @Inject constructor(
         val csvContent = buildString {
             appendLine("# session_code,$sessionCode")
             appendLine("# scenario_code,${scenario.scenarioCode.name}")
-            appendLine("# scenario_category,${scenario.scenarioCategory.name}")
             appendLine("# start_time,${isoFormat.format(Date(scenario.startedAt))}")
             scenario.endedAt?.let {
                 appendLine("# end_time,${isoFormat.format(Date(it))}")
-            }
-            scenario.eventTimestampMs?.let {
-                appendLine("# event_timestamp_ms,$it")
-            }
-            scenario.reactionTimestampMs?.let {
-                appendLine("# reaction_timestamp_ms,$it")
-            }
-            if (scenario.eventTimestampMs != null && scenario.reactionTimestampMs != null) {
-                appendLine("# reaction_time_ms,${scenario.reactionTimestampMs - scenario.eventTimestampMs}")
             }
             appendLine("# esense_hr_samples,$hrCount")
             if (rrCount > 0) appendLine("# rr_interval_samples,$rrCount")

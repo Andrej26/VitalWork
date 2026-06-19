@@ -98,11 +98,6 @@ class SessionRepository @Inject constructor(
         )
     }
 
-    suspend fun updateNotes(id: Long, notes: String) {
-        val session = sessionDao.getSessionById(id) ?: return
-        sessionDao.update(session.copy(notes = notes))
-    }
-
     suspend fun markUploaded(id: Long) {
         val session = sessionDao.getSessionById(id) ?: return
         sessionDao.update(session.copy(status = SessionStatus.UPLOADED))

@@ -2,7 +2,6 @@ package com.vitalwork.app.data.repository
 
 import com.vitalwork.app.data.db.FakeScenarioDao
 import com.vitalwork.app.data.db.FakeSensorSampleDao
-import com.vitalwork.app.data.db.ScenarioCategory
 import com.vitalwork.app.data.db.ScenarioCode
 import com.vitalwork.app.data.db.ScenarioEntity
 import com.vitalwork.app.data.db.SensorSampleEntity
@@ -29,35 +28,12 @@ class ScenarioRepositoryTest {
     }
 
     @Test
-    fun createScenario_derivesCategoryFromCode() = runTest {
+    fun createScenario_setsCodeAndSession() = runTest {
         val s = repository.createScenario(sessionId = 1L, scenarioCode = ScenarioCode.MACHINE_JAM)
 
         assertEquals(ScenarioCode.MACHINE_JAM, s.scenarioCode)
-        assertEquals(ScenarioCategory.B, s.scenarioCategory)
         assertEquals(1L, s.sessionId)
         assertNull(s.endedAt)
-        assertNull(s.eventTimestampMs)
-        assertNull(s.reactionTimestampMs)
-    }
-
-    @Test
-    fun setEventTimestamp_persists() = runTest {
-        val s = repository.createScenario(sessionId = 1L, scenarioCode = ScenarioCode.FALLING_PALLET)
-
-        repository.setEventTimestamp(s.id, eventTimestampMs = 12_345L)
-
-        val updated = fakeScenarioDao.getScenarioById(s.id)!!
-        assertEquals(12_345L, updated.eventTimestampMs)
-    }
-
-    @Test
-    fun setReactionTimestamp_persists() = runTest {
-        val s = repository.createScenario(sessionId = 1L, scenarioCode = ScenarioCode.FALLING_PALLET)
-
-        repository.setReactionTimestamp(s.id, reactionTimestampMs = 67_890L)
-
-        val updated = fakeScenarioDao.getScenarioById(s.id)!!
-        assertEquals(67_890L, updated.reactionTimestampMs)
     }
 
     @Test
@@ -180,7 +156,6 @@ class ScenarioRepositoryTest {
             ScenarioEntity(
                 sessionId = sessionId,
                 scenarioCode = ScenarioCode.FALLING_PALLET,
-                scenarioCategory = ScenarioCategory.A,
                 startedAt = startedAt,
                 endedAt = endedAt
             )
