@@ -28,6 +28,9 @@ sealed class Route(val route: String) {
     }
     data object Sessions : Route("sessions")
     data object ParticipantEntry : Route("participants/new")
+    data object SessionSetup : Route("sessions/setup/{sessionId}") {
+        fun createRoute(sessionId: Long) = "sessions/setup/$sessionId"
+    }
     data object ScenarioSelection : Route("sessions/scenario-select/{sessionId}") {
         fun createRoute(sessionId: Long) = "sessions/scenario-select/$sessionId"
     }
@@ -78,7 +81,8 @@ fun AppNavigation(
                     navController.navigate(Route.ParticipantEntry.route)
                 },
                 onNavigateToSessionActive = { sessionId ->
-                    navController.navigate(Route.SessionActive.createRoute(sessionId))
+                    // Resuming an active session lands on the scenario hub (setup is a one-time gate).
+                    navController.navigate(Route.ScenarioSelection.createRoute(sessionId))
                 },
                 onNavigateToSessionReview = { sessionId ->
                     navController.navigate(Route.SessionReview.createRoute(sessionId))
@@ -148,7 +152,8 @@ fun AppNavigation(
                     navController.navigate(Route.SessionReview.createRoute(sessionId))
                 },
                 onOpenactiveSession = { sessionId ->
-                    navController.navigate(Route.SessionActive.createRoute(sessionId))
+                    // Resuming an active session lands on the scenario hub (setup is a one-time gate).
+                    navController.navigate(Route.ScenarioSelection.createRoute(sessionId))
                 }
             )
         }
@@ -157,6 +162,29 @@ fun AppNavigation(
             ParticipantEntryScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onSessionStarted = { sessionId ->
+                    navController.navigate(Route.SessionSetup.createRoute(sessionId)) {
+                        popUpTo(Route.Home.route)
+                    }
+                }
+            )
+        }
+
+        composable(
+            route = Route.SessionSetup.route,
+            arguments = listOf(
+                navArgument("sessionId") { type = NavType.LongType }
+            )
+        ) { backStackEntry ->
+            val sessionId = backStackEntry.arguments?.getLong("sessionId") ?: -1L
+            // One-time sensor-connection gate: reuses the session control screen with the countdown
+            // and recording controls hidden, plus a Proceed button that opens the scenario hub.
+            SessionControlScreen(
+                sessionId = sessionId,
+                onNavigateBack = { navController.popBackStack() },
+                onCountdownFinished = {},
+                onSessionEnded = {},
+                setupMode = true,
+                onProceed = {
                     navController.navigate(Route.ScenarioSelection.createRoute(sessionId)) {
                         popUpTo(Route.Home.route)
                     }

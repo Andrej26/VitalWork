@@ -105,8 +105,13 @@ class SessionControlViewModelTest {
         return session
     }
 
-    private fun createVm(savedSessionId: Long = sessionId): SessionControlViewModel {
-        val savedState = SavedStateHandle(mapOf("sessionId" to savedSessionId))
+    private fun createVm(
+        savedSessionId: Long = sessionId,
+        scenario: Int = 0
+    ): SessionControlViewModel {
+        val savedState = SavedStateHandle(
+            mapOf("sessionId" to savedSessionId, "scenario" to scenario)
+        )
         return SessionControlViewModel(
             connectionRepository = connectionRepository,
             sensorRecordingRepository = fakeScenarioRecordingRepo,
@@ -189,6 +194,53 @@ class SessionControlViewModelTest {
         assertEquals(1, fakeScenarioRecordingRepo.startRecordingCallCount)
         assertEquals(1, fakeScenarioDao.scenarios.size)
         assertEquals(ScenarioCode.REFERENCE_STATE, fakeScenarioDao.scenarios[0].scenarioCode)
+    }
+
+    @Test
+    fun init_scenarioPicked_withSensorConnected_autoStartsRecording() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        seedActiveSession()
+        fakeBleManager.connectionState.value = ConnectionState.CONNECTED
+
+        // Opening the screen for a real scenario (1 = first ScenarioCode) auto-starts recording.
+        val vm = createVm(scenario = 1)
+        advanceUntilIdle()
+
+        assertEquals(1, fakeScenarioRecordingRepo.startRecordingCallCount)
+        assertEquals(1, fakeScenarioDao.scenarios.size)
+        assertEquals(ScenarioCode.REFERENCE_STATE, fakeScenarioDao.scenarios[0].scenarioCode)
+    }
+
+    @Test
+    fun init_noScenarioPicked_doesNotAutoStartRecording() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        seedActiveSession()
+        fakeBleManager.connectionState.value = ConnectionState.CONNECTED
+
+        // Setup screen / hub / resume open without a scenario pick (scenario == 0) → never record.
+        val vm = createVm(scenario = 0)
+        advanceUntilIdle()
+
+        assertEquals(0, fakeScenarioRecordingRepo.startRecordingCallCount)
+    }
+
+    @Test
+    fun finishScenario_whileRecording_stopsThenInvokesCallback() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        seedActiveSession()
+        fakeBleManager.connectionState.value = ConnectionState.CONNECTED
+
+        val vm = createVm(scenario = 1)
+        advanceUntilIdle()
+        assertEquals(DataRecordingState.RECORDING, fakeScenarioRecordingRepo.recordingState.value)
+
+        var finished = false
+        vm.finishScenario { finished = true }
+        advanceUntilIdle()
+
+        assertEquals(1, fakeScenarioRecordingRepo.stopRecordingCallCount)
+        assertTrue("Callback should fire after stop completes", finished)
+        assertEquals(DataRecordingState.IDLE, fakeScenarioRecordingRepo.recordingState.value)
     }
 
     @Test

@@ -36,7 +36,6 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Watch
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.WifiOff
@@ -53,7 +52,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -117,6 +115,8 @@ fun SessionControlScreen(
     onNavigateBack: () -> Unit,
     onCountdownFinished: () -> Unit,
     onSessionEnded: (sessionId: Long) -> Unit,
+    setupMode: Boolean = false,
+    onProceed: () -> Unit = {},
     viewModel: SessionControlViewModel = hiltViewModel()
 ) {
     // Connection states
@@ -190,10 +190,6 @@ fun SessionControlScreen(
 
     // Convert DeviceState to ConnectionState for UI consistency
     val respirationConnectionState = respirationSensorState.toConnectionState()
-
-    val isAnySensorConnected = pulseSensorState == ConnectionState.CONNECTED ||
-            respirationConnectionState == ConnectionState.CONNECTED ||
-            watchConnectionState == ConnectionState.CONNECTED
 
     val context = LocalContext.current
 
@@ -497,17 +493,20 @@ fun SessionControlScreen(
                 WatchLinkLostBanner()
             }
 
-            // Hero auto-return countdown: this screen's whole purpose is to hand back to the
+            // Hero auto-return countdown: a scenario run's whole purpose is to hand back to the
             // scenario-selection hub after the scenario's full duration (A/E 10 min, B/C 20 min,
-            // D 30 min), so it's the focal point at the top. Skip lets the operator return
-            // immediately instead of waiting it out.
-            ReturnCountdownHero(
-                seconds = viewModel.countdownSeconds,
-                onFinished = onCountdownFinished,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp)
-            )
+            // D 30 min), so it's the focal point at the top. When the countdown ends we stop+finalize
+            // the recording first, then return to the hub. Hidden in setup mode, which is just a
+            // sensor-connection gate before any scenario is picked.
+            if (!setupMode) {
+                ReturnCountdownHero(
+                    seconds = viewModel.countdownSeconds,
+                    onFinished = { viewModel.finishScenario(onCountdownFinished) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                )
+            }
 
             // Mindfield eSense device group
             val eSenseConnectionState = when {
@@ -637,67 +636,23 @@ fun SessionControlScreen(
                 )
             }
 
-            // Recording Control Section
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+            // Setup mode is a one-time sensor-connection gate before any scenario is picked: confirm
+            // which sensors are connected, then proceed to the scenario hub. Scenario runs themselves
+            // record fully automatically (start on entry, stop when the countdown ends), so there are
+            // no manual recording controls — the REC badge + red border in the top bar show state.
+            if (setupMode) {
+                Button(
+                    onClick = onProceed,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        text = "Recording",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium
+                    Text("Proceed to scenarios")
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(
+                        imageVector = Icons.Default.SkipNext,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
                     )
-
-                    // Per-sensor sample counts already appear on the sensor cards above, so the
-                    // recording card stays slim — just the manual Start/Stop controls.
-                    val isIdle = recordingUiState.recordingState == DataRecordingState.IDLE
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Button(
-                            onClick = { viewModel.startManualRecording() },
-                            enabled = isIdle && isAnySensorConnected,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.PlayArrow,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Start Recording")
-                        }
-                        OutlinedButton(
-                            onClick = { viewModel.stopManualRecording() },
-                            enabled = !isIdle,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Stop Recording")
-                        }
-                    }
                 }
-            }
-
-            // Skip lets the operator return to the scenario hub immediately instead of waiting the
-            // countdown out; kept at the very bottom so it doesn't compete with the hero countdown.
-            OutlinedButton(
-                onClick = onCountdownFinished,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(
-                    imageVector = Icons.Default.SkipNext,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Skip")
             }
 
             Spacer(modifier = Modifier.height(8.dp))

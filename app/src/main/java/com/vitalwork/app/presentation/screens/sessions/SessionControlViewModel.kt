@@ -291,6 +291,18 @@ class SessionControlViewModel @Inject constructor(
             sensorRecordingRepository.startWatchEdaSession()
         }
 
+        // Auto-start recording when this screen is opened for an actual scenario run (1..N). The same
+        // ViewModel also backs the scenario-selection hub, the sensor-setup screen, and resumes — all
+        // of which open without a scenario pick (selectedScenarioNumber == 0) and must never record.
+        // We only wait for the session to load; startScenarioRecording() self-guards on IDLE state, an
+        // ACTIVE session, and at least one connected sensor, so it's safe and one-shot.
+        if (selectedScenarioNumber >= 1) {
+            viewModelScope.launch {
+                _session.first { it != null }
+                startManualRecording()
+            }
+        }
+
         // Unified BLE connection-state handler: dialog dismissal, HR-notification kickoff,
         // watchdog cancellation, and post-disconnect resets.
         viewModelScope.launch {
@@ -440,6 +452,21 @@ class SessionControlViewModel @Inject constructor(
             if (sensorRecordingRepository.recordingState.value == DataRecordingState.RECORDING) {
                 sensorRecordingRepository.stopRecording()
             }
+        }
+    }
+
+    /**
+     * Finish the current scenario when its countdown ends: stop+finalize the recording (suspending,
+     * so the scenario row is closed and [recordingState] is back to IDLE) and only then invoke
+     * [onFinished] to navigate back to the hub. The ordering matters — navigating first would let the
+     * next scenario's ViewModel observe a still-RECORDING state and skip its auto-start.
+     */
+    fun finishScenario(onFinished: () -> Unit) {
+        viewModelScope.launch {
+            if (sensorRecordingRepository.recordingState.value == DataRecordingState.RECORDING) {
+                sensorRecordingRepository.stopRecording()
+            }
+            onFinished()
         }
     }
 
