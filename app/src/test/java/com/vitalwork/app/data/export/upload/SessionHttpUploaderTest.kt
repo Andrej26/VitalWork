@@ -73,7 +73,7 @@ class SessionHttpUploaderTest {
     )
 
     @Test
-    fun success201_returnsServerMessage_andSendsApiKeyHeaderToCorrectUrl() = runTest {
+    fun success201_returnsServerMessage_andSendsBearerTokenToCorrectUrl() = runTest {
         // BuildConfig must be configured for the request to be attempted.
         assumeTrue(BuildConfig.VITALWORK_BASE_URL.isNotEmpty() && BuildConfig.VITALWORK_API_KEY.isNotEmpty())
 
@@ -91,8 +91,8 @@ class SessionHttpUploaderTest {
 
         assertTrue(result.isSuccess)
         assertEquals("Full VitalWork session uploaded.", result.getOrNull())
-        assertEquals(BuildConfig.VITALWORK_API_KEY, captured?.headers?.get("X-Api-Key"))
-        assertTrue(captured?.url.toString().endsWith("/api/uploads/session"))
+        assertEquals("Bearer ${BuildConfig.VITALWORK_API_KEY}", captured?.headers?.get(HttpHeaders.Authorization))
+        assertTrue(captured?.url.toString().endsWith("/api/sessions/upload"))
     }
 
     @Test

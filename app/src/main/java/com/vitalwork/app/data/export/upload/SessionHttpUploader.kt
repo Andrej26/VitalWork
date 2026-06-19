@@ -10,7 +10,7 @@ import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.request.header
+import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
@@ -27,9 +27,9 @@ import javax.inject.Singleton
 
 /**
  * Uploads a completed session to the VitalWork Laravel server as one nested JSON bundle
- * (`POST /api/uploads/session`, see `test/VitalWork_API_Documentation.docx`).
+ * (`POST /api/sessions/upload`, see `test/VitalWork_API_Service_Documentation.docx`).
  *
- * The endpoint is idempotent on `session_code` (re-uploading replaces that session's scenarios/samples),
+ * The endpoint is idempotent on `sessionCode` (re-uploading replaces that session's scenarios/samples),
  * so [upload] is always safe to retry. Never throws to the caller — every outcome is a [Result].
  */
 @Singleton
@@ -83,8 +83,8 @@ class SessionHttpUploader(
 
             val request = mapper.buildUploadRequest(participant, session, scenarios)
 
-            val response: HttpResponse = client.post("$baseUrl/api/uploads/session") {
-                header(HEADER_API_KEY, apiKey)
+            val response: HttpResponse = client.post("$baseUrl/api/sessions/upload") {
+                bearerAuth(apiKey)
                 contentType(ContentType.Application.Json)
                 setBody(request)
             }
@@ -117,7 +117,6 @@ class SessionHttpUploader(
     class UploadException(message: String) : Exception(message)
 
     private companion object {
-        const val HEADER_API_KEY = "X-Api-Key"
         const val REQUEST_TIMEOUT_MS = 30_000L
         const val CONNECT_TIMEOUT_MS = 15_000L
         const val ERROR_BODY_LIMIT = 500

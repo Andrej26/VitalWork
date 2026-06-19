@@ -13,7 +13,7 @@ import javax.inject.Singleton
  *
  * Unlike [com.vitalwork.app.data.export.SessionExportMapper] (ISO strings, gaps, statistics), this
  * emits raw epoch-millisecond timestamps straight off the entities and **enum-NAME** sensor types, which is
- * what `POST /api/uploads/session` expects (doc §4/§9). No gap or statistics computation — the server
+ * what `POST /api/sessions/upload` expects (doc §6/§7). No gap or statistics computation — the server
  * recomputes counts from the samples.
  */
 @Singleton
@@ -39,8 +39,8 @@ class SessionUploadMapper @Inject constructor(
             ),
             session = SessionUpload(
                 sessionCode = session.sessionCode,
-                startedAtMs = session.startedAt,
-                endedAtMs = session.endedAt,
+                startedAt = session.startedAt,
+                endedAt = session.endedAt,
                 status = session.status.name
             ),
             scenarios = scenarioUploads
@@ -52,13 +52,14 @@ class SessionUploadMapper @Inject constructor(
         samples: List<SensorSampleEntity>
     ): ScenarioUpload = ScenarioUpload(
         scenarioCode = scenario.scenarioCode.name,
-        startedAtMs = scenario.startedAt,
-        endedAtMs = scenario.endedAt,
+        startedAt = scenario.startedAt,
+        endedAt = scenario.endedAt,
         samples = samples.map { sample ->
             SampleUpload(
                 // Enum NAME, not the lowercase label used by the local CSV export.
                 sensorType = sample.sensorType.name,
                 timestampMs = sample.timestampMs,
+                elapsedMs = sample.elapsedMs,
                 value = sample.value
             )
         }

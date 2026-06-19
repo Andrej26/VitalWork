@@ -53,8 +53,8 @@ class SessionUploadMapperTest {
         assertEquals("male", request.participant.gender)
 
         assertEquals("VW-A-260101-120000", request.session.sessionCode)
-        assertEquals(1_790_509_812_000L, request.session.startedAtMs)
-        assertEquals(1_790_510_412_000L, request.session.endedAtMs)
+        assertEquals(1_790_509_812_000L, request.session.startedAt)
+        assertEquals(1_790_510_412_000L, request.session.endedAt)
         assertEquals("COMPLETED", request.session.status)
     }
 
@@ -73,8 +73,8 @@ class SessionUploadMapperTest {
 
         // Enum NAME, not officialCode "A1".
         assertEquals("REFERENCE_STATE", s.scenarioCode)
-        assertEquals(1_790_509_820_000L, s.startedAtMs)
-        assertEquals(1_790_509_880_000L, s.endedAtMs)
+        assertEquals(1_790_509_820_000L, s.startedAt)
+        assertEquals(1_790_509_880_000L, s.endedAt)
     }
 
     @Test
@@ -105,8 +105,9 @@ class SessionUploadMapperTest {
         // Must be enum NAME (ESENSE_RR_INTERVAL), not the CSV's lowercase "rr_interval".
         assertEquals("ESENSE_RR_INTERVAL", samples[0].sensorType)
         assertEquals(1_790_509_929_000L, samples[0].timestampMs)
+        assertEquals(29_000L, samples[0].elapsedMs)
         assertEquals(698.2f, samples[0].value, 0.001f)
         assertEquals("ESENSE_HEART_RATE", samples[1].sensorType)
-        // elapsedMs is intentionally not present on the wire DTO (derivable server-side).
+        assertEquals(29_100L, samples[1].elapsedMs)
     }
 }
