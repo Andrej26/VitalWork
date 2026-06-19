@@ -13,11 +13,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material.icons.filled.ScreenShare
@@ -27,7 +24,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -47,7 +43,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -73,7 +68,6 @@ fun PeerLinkScreen(
     val role = viewModel.role
     val connectionState by viewModel.connectionState.collectAsState()
     val devices by viewModel.discoveredDevices.collectAsState()
-    val logLines by viewModel.logLines.collectAsState()
     val peerLabel by viewModel.peerLabel.collectAsState()
     val isActive by viewModel.isActive.collectAsState()
     val shareState by viewModel.shareState.collectAsState()
@@ -160,15 +154,6 @@ fun PeerLinkScreen(
                 DiscoveredDevicesCard(devices = devices, onSelect = viewModel::onDeviceSelected)
             }
 
-            Button(
-                onClick = viewModel::onSendTest,
-                enabled = connectionState == ConnectionState.CONNECTED,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null)
-                Text("  Send test message")
-            }
-
             if (role == PeerRole.SERVER) {
                 // Server is started manually: Connect to host, Disconnect to stop.
                 Row(
@@ -208,16 +193,6 @@ fun PeerLinkScreen(
                     Text("  Disconnect")
                 }
             }
-
-            LogCard(
-                logLines = logLines,
-                // The mirror takes the spare space while viewing; the log keeps a compact fixed height.
-                modifier = if (role == PeerRole.SERVER && remoteVideoTrack != null) {
-                    Modifier.height(140.dp)
-                } else {
-                    Modifier.weight(1f)
-                }
-            )
         }
     }
 }
@@ -296,10 +271,21 @@ private fun ScreenMonitorCard(
                 Button(
                     onClick = onView,
                     enabled = connected,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(64.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    ),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
                 ) {
                     Icon(Icons.Default.ScreenShare, contentDescription = null)
-                    Text("  View screen")
+                    Text(
+                        text = "  View screen",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             } else {
                 OutlinedButton(
@@ -459,34 +445,3 @@ private fun DiscoveredDevicesCard(
     }
 }
 
-@Composable
-private fun LogCard(
-    logLines: List<String>,
-    modifier: Modifier = Modifier
-) {
-    Card(modifier = modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = "Log",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-                reverseLayout = true
-            ) {
-                items(logLines.reversed()) { line ->
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            text = line,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontFamily = FontFamily.Monospace
-                        )
-                    }
-                }
-            }
-        }
-    }
-}

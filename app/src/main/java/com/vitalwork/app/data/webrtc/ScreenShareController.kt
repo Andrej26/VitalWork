@@ -23,23 +23,19 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
-import org.webrtc.CapturerObserver
 import org.webrtc.IceCandidate
 import org.webrtc.MediaConstraints
 import org.webrtc.MediaStream
 import org.webrtc.PeerConnection
+import org.webrtc.RtpParameters
 import org.webrtc.RtpReceiver
 import org.webrtc.RtpTransceiver
 import org.webrtc.ScreenCapturerAndroid
 import org.webrtc.SessionDescription
 import org.webrtc.SurfaceTextureHelper
 import org.webrtc.VideoCapturer
-import org.webrtc.VideoFrame
 import org.webrtc.VideoSource
 import org.webrtc.VideoTrack
-import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledExecutorService
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -91,7 +87,6 @@ class ScreenShareController @Inject constructor(
     private var localVideoSource: VideoSource? = null
     private var localVideoTrack: VideoTrack? = null
     private var surfaceTextureHelper: SurfaceTextureHelper? = null
-    private var frameRepeater: FrameRepeater? = null
 
     private var remoteDescriptionSet = false
     private val pendingRemoteIce = mutableListOf<IceCandidate>()
@@ -154,24 +149,42 @@ class ScreenShareController @Inject constructor(
             })
             val helper = SurfaceTextureHelper.create("ScreenCapture", engine.eglBase.eglBaseContext)
             val source = factory.createVideoSource(/* isScreencast = */ true)
-            // ScreenCapturerAndroid (→ VirtualDisplay) only emits a frame when the screen content
-            // changes, so a static client screen sends one frame and goes silent — the viewer freezes
-            // and a viewer surface recreated by a server rotation stays black until the client is
-            // touched. The repeater keeps a low-rate idle stream alive by re-feeding a *copy* of the
-            // last frame (see FrameRepeater for why a copy, not the live capture frame).
-            val repeater = FrameRepeater(source.capturerObserver)
-            capturer.initialize(helper, context, repeater)
-            capturer.startCapture(metrics.widthPixels, metrics.heightPixels, CAPTURE_FPS)
+            capturer.initialize(helper, context, source.capturerObserver)
+            // Downscale at the source (VirtualDisplay) so the long edge is at most MAX_LONG_EDGE_PX,
+            // preserving the screen's aspect (no stretch) and rounding to even dims (encoder
+            // requirement). ScreenCapturerAndroid ignores the framerate arg — capture is event-driven
+            // (frames only on screen change); the framerate is capped on the encoder instead (below).
+            val rawW = metrics.widthPixels
+            val rawH = metrics.heightPixels
+            val scale = minOf(1.0, MAX_LONG_EDGE_PX.toDouble() / maxOf(rawW, rawH))
+            val captureW = maxOf((rawW * scale).toInt() and 1.inv(), 2)
+            val captureH = maxOf((rawH * scale).toInt() and 1.inv(), 2)
+            capturer.startCapture(captureW, captureH, CAPTURE_FPS)
             val track = factory.createVideoTrack("screen0", source)
 
             screenCapturer = capturer
             surfaceTextureHelper = helper
             localVideoSource = source
             localVideoTrack = track
-            frameRepeater = repeater
 
             val pc = createPeerConnection() ?: return@launch
-            pc.addTrack(track, listOf(STREAM_ID))
+            val sender = pc.addTrack(track, listOf(STREAM_ID))
+            // Configure the encoder: cap the bitrate (default is camera-low → ghosting on sharp screen
+            // content), cap the framerate (the capturer ignores its fps arg), and degrade BALANCED
+            // under congestion. These are local encoder constraints (not signaled in SDP), so order vs.
+            // createOffer doesn't matter. Mutate the object getParameters() returns and pass it back —
+            // it carries the transactionId setParameters validates against. No minBitrateBps floor: it
+            // would force wasted bits on a static screen and worsen idle shimmer.
+            runCatching {
+                val params = sender.parameters ?: return@runCatching
+                if (params.encodings.isNotEmpty()) {
+                    params.encodings[0].maxBitrateBps = MAX_BITRATE_BPS
+                    params.encodings[0].maxFramerate = CAPTURE_FPS
+                }
+                params.degradationPreference = RtpParameters.DegradationPreference.BALANCED
+                val applied = sender.setParameters(params)
+                log("Encoder: max ${MAX_BITRATE_BPS / 1_000_000}Mbps, ${CAPTURE_FPS}fps, BALANCED (applied=$applied)")
+            }.onFailure { log("Failed to set encoder params: ${it.message}") }
             _shareState.value = ShareState.SHARING
 
             pc.createOffer(object : SdpAdapter() {
@@ -330,9 +343,6 @@ class ScreenShareController @Inject constructor(
         runCatching { screenCapturer?.stopCapture() }
         runCatching { screenCapturer?.dispose() }
         screenCapturer = null
-        // After capture is stopped (no more onFrameCaptured), stop the repeater and free its copy.
-        runCatching { frameRepeater?.dispose() }
-        frameRepeater = null
         runCatching { localVideoTrack?.dispose() }
         localVideoTrack = null
         runCatching { localVideoSource?.dispose() }
@@ -360,79 +370,6 @@ class ScreenShareController @Inject constructor(
         peerLinkManager.logExternal("Screen: $line")
     }
 
-    /**
-     * Wraps the [VideoSource]'s [CapturerObserver] so a static client screen keeps streaming.
-     *
-     * Android screen capture only delivers a frame when the screen content changes, so without this
-     * the viewer freezes on the last frame and a viewer surface recreated by a server rotation shows
-     * black until the client is touched. The repeater fills the silence by re-feeding the last frame
-     * at a low idle rate ([REPEAT_INTERVAL_MS]); when real frames are flowing it stays out of the way.
-     *
-     * **Why a copy, not the live frame:** capture frames are backed by the capturer's single shared
-     * `SurfaceTexture`. Retaining one to re-feed later would block the capturer from delivering new
-     * frames (the texture stays "in use") and would re-send a since-overwritten texture — exactly the
-     * hard-freeze regression this replaces. So each kept frame is copied into its own I420 memory via
-     * [VideoFrame.Buffer.toI420], which is independent of the capture texture and safe to hold/resend.
-     * The copy is throttled to the idle rate so the GPU→CPU read happens at most ~twice a second.
-     */
-    private class FrameRepeater(private val delegate: CapturerObserver) : CapturerObserver {
-        private val executor: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor()
-        private val lock = Any()
-        /** Independent I420 copy of the most recent frame — safe to hold and re-feed. */
-        private var lastCopy: VideoFrame? = null
-        @Volatile private var lastRealFrameNanos = 0L
-        private var lastCopyNanos = 0L
-
-        init {
-            executor.scheduleWithFixedDelay({
-                val repeat = synchronized(lock) {
-                    val copy = lastCopy ?: return@synchronized null
-                    // Only fill silence: skip if a real frame flowed within the interval.
-                    if (System.nanoTime() - lastRealFrameNanos < REPEAT_INTERVAL_NANOS) {
-                        return@synchronized null
-                    }
-                    copy.buffer.retain() // released via repeat.release() after delivery below
-                    VideoFrame(copy.buffer, copy.rotation, System.nanoTime())
-                }
-                if (repeat != null) {
-                    try {
-                        delegate.onFrameCaptured(repeat)
-                    } finally {
-                        repeat.release()
-                    }
-                }
-            }, REPEAT_INTERVAL_MS, REPEAT_INTERVAL_MS, TimeUnit.MILLISECONDS)
-        }
-
-        override fun onCapturerStarted(success: Boolean) = delegate.onCapturerStarted(success)
-
-        override fun onCapturerStopped() = delegate.onCapturerStopped()
-
-        override fun onFrameCaptured(frame: VideoFrame) {
-            // Refresh the kept copy at most once per interval (toI420 is a GPU→CPU read). Done before
-            // forwarding while the producer's buffer reference is still guaranteed valid.
-            synchronized(lock) {
-                val now = System.nanoTime()
-                lastRealFrameNanos = now
-                if (lastCopy == null || now - lastCopyNanos >= REPEAT_INTERVAL_NANOS) {
-                    lastCopy?.release()
-                    val i420 = frame.buffer.toI420()
-                    lastCopy = VideoFrame(i420, frame.rotation, frame.timestampNs)
-                    lastCopyNanos = now
-                }
-            }
-            delegate.onFrameCaptured(frame)
-        }
-
-        fun dispose() {
-            executor.shutdownNow()
-            synchronized(lock) {
-                lastCopy?.release()
-                lastCopy = null
-            }
-        }
-    }
-
     /** Empty-default [org.webrtc.SdpObserver] so callers override only what they need. */
     private open class SdpAdapter : org.webrtc.SdpObserver {
         override fun onCreateSuccess(desc: SessionDescription) {}
@@ -446,9 +383,13 @@ class ScreenShareController @Inject constructor(
         private const val CAPTURE_FPS = 30
         private const val STREAM_ID = "vitalwork-screen"
 
-        /** Idle cadence for re-feeding the last screen frame so a static client screen stays live. */
-        private const val REPEAT_INTERVAL_MS = 500L
-        private val REPEAT_INTERVAL_NANOS = TimeUnit.MILLISECONDS.toNanos(REPEAT_INTERVAL_MS)
+        /** Encoder ceiling for screen content. Generous for a LAN (P2P over local Wi-Fi); BALANCED
+         *  degradation scales below this under congestion. Tunable. */
+        private const val MAX_BITRATE_BPS = 8_000_000
+
+        /** Cap the captured screen's long edge so a high-DPI tablet (~2560 px) isn't encoded at full
+         *  native resolution — fewer pixels → more bits/pixel → crisper text, smoother, lighter. */
+        private const val MAX_LONG_EDGE_PX = 1920
 
         const val TYPE_REQUEST_SCREEN = "request_screen"
         const val TYPE_OFFER = "offer"

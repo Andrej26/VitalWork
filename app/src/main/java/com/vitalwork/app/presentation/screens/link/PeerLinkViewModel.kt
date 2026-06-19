@@ -34,7 +34,6 @@ class PeerLinkViewModel @Inject constructor(
 
     val connectionState: StateFlow<ConnectionState> = linkManager.connectionState
     val discoveredDevices: StateFlow<List<PeerDevice>> = linkManager.discoveredDevices
-    val logLines: StateFlow<List<String>> = linkManager.logLines
     val peerLabel: StateFlow<String?> = linkManager.peerLabel
     val isActive: StateFlow<Boolean> = linkManager.isActive
 
@@ -63,8 +62,6 @@ class PeerLinkViewModel @Inject constructor(
     /** Either side: stop monitoring/sharing. */
     fun stopShare() = screenShare.stopShare()
 
-    private var testCounter = 0
-
     init {
         // The server is started manually via [connect] (Connect button); only the client begins
         // automatically (discovery). Returning to the screen while already active leaves it as-is.
@@ -78,8 +75,6 @@ class PeerLinkViewModel @Inject constructor(
     fun connect() = linkManager.startServer()
 
     fun onDeviceSelected(device: PeerDevice) = linkManager.connectTo(device)
-
-    fun onSendTest() = linkManager.sendMessage("Test message #${++testCounter}")
 
     fun disconnect() = linkManager.stop()
 

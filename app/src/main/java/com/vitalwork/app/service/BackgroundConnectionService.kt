@@ -304,6 +304,18 @@ class BackgroundConnectionService : Service() {
         return String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds)
     }
 
+    /**
+     * The user swiped the app away from recents (closed it). Tear the device link + any screen
+     * mirroring down immediately so the connection doesn't linger — closing the socket also lets the
+     * peer detect the drop and clean up its own side.
+     */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        Log.i(TAG, "BackgroundConnectionService.onTaskRemoved — app closed, terminating link")
+        screenShareController.stopShare()
+        linkManager.stop()
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onDestroy() {
         Log.i(TAG, "BackgroundConnectionService.onDestroy")
         observerJob?.cancel()
