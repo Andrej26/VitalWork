@@ -78,6 +78,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.vitalwork.app.data.model.ConnectionState
@@ -455,9 +456,9 @@ fun SessionControlScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp)
+                .padding(12.dp)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // Readiness backup banner (only shows when a prerequisite is missing)
             ReadinessWarningCard(
@@ -496,6 +497,17 @@ fun SessionControlScreen(
                 WatchLinkLostBanner()
             }
 
+            // Hero auto-return countdown: this screen's whole purpose is to hand back to the
+            // scenario-selection hub after 10 s, so it's the focal point at the top. Skip lets the
+            // operator return immediately instead of waiting it out.
+            ReturnCountdownHero(
+                seconds = 10,
+                onFinished = onCountdownFinished,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+            )
+
             // Mindfield eSense device group
             val eSenseConnectionState = when {
                 pulseSensorState == ConnectionState.CONNECTED ||
@@ -533,6 +545,7 @@ fun SessionControlScreen(
                     animate = heartRate != null && heartRate!! > 0,
                     onClick = { viewModel.onHeartRateCardClick() },
                     batteryLevel = bleBatteryLevel,
+                    compact = true,
                     modifier = Modifier.weight(1f)
                 )
                 LiveSensorCard(
@@ -545,6 +558,7 @@ fun SessionControlScreen(
                     connectionState = respirationConnectionState,
                     sampleCount = recordingUiState.respirationSampleCount,
                     onClick = { viewModel.onRespirationCardClick(context) },
+                    compact = true,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -604,6 +618,7 @@ fun SessionControlScreen(
                     sampleCount = recordingUiState.watchHrSampleCount,
                     animate = watchConnected && (watchHeartRate ?: 0) > 0,
                     batteryLevel = watchBatteryLevel,
+                    compact = true,
                     modifier = Modifier.weight(1f)
                 )
                 LiveSensorCard(
@@ -616,6 +631,7 @@ fun SessionControlScreen(
                     connectionState = watchConnectionState,
                     sampleCount = recordingUiState.edaSampleCount,
                     batteryLevel = watchBatteryLevel,
+                    compact = true,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -628,104 +644,17 @@ fun SessionControlScreen(
                 )
             ) {
                 Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Recording",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                    Text(
+                        text = "Recording",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium
+                    )
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Bluetooth,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Heart Rate",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Text(
-                            text = if (recordingUiState.isHeartRateConnected) {
-                                val rrPart = if (recordingUiState.esenseRrIntervalSampleCount > 0)
-                                    " · ${recordingUiState.esenseRrIntervalSampleCount} RR"
-                                else ""
-                                "${recordingUiState.heartRateSampleCount} HR$rrPart"
-                            } else "Not connected",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Mic,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Respiration",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Text(
-                            text = if (recordingUiState.isRespirationConnected)
-                                "${recordingUiState.respirationSampleCount} samples"
-                            else "Not connected",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Watch,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Galaxy Watch",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Text(
-                            text = if (watchConnectionState == ConnectionState.CONNECTED)
-                                "${recordingUiState.edaSampleCount} EDA · " +
-                                    "${recordingUiState.watchHrSampleCount} HR · " +
-                                    "${recordingUiState.watchIbiSampleCount} IBI"
-                            else "Not connected",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    HorizontalDivider()
-
-                    // Start/stop recording from the phone.
+                    // Per-sensor sample counts already appear on the sensor cards above, so the
+                    // recording card stays slim — just the manual Start/Stop controls.
                     val isIdle = recordingUiState.recordingState == DataRecordingState.IDLE
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -755,30 +684,59 @@ fun SessionControlScreen(
                 }
             }
 
-            // Auto-return countdown: after 10 s this screen hands back to the scenario-selection hub.
-            ReturnCountdown(
-                seconds = 10,
-                onFinished = onCountdownFinished,
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .padding(top = 8.dp)
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
         }
     }
     } // Box
 }
 
 /**
+ * The countdown as the screen's focal point: the ring + a caption explaining the auto-return and a
+ * Skip button so the operator can return immediately instead of waiting the [seconds] out.
+ */
+@Composable
+private fun ReturnCountdownHero(
+    seconds: Int,
+    onFinished: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        ReturnCountdown(
+            seconds = seconds,
+            onFinished = onFinished,
+            size = 120.dp
+        )
+        Text(
+            text = "Returning to scenarios…",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        TextButton(onClick = onFinished) {
+            Icon(
+                imageVector = Icons.Default.SkipNext,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("Skip")
+        }
+    }
+}
+
+/**
  * A round [seconds]-second countdown: a circular ring that drains as time passes, with the remaining
  * whole seconds shown in the center. Calls [onFinished] once when it reaches zero. Restarts whenever
- * [seconds] changes (and on first composition).
+ * [seconds] changes (and on first composition). [size] sets the ring diameter (and scales the number).
  */
 @Composable
 private fun ReturnCountdown(
     seconds: Int,
     onFinished: () -> Unit,
+    size: Dp = 96.dp,
     modifier: Modifier = Modifier
 ) {
     var remainingMs by remember(seconds) { mutableStateOf(seconds * 1000L) }
@@ -799,19 +757,20 @@ private fun ReturnCountdown(
     val secondsLeft = ((remainingMs + 999L) / 1000L).toInt() // ceil so it shows 10..1 then fires
 
     Box(
-        modifier = modifier.size(96.dp),
+        modifier = modifier.size(size),
         contentAlignment = Alignment.Center
     ) {
         CircularProgressIndicator(
             progress = { progress },
             modifier = Modifier.fillMaxSize(),
-            strokeWidth = 6.dp,
+            strokeWidth = if (size >= 120.dp) 8.dp else 6.dp,
             color = MaterialTheme.colorScheme.primary,
             trackColor = MaterialTheme.colorScheme.surfaceVariant
         )
         Text(
             text = secondsLeft.toString(),
-            style = MaterialTheme.typography.headlineMedium,
+            style = if (size >= 120.dp) MaterialTheme.typography.displayMedium
+                    else MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface
         )
