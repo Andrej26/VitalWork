@@ -29,16 +29,16 @@ class ScenarioRepositoryTest {
 
     @Test
     fun createScenario_setsCodeAndSession() = runTest {
-        val s = repository.createScenario(sessionId = 1L, scenarioCode = ScenarioCode.MACHINE_JAM)
+        val s = repository.createScenario(sessionId = 1L, scenarioCode = ScenarioCode.COGNITIVE_LOAD)
 
-        assertEquals(ScenarioCode.MACHINE_JAM, s.scenarioCode)
+        assertEquals(ScenarioCode.COGNITIVE_LOAD, s.scenarioCode)
         assertEquals(1L, s.sessionId)
         assertNull(s.endedAt)
     }
 
     @Test
     fun endScenario_setsEndedAt() = runTest {
-        val s = repository.createScenario(sessionId = 1L, scenarioCode = ScenarioCode.SLING_FAILURE)
+        val s = repository.createScenario(sessionId = 1L, scenarioCode = ScenarioCode.DISTRACTING_ENVIRONMENT)
 
         repository.endScenario(s.id)
 
@@ -48,7 +48,7 @@ class ScenarioRepositoryTest {
 
     @Test
     fun endScenario_idempotent() = runTest {
-        val s = repository.createScenario(sessionId = 1L, scenarioCode = ScenarioCode.SLING_FAILURE)
+        val s = repository.createScenario(sessionId = 1L, scenarioCode = ScenarioCode.DISTRACTING_ENVIRONMENT)
         repository.endScenario(s.id)
         val firstEnd = fakeScenarioDao.getScenarioById(s.id)!!.endedAt
 
@@ -155,7 +155,7 @@ class ScenarioRepositoryTest {
         fakeScenarioDao.insert(
             ScenarioEntity(
                 sessionId = sessionId,
-                scenarioCode = ScenarioCode.FALLING_PALLET,
+                scenarioCode = ScenarioCode.REFERENCE_STATE,
                 startedAt = startedAt,
                 endedAt = endedAt
             )

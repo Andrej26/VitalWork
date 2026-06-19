@@ -63,7 +63,7 @@ class SessionUploadMapperTest {
         val scenario = ScenarioEntity(
             id = 5L,
             sessionId = 1L,
-            scenarioCode = ScenarioCode.FALLING_PALLET,
+            scenarioCode = ScenarioCode.REFERENCE_STATE,
             startedAt = 1_790_509_820_000L,
             endedAt = 1_790_509_880_000L
         )
@@ -72,7 +72,7 @@ class SessionUploadMapperTest {
         val s = request.scenarios.single()
 
         // Enum NAME, not officialCode "A1".
-        assertEquals("FALLING_PALLET", s.scenarioCode)
+        assertEquals("REFERENCE_STATE", s.scenarioCode)
         assertEquals(1_790_509_820_000L, s.startedAtMs)
         assertEquals(1_790_509_880_000L, s.endedAtMs)
     }
@@ -82,7 +82,7 @@ class SessionUploadMapperTest {
         val scenario = ScenarioEntity(
             id = 5L,
             sessionId = 1L,
-            scenarioCode = ScenarioCode.MACHINE_JAM,
+            scenarioCode = ScenarioCode.COGNITIVE_LOAD,
             startedAt = 1_790_509_900_000L
         )
         sampleDao.samples.addAll(

@@ -144,7 +144,7 @@ class SessionExportService @Inject constructor(
             }
         }
 
-        // Several recordings in one session can share a scenario code (e.g. all FALLING_PALLET), so a
+        // Several recordings in one session can share a scenario code (e.g. all REFERENCE_STATE), so a
         // code-only filename collides and overwrites. Prefix a 1-based, zero-padded ordinal so each
         // recording gets its own file and they sort chronologically.
         val fileName = "${sessionCode}_%02d_${scenario.scenarioCode.name}.csv".format(ordinal)

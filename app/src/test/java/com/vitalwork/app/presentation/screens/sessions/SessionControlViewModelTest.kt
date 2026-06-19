@@ -188,7 +188,7 @@ class SessionControlViewModelTest {
 
         assertEquals(1, fakeScenarioRecordingRepo.startRecordingCallCount)
         assertEquals(1, fakeScenarioDao.scenarios.size)
-        assertEquals(ScenarioCode.FALLING_PALLET, fakeScenarioDao.scenarios[0].scenarioCode)
+        assertEquals(ScenarioCode.REFERENCE_STATE, fakeScenarioDao.scenarios[0].scenarioCode)
     }
 
     @Test

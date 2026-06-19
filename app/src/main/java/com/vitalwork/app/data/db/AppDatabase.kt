@@ -19,10 +19,12 @@ import androidx.room.TypeConverters
     // v5: biofeedback-only pivot — dropped scenarios.scenarioCategory/eventTimestampMs/
     //     reactionTimestampMs and sessions.notes (reaction-time measurement + the VR link were
     //     removed; the app now records only sensor samples per scenario).
+    // v6: renamed the nine industrial ScenarioCode values to the five biofeedback scenarios
+    //     (REFERENCE_STATE/COGNITIVE_LOAD/DISTRACTING_ENVIRONMENT/LONG_TERM_FATIGUE/REACTION_TASKS).
     // The DB uses fallbackToDestructiveMigration (see AppModule), so renamed enum values and added/
     // removed columns need no hand-written Migration — the destructive fallback wipes the old local
     // rows (sessions are already exported/uploaded), and values are stored as strings by Converters.
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

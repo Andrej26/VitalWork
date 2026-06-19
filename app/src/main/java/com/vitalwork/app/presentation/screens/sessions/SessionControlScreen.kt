@@ -498,10 +498,11 @@ fun SessionControlScreen(
             }
 
             // Hero auto-return countdown: this screen's whole purpose is to hand back to the
-            // scenario-selection hub after 10 s, so it's the focal point at the top. Skip lets the
-            // operator return immediately instead of waiting it out.
+            // scenario-selection hub after the scenario's full duration (A/E 10 min, B/C 20 min,
+            // D 30 min), so it's the focal point at the top. Skip lets the operator return
+            // immediately instead of waiting it out.
             ReturnCountdownHero(
-                seconds = 10,
+                seconds = viewModel.countdownSeconds,
                 onFinished = onCountdownFinished,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -755,6 +756,12 @@ private fun ReturnCountdown(
 
     val progress = (remainingMs.toFloat() / (seconds * 1000f)).coerceIn(0f, 1f)
     val secondsLeft = ((remainingMs + 999L) / 1000L).toInt() // ceil so it shows 10..1 then fires
+    // Sub-minute durations read fine as a bare number; minutes-long scenarios need mm:ss.
+    val countdownLabel = if (seconds >= 60) {
+        "%d:%02d".format(secondsLeft / 60, secondsLeft % 60)
+    } else {
+        secondsLeft.toString()
+    }
 
     Box(
         modifier = modifier.size(size),
@@ -768,7 +775,7 @@ private fun ReturnCountdown(
             trackColor = MaterialTheme.colorScheme.surfaceVariant
         )
         Text(
-            text = secondsLeft.toString(),
+            text = countdownLabel,
             style = if (size >= 120.dp) MaterialTheme.typography.displayMedium
                     else MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,

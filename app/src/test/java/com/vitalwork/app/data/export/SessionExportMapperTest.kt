@@ -56,11 +56,11 @@ class SessionExportMapperTest {
 
     @Test
     fun buildScenarioExport_scenarioCodeEmittedAsString() {
-        val scenario = scenario(code = ScenarioCode.MACHINE_JAM)
+        val scenario = scenario(code = ScenarioCode.COGNITIVE_LOAD)
 
         val result = mapper.buildScenarioExport(scenario, emptyList())
 
-        assertEquals("MACHINE_JAM", result.scenarioCode)
+        assertEquals("COGNITIVE_LOAD", result.scenarioCode)
     }
 
     @Test
@@ -224,7 +224,7 @@ class SessionExportMapperTest {
     private fun scenario(
         id: Long? = null,
         sessionId: Long = 1L,
-        code: ScenarioCode = ScenarioCode.FALLING_PALLET,
+        code: ScenarioCode = ScenarioCode.REFERENCE_STATE,
         endedAt: Long? = 1_060_000L
     ): ScenarioEntity {
         val actualId = id ?: nextScenarioId++

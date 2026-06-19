@@ -77,7 +77,7 @@ class SessionDetailViewModelTest {
         return session
     }
 
-    private fun seedScenario(id: Long, code: ScenarioCode = ScenarioCode.FALLING_PALLET) {
+    private fun seedScenario(id: Long, code: ScenarioCode = ScenarioCode.REFERENCE_STATE) {
         fakeScenarioDao.scenarios.add(
             ScenarioEntity(
                 id = id,
@@ -97,7 +97,7 @@ class SessionDetailViewModelTest {
     fun loadSession_populatesStateAndClearsLoading() = runTest {
         val session = seedSession()
         seedScenario(id = 10)
-        seedScenario(id = 11, code = ScenarioCode.MACHINE_JAM)
+        seedScenario(id = 11, code = ScenarioCode.COGNITIVE_LOAD)
 
         val vm = newViewModel()
         advanceUntilIdle()

@@ -35,9 +35,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.vitalwork.app.presentation.screens.sessions.components.EndSessionWatchDialog
 
 /**
- * Scenario picker that doubles as the session's home/hub: five vertically-centered buttons
- * ("Scenario 01"…"Scenario 05") open the session control screen for [sessionId] with the chosen
- * scenario number, and an **End Session & Save** action at the bottom finalizes the whole session
+ * Scenario picker that doubles as the session's home/hub: one vertically-centered button per
+ * [ScenarioCode] (labelled with its `displayName`, e.g. "Scenario A – Reference State") opens the
+ * session control screen for [sessionId] with the chosen scenario number (1-based, in declaration
+ * order), and an **End Session & Save** action at the bottom finalizes the whole session
  * (with the watch-transfer handshake) and leaves for review. This is the screen operators return to
  * most often, so end/save lives here rather than inside each scenario run.
  */
@@ -116,13 +117,13 @@ fun ScenarioSelectionScreen(
                     .fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                (1..5).forEach { number ->
+                com.vitalwork.app.data.db.ScenarioCode.entries.forEachIndexed { index, code ->
                     Button(
-                        onClick = { onScenarioSelected(number) },
+                        onClick = { onScenarioSelected(index + 1) },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            text = "Scenario %02d".format(number),
+                            text = code.displayName,
                             style = MaterialTheme.typography.titleMedium
                         )
                     }

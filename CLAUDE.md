@@ -362,13 +362,14 @@ com.vitalwork.wear/
 
 ## Database Schema
 
-Room database (version 5) with 4 entities. Cascade-delete on all foreign keys. Uses
+Room database (version 6) with 4 entities. Cascade-delete on all foreign keys. Uses
 `fallbackToDestructiveMigration` (enums are stored as strings), so adding/removing a `SensorType`
 value or column is a version bump with no hand-written `Migration` — the destructive fallback wipes
 old local rows (sessions are already exported/uploaded). History: v2 added `WATCH_IBI`; v3 split
-per-device sensor types; v4 added the watch sample counters; **v5** dropped the reaction-time/VR
+per-device sensor types; v4 added the watch sample counters; v5 dropped the reaction-time/VR
 fields (`scenarioCategory`, `eventTimestampMs`, `reactionTimestampMs`) and `sessions.notes` for the
-biofeedback-only pivot.
+biofeedback-only pivot; **v6** renamed the nine industrial scenario codes to the five biofeedback
+scenarios.
 
 | Entity | Table | Purpose |
 |--------|-------|---------|
@@ -382,12 +383,13 @@ biofeedback-only pivot.
 | Enum | Stored values |
 |------|---------------|
 | `SessionStatus` | `ACTIVE`, `COMPLETED`, `UPLOADED` |
-| `ScenarioCode` | `FALLING_PALLET`, `BLIND_CORNER`, `EQUIPMENT_COLLISION`, `FLOOR_OBSTACLE`, `MACHINE_JAM`, `CONVEYOR_ACCELERATION`, `MEDIUM_LEAKAGE`, `ELECTRICAL_SHORT`, `SLING_FAILURE` |
+| `ScenarioCode` | `REFERENCE_STATE`, `COGNITIVE_LOAD`, `DISTRACTING_ENVIRONMENT`, `LONG_TERM_FATIGUE`, `REACTION_TASKS` |
 | `SensorType` | `ESENSE_HEART_RATE`, `RESPIRATION`, `ESENSE_RR_INTERVAL`, `WATCH_HR`, `WATCH_IBI`, `WATCH_EDA` |
 
-`ScenarioCode` carries the official short code (e.g. `A1`) and display label as enum properties —
-they're stored descriptively in the DB so renumbering doesn't break old rows. (The `ScenarioCategory`
-concept and the `scenarioCategory` column were removed in v5.)
+`ScenarioCode` carries a short official code (`A`…`E`) and a display label (e.g. `Scenario A –
+Reference State`) as enum properties — the constant *name* (e.g. `REFERENCE_STATE`) is what's stored
+in the DB and sent to the server, so the descriptive labels can change without breaking old rows. (The
+`ScenarioCategory` concept and the `scenarioCategory` column were removed in v5.)
 
 Session duration is derived from `endedAt − startedAt`. All timestamps come from an NTP-corrected
 clock (`TimeProvider`) on the same UTC timeline, so cross-stream alignment needs no clock-sync.

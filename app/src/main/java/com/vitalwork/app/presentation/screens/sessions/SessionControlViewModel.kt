@@ -427,6 +427,13 @@ class SessionControlViewModel @Inject constructor(
         return codes[index]
     }
 
+    /**
+     * Auto-return countdown length (seconds) for the selected scenario: A/E run 10 min, B/C 20 min,
+     * D 30 min ([ScenarioCode.countdownMinutes]), so the operator screen hands back to the hub after
+     * the scenario's full duration.
+     */
+    val countdownSeconds: Int = scenarioCodeForSelection().countdownMinutes * 60
+
     /** Stop sensor capture and finalize the scenario row. */
     fun stopManualRecording() {
         viewModelScope.launch {

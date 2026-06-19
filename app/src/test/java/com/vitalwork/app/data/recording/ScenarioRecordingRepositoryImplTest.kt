@@ -64,7 +64,7 @@ class ScenarioRecordingRepositoryImplTest {
         val s = ScenarioEntity(
             id = id,
             sessionId = 1L,
-            scenarioCode = ScenarioCode.FALLING_PALLET,
+            scenarioCode = ScenarioCode.REFERENCE_STATE,
             startedAt = startedAt,
             endedAt = endedAt
         )
@@ -90,7 +90,7 @@ class ScenarioRecordingRepositoryImplTest {
         val s = ScenarioEntity(
             id = id,
             sessionId = 1L,
-            scenarioCode = ScenarioCode.FALLING_PALLET,
+            scenarioCode = ScenarioCode.REFERENCE_STATE,
             startedAt = System.currentTimeMillis()
         )
         fakeScenarioDao.scenarios.add(s)
