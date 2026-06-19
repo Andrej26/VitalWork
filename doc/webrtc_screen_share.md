@@ -209,6 +209,28 @@ All session mutations run on a single-worker scope
 
 ---
 
+## Keeping the picture alive when the screen "turns off"
+
+Android **stops compositing a display that is truly powered off**, so `MediaProjection` produces no
+frames once the sharer's screen sleeps — the operator would see a frozen/black image. There is no API
+to capture an off display. The workaround keeps the sharer's display technically **on** while making
+it *look* off ([ScreenDimController](../app/src/main/java/com/vitalwork/app/service/ScreenDimController.kt)):
+
+1. A **`SCREEN_DIM_WAKE_LOCK`** held by `BackgroundConnectionService` keeps the screen rendering
+   regardless of which app is in the foreground (a window `KEEP_SCREEN_ON` flag only works while *our*
+   activity is visible). It is acquired/released in lockstep with the `SCREEN_SHARE` keep-alive reason.
+2. The **backlight is dimmed to near-black** via `Settings.System.SCREEN_BRIGHTNESS`. Backlight is a
+   panel property and does **not** affect the captured framebuffer, so the operator keeps seeing
+   full-brightness content while the phone looks off and draws little power. The original brightness +
+   mode are saved and restored on stop.
+
+Dimming needs the **`WRITE_SETTINGS`** special access (`Settings.System.canWrite`); the client's
+"Sharing your screen" card offers an **Allow dark screen** button that opens the grant page. Without it
+the screen still stays on (step 1), just at normal brightness.
+
+The **tablet (viewer)** needs nothing here — the WebRTC connection + foreground service survive the
+tablet sleeping; waking it resumes the live picture.
+
 ## Network Scope: LAN only (no TURN)
 
 The current configuration is **same-Wi-Fi only**:

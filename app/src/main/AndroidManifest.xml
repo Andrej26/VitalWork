@@ -28,6 +28,10 @@
     <!-- Optional: exempt from battery optimization so OEM power managers don't kill long sessions -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
+    <!-- Optional (special access): dim the sharer's backlight to near-black while screen sharing so
+         the phone looks off but MediaProjection keeps capturing. Granted via system Settings. -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" tools:ignore="ProtectedPermissions" />
+
     <!-- Bluetooth (eSense Pulse) - Android 12+ (API 31+) -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />

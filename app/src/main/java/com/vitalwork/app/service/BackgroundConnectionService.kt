@@ -65,6 +65,11 @@ class BackgroundConnectionService : Service() {
     @Suppress("DEPRECATION") // WifiLock is the supported way to keep Wi-Fi awake under Doze
     private var wifiLock: WifiManager.WifiLock? = null
 
+    /** Keeps the *sharer's* screen rendering (dimmed) while screen-sharing, so capture survives the
+     *  screen "turning off". Toggled by the SCREEN_SHARE keep-alive reason; see [ScreenDimController]. */
+    private val screenDim by lazy { ScreenDimController(applicationContext) }
+    private var screenKeptOn = false
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -138,6 +143,7 @@ class BackgroundConnectionService : Service() {
             }
                 .distinctUntilChanged()
                 .collect { state ->
+                    applyScreenKeepOn(KeepAliveReason.SCREEN_SHARE in state.reasons)
                     if (state.reasons.isNotEmpty()) {
                         hadAnyReason = true
                         startForegroundFromState(state)
@@ -253,6 +259,13 @@ class BackgroundConnectionService : Service() {
         return builder.build()
     }
 
+    /** Hold/release the screen-on (dimmed) state in lockstep with the SCREEN_SHARE keep-alive reason. */
+    private fun applyScreenKeepOn(sharing: Boolean) {
+        if (sharing == screenKeptOn) return
+        screenKeptOn = sharing
+        if (sharing) screenDim.enable() else screenDim.disable()
+    }
+
     private fun stopForegroundAndSelf(reason: String) {
         Log.i(TAG, "BackgroundConnectionService.stopForegroundAndSelf ($reason)")
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
@@ -297,6 +310,7 @@ class BackgroundConnectionService : Service() {
         watchdogJob?.cancel()
         scope.cancel()
         releaseWifiLock()
+        applyScreenKeepOn(false)
         super.onDestroy()
     }
 

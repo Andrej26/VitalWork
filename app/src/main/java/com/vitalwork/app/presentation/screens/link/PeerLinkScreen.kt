@@ -58,6 +58,7 @@ import com.vitalwork.app.data.model.ConnectionState
 import com.vitalwork.app.data.webrtc.model.ShareState
 import com.vitalwork.app.presentation.components.ConnectionStatusBadge
 import com.vitalwork.app.service.BatteryOptimizationHelper
+import com.vitalwork.app.service.ScreenDimController
 import org.webrtc.EglBase
 import org.webrtc.RendererCommon
 import org.webrtc.SurfaceViewRenderer
@@ -319,10 +320,28 @@ private fun SharingCard(onStop: () -> Unit) {
                 color = MaterialTheme.colorScheme.onTertiaryContainer
             )
             Text(
-                text = "The operator can see this device's screen.",
+                text = "The screen stays on (dimmed) while sharing, so the operator keeps seeing it " +
+                    "even when it looks off.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onTertiaryContainer
             )
+            // Dimming the backlight to near-black needs the "Modify system settings" special access.
+            // Without it the screen still stays on, just at normal brightness.
+            val context = LocalContext.current
+            if (!ScreenDimController.canDim(context)) {
+                Text(
+                    text = "To dim this screen to near-black while sharing, allow \"Modify system " +
+                        "settings\".",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                )
+                OutlinedButton(
+                    onClick = { ScreenDimController.openWriteSettings(context) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Allow dark screen")
+                }
+            }
             OutlinedButton(
                 onClick = onStop,
                 modifier = Modifier.fillMaxWidth(),
