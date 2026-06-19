@@ -685,6 +685,21 @@ fun SessionControlScreen(
                 }
             }
 
+            // Skip lets the operator return to the scenario hub immediately instead of waiting the
+            // countdown out; kept at the very bottom so it doesn't compete with the hero countdown.
+            OutlinedButton(
+                onClick = onCountdownFinished,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    imageVector = Icons.Default.SkipNext,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Skip")
+            }
+
             Spacer(modifier = Modifier.height(8.dp))
         }
     }
@@ -709,22 +724,13 @@ private fun ReturnCountdownHero(
         ReturnCountdown(
             seconds = seconds,
             onFinished = onFinished,
-            size = 120.dp
+            size = 200.dp
         )
         Text(
-            text = "Returning to scenarios…",
+            text = "Time remaining until the end of the scenario",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        TextButton(onClick = onFinished) {
-            Icon(
-                imageVector = Icons.Default.SkipNext,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            Text("Skip")
-        }
     }
 }
 
@@ -770,13 +776,14 @@ private fun ReturnCountdown(
         CircularProgressIndicator(
             progress = { progress },
             modifier = Modifier.fillMaxSize(),
-            strokeWidth = if (size >= 120.dp) 8.dp else 6.dp,
+            strokeWidth = if (size >= 160.dp) 12.dp else if (size >= 120.dp) 8.dp else 6.dp,
             color = MaterialTheme.colorScheme.primary,
             trackColor = MaterialTheme.colorScheme.surfaceVariant
         )
         Text(
             text = countdownLabel,
-            style = if (size >= 120.dp) MaterialTheme.typography.displayMedium
+            style = if (size >= 160.dp) MaterialTheme.typography.displayLarge
+                    else if (size >= 120.dp) MaterialTheme.typography.displayMedium
                     else MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface

@@ -61,10 +61,10 @@ fun LiveSensorCard(
 ) {
     // Compact mode roughly halves the card height for screens that must fit without scrolling
     // (e.g. the transient post-scenario SessionControlScreen on a phone). Same content, smaller.
-    val cardPadding = if (compact) 10.dp else 16.dp
-    val iconSize = if (compact) 24.dp else 32.dp
-    val valueFontSize = if (compact) 30.sp else 48.sp
-    val gap = if (compact) 2.dp else 4.dp
+    val cardPadding = if (compact) 8.dp else 16.dp
+    val iconSize = if (compact) 18.dp else 32.dp
+    val valueFontSize = if (compact) 24.sp else 48.sp
+    val gap = if (compact) 1.dp else 4.dp
     val isClickable = onClick != null &&
             (connectionState == ConnectionState.DISCONNECTED || connectionState == ConnectionState.ERROR)
     val borderColor by animateColorAsState(
