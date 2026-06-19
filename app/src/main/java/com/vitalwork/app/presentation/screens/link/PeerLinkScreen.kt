@@ -142,6 +142,9 @@ fun PeerLinkScreen(
 
             if (role == PeerRole.SERVER) {
                 ScreenMonitorCard(
+                    // While viewing, let the card grow to fill the screen so the mirror is as large
+                    // as possible; collapse to natural height when there's nothing to show.
+                    modifier = if (remoteVideoTrack != null) Modifier.weight(1f) else Modifier,
                     connected = connectionState == ConnectionState.CONNECTED,
                     shareState = shareState,
                     remoteVideoTrack = remoteVideoTrack,
@@ -206,7 +209,15 @@ fun PeerLinkScreen(
                 }
             }
 
-            LogCard(logLines = logLines, modifier = Modifier.weight(1f))
+            LogCard(
+                logLines = logLines,
+                // The mirror takes the spare space while viewing; the log keeps a compact fixed height.
+                modifier = if (role == PeerRole.SERVER && remoteVideoTrack != null) {
+                    Modifier.height(140.dp)
+                } else {
+                    Modifier.weight(1f)
+                }
+            )
         }
     }
 }
@@ -244,9 +255,10 @@ private fun ScreenMonitorCard(
     remoteVideoTrack: VideoTrack?,
     eglBase: EglBase,
     onView: () -> Unit,
-    onStop: () -> Unit
+    onStop: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 text = "Screen monitor",
@@ -255,12 +267,13 @@ private fun ScreenMonitorCard(
             )
 
             if (remoteVideoTrack != null) {
-                // Bounded area; the renderer sizes itself to the *real* incoming frame aspect
-                // (portrait phone → tall rectangle) and is centered, so the whole screen shows.
+                // Fills the space the card was given; the renderer sizes itself to the *real* incoming
+                // frame aspect (portrait phone → tall rectangle) and is centered, so the whole screen
+                // shows. weight(1f) lets the mirror grow to fill the available height.
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(420.dp),
+                        .weight(1f),
                     contentAlignment = Alignment.Center
                 ) {
                     ScreenVideoView(
