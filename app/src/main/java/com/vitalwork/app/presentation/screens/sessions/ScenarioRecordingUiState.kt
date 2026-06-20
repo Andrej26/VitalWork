@@ -14,6 +14,12 @@ data class ScenarioRecordingUiState(
     val watchHrSampleCount: Int = 0,
     val watchIbiSampleCount: Int = 0,
     val scenarioIdentifier: String? = null,
+    /**
+     * Monotonic origin ([android.os.SystemClock.elapsedRealtime]) of the active recording, or null
+     * when not recording. The auto-return countdown anchors to this so it starts/ends exactly with
+     * the data capture instead of with screen composition.
+     */
+    val recordingStartElapsedMs: Long? = null,
     val isRecording: Boolean = false,
     val heartRateWasEnabled: Boolean = false,
     val respirationWasEnabled: Boolean = false

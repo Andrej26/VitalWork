@@ -100,6 +100,7 @@ import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.SystemClock
 import android.provider.Settings
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
@@ -509,6 +510,7 @@ fun SessionControlScreen(
             if (!setupMode) {
                 ReturnCountdownHero(
                     seconds = viewModel.countdownSeconds,
+                    startElapsedMs = recordingUiState.recordingStartElapsedMs,
                     onFinished = { viewModel.finishScenario(onCountdownFinished) },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -725,6 +727,7 @@ private fun RecordingTouchLock(active: Boolean, modifier: Modifier = Modifier) {
 @Composable
 private fun ReturnCountdownHero(
     seconds: Int,
+    startElapsedMs: Long?,
     onFinished: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -735,6 +738,7 @@ private fun ReturnCountdownHero(
     ) {
         ReturnCountdown(
             seconds = seconds,
+            startElapsedMs = startElapsedMs,
             onFinished = onFinished,
             size = 200.dp
         )
@@ -748,23 +752,29 @@ private fun ReturnCountdownHero(
 
 /**
  * A round [seconds]-second countdown: a circular ring that drains as time passes, with the remaining
- * whole seconds shown in the center. Calls [onFinished] once when it reaches zero. Restarts whenever
- * [seconds] changes (and on first composition). [size] sets the ring diameter (and scales the number).
+ * whole seconds shown in the center. Calls [onFinished] once when it reaches zero. [size] sets the
+ * ring diameter (and scales the number).
+ *
+ * It is anchored to [startElapsedMs] — the monotonic origin of the data recording — rather than to
+ * its own start instant, so the countdown begins, ticks, and ends *exactly* with the sensor capture
+ * (the data window equals the scenario duration). While [startElapsedMs] is null (recording hasn't
+ * begun yet) the ring sits full and idle and never fires.
  */
 @Composable
 private fun ReturnCountdown(
     seconds: Int,
+    startElapsedMs: Long?,
     onFinished: () -> Unit,
     size: Dp = 96.dp,
     modifier: Modifier = Modifier
 ) {
-    var remainingMs by remember(seconds) { mutableStateOf(seconds * 1000L) }
+    val totalMs = seconds * 1000L
+    var remainingMs by remember(startElapsedMs) { mutableStateOf(totalMs) }
 
-    LaunchedEffect(seconds) {
-        val totalMs = seconds * 1000L
-        val startedAt = System.currentTimeMillis()
+    LaunchedEffect(startElapsedMs) {
+        if (startElapsedMs == null) return@LaunchedEffect
         while (true) {
-            val elapsed = System.currentTimeMillis() - startedAt
+            val elapsed = SystemClock.elapsedRealtime() - startElapsedMs
             remainingMs = (totalMs - elapsed).coerceAtLeast(0L)
             if (remainingMs == 0L) break
             delay(50L)
@@ -772,7 +782,7 @@ private fun ReturnCountdown(
         onFinished()
     }
 
-    val progress = (remainingMs.toFloat() / (seconds * 1000f)).coerceIn(0f, 1f)
+    val progress = (remainingMs.toFloat() / totalMs.toFloat()).coerceIn(0f, 1f)
     val secondsLeft = ((remainingMs + 999L) / 1000L).toInt() // ceil so it shows 10..1 then fires
     // Sub-minute durations read fine as a bare number; minutes-long scenarios need mm:ss.
     val countdownLabel = if (seconds >= 60) {

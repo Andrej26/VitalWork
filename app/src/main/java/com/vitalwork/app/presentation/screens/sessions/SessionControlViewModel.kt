@@ -273,6 +273,7 @@ class SessionControlViewModel @Inject constructor(
             watchHrSampleCount = metadata?.watchHrSampleCount ?: 0,
             watchIbiSampleCount = metadata?.watchIbiSampleCount ?: 0,
             scenarioIdentifier = metadata?.scenarioIdentifier,
+            recordingStartElapsedMs = metadata?.startElapsedRealtimeMs,
             isRecording = state == DataRecordingState.RECORDING,
             heartRateWasEnabled = metadata?.heartRateRecording ?: false,
             respirationWasEnabled = metadata?.respirationRecording ?: false
