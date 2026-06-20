@@ -2,10 +2,12 @@ package com.vitalwork.app.data.repository
 
 import com.vitalwork.app.data.db.FakeParticipantDao
 import com.vitalwork.app.data.prefs.FakeSettingsRepository
+import com.vitalwork.app.data.time.TimeProvider
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
@@ -20,7 +22,7 @@ class ParticipantRepositoryTest {
     fun setUp() {
         fakeDao = FakeParticipantDao()
         settings = FakeSettingsRepository("A")
-        repository = ParticipantRepository(fakeDao, settings)
+        repository = ParticipantRepository(fakeDao, settings, TimeProvider.system())
     }
 
     // <prefix>-NNN-yyMMdd-HHmmss, e.g. A-001-260620-143022. The timestamp tail is non-deterministic,
@@ -56,6 +58,17 @@ class ParticipantRepositoryTest {
         repository.createParticipant("A-001-260620-143022")
         settings.prefix = "B"
         assertCode("B-001", repository.generateNextParticipantCode())
+    }
+
+    @Test
+    fun generateNextParticipantCode_tokenIsUtcNotDeviceLocal() = runTest {
+        // 2026-06-20T14:04:12.860Z — the true-UTC instant from the test export. In any zone east of
+        // UTC (e.g. CEST, where this app runs) device-local would render a different hour, so a token
+        // ending in 140412 proves the clock is read as UTC, not the device zone.
+        val fixedUtc = 1781964252860L
+        val repo = ParticipantRepository(fakeDao, settings, TimeProvider { fixedUtc })
+        val code = repo.generateNextParticipantCode()
+        assertTrue("Code '$code' should carry the UTC token 260620-140412", code.endsWith("260620-140412"))
     }
 
     @Test

@@ -319,7 +319,7 @@ private fun LogSection(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Event Log",
+                    text = "Event Log · UTC",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Medium
                 )

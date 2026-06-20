@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.vitalwork.app.data.db.SessionStatus
 import com.vitalwork.app.presentation.screens.sessions.components.UploadProgressDialog
+import com.vitalwork.app.util.TimeFormats
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -215,7 +216,9 @@ fun SessionDetailScreen(
         }
 
         val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
+            .apply { timeZone = TimeFormats.UTC }
         val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
+            .apply { timeZone = TimeFormats.UTC }
 
         Column(
             modifier = Modifier
@@ -239,6 +242,12 @@ fun SessionDetailScreen(
                         text = "Summary",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Medium
+                    )
+
+                    Text(
+                        text = "All times UTC",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
                     SummaryRow("Date", dateFormat.format(Date(session.startedAt)))

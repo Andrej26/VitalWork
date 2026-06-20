@@ -49,7 +49,7 @@ class SessionHttpUploaderTest {
         scenarioDao = FakeScenarioDao()
         sampleDao = FakeSensorSampleDao()
         sessionRepo = SessionRepository(sessionDao, scenarioDao, sampleDao, FakeSettingsRepository("A"), TimeProvider.system())
-        participantRepo = ParticipantRepository(participantDao, FakeSettingsRepository("A"))
+        participantRepo = ParticipantRepository(participantDao, FakeSettingsRepository("A"), TimeProvider.system())
         scenarioRepo = ScenarioRepository(scenarioDao, sampleDao, TimeProvider.system())
         mapper = SessionUploadMapper(scenarioRepo)
 

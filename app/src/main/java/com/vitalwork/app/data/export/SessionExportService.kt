@@ -16,15 +16,13 @@ import com.vitalwork.app.data.recording.detectRespirationGaps
 import com.vitalwork.app.data.repository.ParticipantRepository
 import com.vitalwork.app.data.repository.ScenarioRepository
 import com.vitalwork.app.data.repository.SessionRepository
+import com.vitalwork.app.util.TimeFormats
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -47,8 +45,6 @@ class SessionExportService @Inject constructor(
         prettyPrint = true
         encodeDefaults = true
     }
-
-    private val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
 
     override suspend fun exportSession(sessionId: Long): Result<String> =
         withContext(Dispatchers.IO) {
@@ -106,9 +102,9 @@ class SessionExportService @Inject constructor(
         val csvContent = buildString {
             appendLine("# session_code,$sessionCode")
             appendLine("# scenario_code,${scenario.scenarioCode.name}")
-            appendLine("# start_time,${isoFormat.format(Date(scenario.startedAt))}")
+            appendLine("# start_time,${TimeFormats.iso(scenario.startedAt)}")
             scenario.endedAt?.let {
-                appendLine("# end_time,${isoFormat.format(Date(it))}")
+                appendLine("# end_time,${TimeFormats.iso(it)}")
             }
             appendLine("# esense_hr_samples,$hrCount")
             if (rrCount > 0) appendLine("# rr_interval_samples,$rrCount")

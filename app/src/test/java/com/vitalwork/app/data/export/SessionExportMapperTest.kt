@@ -190,6 +190,23 @@ class SessionExportMapperTest {
         assertEquals("2.1.0", result.version)
     }
 
+    @Test
+    fun buildExportData_timestampsRenderedAsTrueUtc() = runTest {
+        val participant = participant()
+        // startedAt = 1_000_000 ms = 1970-01-01T00:16:40Z; endedAt = 1_060_000 ms = 00:17:40Z.
+        // Asserting the exact UTC strings catches the device-local-mislabeled-as-Z regression
+        // regardless of the JVM default zone the test runs in.
+        val session = session()
+        val scenario = scenario(id = 5L)
+
+        val result = mapper.buildExportData(participant, session, listOf(scenario))
+
+        assertEquals("1970-01-01T00:16:40Z", result.session.startedAt)
+        assertEquals("1970-01-01T00:17:40Z", result.session.endedAt)
+        assertEquals("1970-01-01T00:16:40Z", result.scenarios[0].startedAt)
+        assertTrue(result.exportedAt.endsWith("Z"))
+    }
+
     // -- Helpers --
 
     private fun participant(

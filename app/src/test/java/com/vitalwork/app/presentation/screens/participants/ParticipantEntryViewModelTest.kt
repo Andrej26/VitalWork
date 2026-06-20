@@ -43,7 +43,7 @@ class ParticipantEntryViewModelTest {
         sessionDao = FakeSessionDao()
         scenarioDao = FakeScenarioDao()
         sampleDao = FakeSensorSampleDao()
-        participantRepository = ParticipantRepository(participantDao, FakeSettingsRepository("A"))
+        participantRepository = ParticipantRepository(participantDao, FakeSettingsRepository("A"), TimeProvider.system())
         sessionRepository = SessionRepository(
             sessionDao,
             scenarioDao,
@@ -66,7 +66,8 @@ class ParticipantEntryViewModelTest {
         val vm = newViewModel()
         advanceUntilIdle()
 
-        assertEquals("A-001", vm.uiState.value.participantCode)
+        // Code carries a UTC timestamp tail (A-001-yyMMdd-HHmmss) for cross-reinstall uniqueness.
+        assertTrue(vm.uiState.value.participantCode.startsWith("A-001-"))
         assertTrue(vm.uiState.value.isInitialized)
     }
 
@@ -104,16 +105,13 @@ class ParticipantEntryViewModelTest {
 
     @Test
     fun submit_duplicateGeneratedCode_setsCodeError() = runTest {
-        // Code generation is count-based (count-by-prefix + 1), so a gap left by a deleted
-        // participant ("A-001" missing) makes the count-derived suggestion ("A-003") collide
-        // with an existing row. Seed that exact gap so the uniqueness safety-net in submit()
-        // still fires even though the field is locked.
-        participantRepository.createParticipant("A-002")
-        participantRepository.createParticipant("A-003")
-
+        // The generated code carries a UTC timestamp tail, so natural count collisions can't happen;
+        // drive the uniqueness safety-net directly by seeding a row with the exact code the VM minted
+        // (e.g. a restored backup or another tablet that produced the same stamp).
         val vm = newViewModel()
         advanceUntilIdle()
-        assertEquals("A-003", vm.uiState.value.participantCode)
+        val generated = vm.uiState.value.participantCode
+        participantRepository.createParticipant(generated)
 
         vm.submit()
         advanceUntilIdle()
@@ -135,7 +133,7 @@ class ParticipantEntryViewModelTest {
 
         assertTrue(event is ParticipantEntryEvent.SessionStarted)
         val participant = participantDao.participants.single()
-        assertEquals("A-001", participant.participantCode)
+        assertTrue(participant.participantCode.startsWith("A-001-"))
         assertEquals(30, participant.age)
         assertEquals("M", participant.gender)
 

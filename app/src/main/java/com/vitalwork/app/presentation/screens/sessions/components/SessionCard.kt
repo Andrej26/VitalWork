@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.vitalwork.app.data.db.SessionEntity
 import com.vitalwork.app.data.db.SessionStatus
+import com.vitalwork.app.util.TimeFormats
 import com.vitalwork.app.util.formatDuration
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -40,6 +41,7 @@ internal fun SessionCard(
     onUpload: (() -> Unit)? = null
 ) {
     val dateFormat = SimpleDateFormat("MMM dd, yyyy hh:mm a", Locale.getDefault())
+        .apply { timeZone = TimeFormats.UTC }
 
     Card(
         onClick = onClick,

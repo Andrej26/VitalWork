@@ -8,10 +8,8 @@ import com.vitalwork.app.data.db.SessionEntity
 import com.vitalwork.app.data.db.SessionStatus
 import com.vitalwork.app.data.prefs.SettingsRepository
 import com.vitalwork.app.data.time.TimeProvider
+import com.vitalwork.app.util.TimeFormats
 import kotlinx.coroutines.flow.Flow
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -51,14 +49,16 @@ class SessionRepository @Inject constructor(
     }
 
     private fun buildNewSession(participantId: Long): SessionEntity {
-        val now = LocalDateTime.now()
-        val timestampToken = now.format(DateTimeFormatter.ofPattern("yyMMdd-HHmmss", Locale.US))
+        // Source the code's time token from the same NTP-corrected UTC clock used for startedAt,
+        // so the code reads on the same timeline as the timestamps it labels.
+        val startedAt = timeProvider.nowMs()
+        val timestampToken = TimeFormats.codeToken(startedAt)
         val prefix = settingsRepository.getDevicePrefix()
         val sessionCode = "VW-$prefix-$timestampToken"
         return SessionEntity(
             participantId = participantId,
             sessionCode = sessionCode,
-            startedAt = timeProvider.nowMs(),
+            startedAt = startedAt,
             status = SessionStatus.ACTIVE
         )
     }

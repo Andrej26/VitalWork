@@ -55,7 +55,7 @@ fun BleDebugLog(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Debug Log (${logEntries.size})",
+                text = "Debug Log (${logEntries.size}) · UTC",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Medium
             )

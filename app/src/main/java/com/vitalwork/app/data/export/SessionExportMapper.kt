@@ -20,9 +20,7 @@ import com.vitalwork.app.data.recording.detectHeartRateGaps
 import com.vitalwork.app.data.recording.detectRespirationGaps
 import com.vitalwork.app.data.repository.ScenarioRepository
 import com.vitalwork.app.data.time.TimeProvider
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import com.vitalwork.app.util.TimeFormats
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -31,8 +29,6 @@ class SessionExportMapper @Inject constructor(
     private val scenarioRepository: ScenarioRepository,
     private val timeProvider: TimeProvider
 ) {
-    private val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
-
     suspend fun buildExportData(
         participant: ParticipantEntity,
         session: SessionEntity,
@@ -54,7 +50,7 @@ class SessionExportMapper @Inject constructor(
         fun countOf(type: SensorType) = allSamples.count { it.sensorType == type }
 
         return SessionExport(
-            exportedAt = isoFormat.format(Date(timeProvider.nowMs())),
+            exportedAt = TimeFormats.iso(timeProvider.nowMs()),
             participant = ParticipantExport(
                 participantCode = participant.participantCode,
                 age = participant.age,
@@ -62,8 +58,8 @@ class SessionExportMapper @Inject constructor(
             ),
             session = SessionInfo(
                 sessionCode = session.sessionCode,
-                startedAt = isoFormat.format(Date(session.startedAt)),
-                endedAt = session.endedAt?.let { isoFormat.format(Date(it)) },
+                startedAt = TimeFormats.iso(session.startedAt),
+                endedAt = session.endedAt?.let { TimeFormats.iso(it) },
                 status = session.status.name,
                 statistics = SessionStatistics(
                     scenarioCount = session.scenarioCount,
@@ -115,8 +111,8 @@ class SessionExportMapper @Inject constructor(
 
         return ScenarioExport(
             scenarioCode = scenario.scenarioCode.name,
-            startedAt = isoFormat.format(Date(scenario.startedAt)),
-            endedAt = scenario.endedAt?.let { isoFormat.format(Date(it)) },
+            startedAt = TimeFormats.iso(scenario.startedAt),
+            endedAt = scenario.endedAt?.let { TimeFormats.iso(it) },
             gaps = gaps,
             samples = sampleExports
         )
