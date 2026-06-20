@@ -23,29 +23,39 @@ class ParticipantRepositoryTest {
         repository = ParticipantRepository(fakeDao, settings)
     }
 
+    // <prefix>-NNN-yyMMdd-HHmmss, e.g. A-001-260620-143022. The timestamp tail is non-deterministic,
+    // so tests assert on the stable prefix+counter head plus the timestamp's shape.
+    private val codeRegex = Regex("""^([A-Z])-(\d{3})-\d{6}-\d{6}$""")
+
+    private fun assertCode(expectedHead: String, code: String) {
+        val match = codeRegex.matchEntire(code)
+        assertNotNull("Code '$code' is not in <prefix>-NNN-yyMMdd-HHmmss format", match)
+        assertEquals(expectedHead, "${match!!.groupValues[1]}-${match.groupValues[2]}")
+    }
+
     @Test
     fun generateNextParticipantCode_startsAtA001() = runTest {
-        assertEquals("A-001", repository.generateNextParticipantCode())
+        assertCode("A-001", repository.generateNextParticipantCode())
     }
 
     @Test
     fun generateNextParticipantCode_incrementsAfterInsert() = runTest {
-        repository.createParticipant("A-001", age = 30, gender = "M")
-        assertEquals("A-002", repository.generateNextParticipantCode())
+        repository.createParticipant("A-001-260620-143022", age = 30, gender = "M")
+        assertCode("A-002", repository.generateNextParticipantCode())
     }
 
     @Test
     fun generateNextParticipantCode_usesConfiguredPrefix() = runTest {
         settings.prefix = "B"
-        assertEquals("B-001", repository.generateNextParticipantCode())
+        assertCode("B-001", repository.generateNextParticipantCode())
     }
 
     @Test
     fun generateNextParticipantCode_countsPerPrefix() = runTest {
         // An A-prefixed row must not bump the count for prefix B.
-        repository.createParticipant("A-001")
+        repository.createParticipant("A-001-260620-143022")
         settings.prefix = "B"
-        assertEquals("B-001", repository.generateNextParticipantCode())
+        assertCode("B-001", repository.generateNextParticipantCode())
     }
 
     @Test
