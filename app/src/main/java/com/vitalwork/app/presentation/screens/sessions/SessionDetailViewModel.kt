@@ -40,7 +40,7 @@ data class SessionDetailUiState(
     val uploadState: UploadState = UploadState.Idle
 )
 
-private const val AUTO_UPLOAD_ENABLED = false
+private const val AUTO_UPLOAD_ENABLED = true
 
 @HiltViewModel
 class SessionDetailViewModel @Inject constructor(

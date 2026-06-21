@@ -30,8 +30,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 
 /**
  * Per-device settings. The device prefix (A/B/C/D) tags every participant code (`A-001`) and session
- * code (`VW-A-…`) generated on this tablet, so several tablets testing at the same time never mint
- * colliding codes. Operators must agree beforehand which letter each device owns.
+ * code (`VW-A-…`) generated on this tablet, and also scopes the device-to-device link to one pair.
+ * Rule: **both devices of a pair (server + client) use the same letter**; different pairs use
+ * different letters, so codes don't collide and each client only links to its own server. Operators
+ * must agree beforehand which letter each pair owns.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,9 +84,11 @@ fun SettingsScreen(
                     )
                     Text(
                         text = "This letter is added to every participant code (e.g. $devicePrefix-001) " +
-                            "and session code on this device. Each tablet must use a different letter " +
-                            "so codes don't collide when several devices test at the same time — agree " +
-                            "beforehand which device gets which letter.",
+                            "and session code on this device, and links it to its pair. Both devices " +
+                            "in a set — the server and its client — use the same letter; a second " +
+                            "set uses a different letter. That way each client connects only to its " +
+                            "own server, and codes never collide. Agree beforehand which letter each " +
+                            "set owns.",
                         style = MaterialTheme.typography.bodyMedium
                     )
 

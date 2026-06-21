@@ -249,11 +249,12 @@ fun HomeScreen(
                 HorizontalDivider()
 
                 // Change Mode lives in the small-icon row alongside Sensors/Tutorial/Settings.
-                // Those three are operator-only, so in Server mode the row carries just Change Mode
-                // (still the way back out of the bare Server home).
+                // Sensors/Tutorial are operator-only, but Settings carries the device prefix (A–D)
+                // that now also scopes the link to one pair, so the server needs it too.
                 if (deviceMode == PeerRole.SERVER) {
                     SecondaryNavRow(
-                        onChangeMode = onNavigateToModeSelection
+                        onChangeMode = onNavigateToModeSelection,
+                        onSettings = onNavigateToSettings
                     )
                 } else {
                     SecondaryNavRow(

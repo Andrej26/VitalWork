@@ -5,6 +5,7 @@ import android.util.Log
 import com.vitalwork.app.data.link.model.PeerDevice
 import com.vitalwork.app.data.link.model.PeerMessage
 import com.vitalwork.app.data.model.ConnectionState
+import com.vitalwork.app.data.prefs.SettingsRepository
 import com.vitalwork.app.data.system.KeepAliveCoordinator
 import com.vitalwork.app.data.system.KeepAliveReason
 import kotlinx.coroutines.CoroutineScope
@@ -13,9 +14,12 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
@@ -41,7 +45,8 @@ import javax.inject.Singleton
 @Singleton
 class PeerLinkManagerImpl @Inject constructor(
     private val mdns: PeerMdnsService,
-    private val keepAlive: KeepAliveCoordinator
+    private val keepAlive: KeepAliveCoordinator,
+    private val settings: SettingsRepository
 ) : PeerLinkManager {
 
     companion object {
@@ -56,12 +61,21 @@ class PeerLinkManagerImpl @Inject constructor(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
-    private val deviceName = "VitalWork-${Build.MODEL}".replace(' ', '-')
+    private val modelName = Build.MODEL.replace(' ', '-')
+    private val deviceName = "VitalWork-$modelName"
 
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
     override val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
 
+    // Only surface peers belonging to this device's pair (matching device prefix), so two
+    // server/client pairs can share one Wi-Fi without a client connecting to the wrong server.
+    // Prefix is read per-emission so a Settings change takes effect without restarting the link.
     override val discoveredDevices: StateFlow<List<PeerDevice>> = mdns.discoveredDevices
+        .map { devices ->
+            val prefix = settings.getDevicePrefix()
+            devices.filter { PeerNaming.matchesPrefix(it.name, prefix) }
+        }
+        .stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     private val _logLines = MutableStateFlow<List<String>>(emptyList())
     override val logLines: StateFlow<List<String>> = _logLines.asStateFlow()
@@ -124,7 +138,7 @@ class PeerLinkManagerImpl @Inject constructor(
         server = s
         try {
             s.start()
-            mdns.register(deviceName, PORT)
+            mdns.register(PeerNaming.advertise(settings.getDevicePrefix(), modelName), PORT)
             _connectionState.value = ConnectionState.CONNECTING
             markActive(PeerRole.SERVER)
         } catch (e: Exception) {
