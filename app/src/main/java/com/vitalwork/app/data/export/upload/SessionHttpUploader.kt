@@ -117,8 +117,14 @@ class SessionHttpUploader(
     class UploadException(message: String) : Exception(message)
 
     private companion object {
-        const val REQUEST_TIMEOUT_MS = 30_000L
-        const val CONNECT_TIMEOUT_MS = 15_000L
-        const val ERROR_BODY_LIMIT = 500
+        // A full session is sent as one POST. A long recording (e.g. 2 hours) is a multi-MB body that
+        // can take well over the old 30s ceiling to upload, so allow up to 10 minutes for the whole
+        // request — far more than even a slow link needs, while still finite. The socket timeout is the
+        // real guard: it tolerates slow-but-steady throughput yet fails in ~60s if the transfer stalls
+        // completely (dropped Wi-Fi / hung server), instead of hanging for the full request cap. Connect
+        // stays short so a missing network fails fast.
+        const val REQUEST_TIMEOUT_MS = 600_000L
+        const val CONNECT_TIMEOUT_MS = 30_000L
+        const val ERROR_BODY_LIMIT = 1000
     }
 }
