@@ -124,7 +124,7 @@ class SessionHttpUploader(
         // completely (dropped Wi-Fi / hung server), instead of hanging for the full request cap. Connect
         // stays short so a missing network fails fast.
         const val REQUEST_TIMEOUT_MS = 600_000L
-        const val CONNECT_TIMEOUT_MS = 30_000L
+        const val CONNECT_TIMEOUT_MS = 15_000L
         const val ERROR_BODY_LIMIT = 1000
     }
 }
