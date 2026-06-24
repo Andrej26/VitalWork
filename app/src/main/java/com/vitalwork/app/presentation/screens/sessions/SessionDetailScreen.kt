@@ -250,6 +250,8 @@ fun SessionDetailScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
+                    SummaryRow("Participant", uiState.participantCode ?: "—")
+
                     SummaryRow("Date", dateFormat.format(Date(session.startedAt)))
 
                     val startTime = timeFormat.format(Date(session.startedAt))
