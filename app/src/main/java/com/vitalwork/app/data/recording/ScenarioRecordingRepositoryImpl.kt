@@ -13,6 +13,7 @@ import com.vitalwork.app.data.sensor.ble.BleManager
 import com.vitalwork.app.data.sensor.watch.WatchFlushState
 import com.vitalwork.app.data.sensor.watch.WatchSensorReceiver
 import com.vitalwork.app.data.time.TimeProvider
+import android.os.SystemClock
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -54,6 +55,8 @@ class ScenarioRecordingRepositoryImpl(
     private val collectorJobs = mutableListOf<Job>()
 
     private var startTimeMs: Long = 0L
+    /** Monotonic origin captured at recording start; drives the duration timer + UI countdown. */
+    private var startElapsedRealtimeMs: Long = 0L
     private var currentScenarioId: Long = 0L
 
     // --- Galaxy Watch (EDA + HR + IBI; session-scoped, independent of per-scenario recording) ---
@@ -87,6 +90,7 @@ class ScenarioRecordingRepositoryImpl(
 
         Log.i(TAG, "startRecording scenarioId=$scenarioId ($scenarioIdentifier)")
         startTimeMs = timeProvider.nowMs()
+        startElapsedRealtimeMs = SystemClock.elapsedRealtime()
         currentScenarioId = scenarioId
 
         val isHeartRateConnected = bleManager.connectionState.value == ConnectionState.CONNECTED
@@ -110,6 +114,7 @@ class ScenarioRecordingRepositoryImpl(
             scenarioId = scenarioId,
             scenarioIdentifier = scenarioIdentifier,
             startTimestampMs = startTimeMs,
+            startElapsedRealtimeMs = startElapsedRealtimeMs,
             heartRateRecording = shouldRecordHr,
             respirationRecording = shouldRecordResp,
             edaRecording = shouldRecordEda
@@ -148,7 +153,9 @@ class ScenarioRecordingRepositoryImpl(
         durationJob = scope.launch {
             while (isActive) {
                 delay(1000)
-                _recordingDurationMs.value = System.currentTimeMillis() - startTimeMs
+                // Monotonic so the displayed elapsed can't drift from the UI countdown (which shares
+                // this origin) or jump on an NTP correction mid-scenario.
+                _recordingDurationMs.value = SystemClock.elapsedRealtime() - startElapsedRealtimeMs
             }
         }
 

@@ -9,6 +9,7 @@ import com.vitalwork.app.data.sensor.audio.LowSignalWarning
 import com.vitalwork.app.data.sensor.audio.MindfieldRespiration
 import com.vitalwork.app.presentation.log.LogEntry
 import com.vitalwork.app.presentation.log.LogType
+import com.vitalwork.app.util.TimeFormats
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,6 +51,7 @@ class EsenseRespirationViewModel @Inject constructor(
     val uiState: StateFlow<EsenseRespirationUiState> = _uiState.asStateFlow()
 
     private val timeFormatter = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+        .apply { timeZone = TimeFormats.UTC }
 
     init {
         observeSensorDevice()

@@ -38,26 +38,15 @@ class WatchSensorReceiver @Inject constructor(
 ) {
 
     private companion object {
-        // Data arrives ~1 Hz (flush loop). 6 s of silence reliably means a real drop, not a hiccup —
-        // the extra headroom over the bare 1 Hz cadence absorbs an occasional 1–2 s gap (e.g. a 2 s
-        // flush cadence, or a brief Doze stall) so the state doesn't flap CONNECTED↔DISCONNECTED.
-        // A normal Stop is signalled explicitly via onStop() for instant DISCONNECTED; this watchdog
-        // is the safety net for the watch dying / going out of range (no goodbye sent).
+        // Data arrives ~1 Hz (flush loop). 6 s of silence reliably means readings have stopped, not a
+        // hiccup — the extra headroom over the bare 1 Hz cadence absorbs an occasional 1–2 s gap (e.g. a
+        // 2 s flush cadence, or a brief Doze stall) so the status doesn't flap LIVE↔DOZING.
         const val INACTIVITY_TIMEOUT_MS = 6_000L
         const val POLL_INTERVAL_MS = 1_000L
-
-        // The watch beats a HEARTBEAT every ~30 s. If no readings arrive but a heartbeat lands within
-        // this window, the watch is alive-but-dozing (buffering), NOT gone — so we show DOZING instead
-        // of DISCONNECTED. ~95 s ≈ 3 missed beats of headroom so a single dropped beat doesn't flap.
-        // Only after this longer silence (no readings AND no heartbeat) do we declare DISCONNECTED.
-        const val HEARTBEAT_TIMEOUT_MS = 95_000L
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    /** Last time ANY message arrived (reading, heartbeat, capabilities) — drives "truly gone". */
-    @Volatile
-    private var lastMessageMs: Long = 0L
     /** Last time an actual sensor READING arrived — drives LIVE vs DOZING. */
     @Volatile
     private var lastReadingMs: Long = 0L
@@ -288,8 +277,8 @@ class WatchSensorReceiver @Inject constructor(
     /**
      * Drop the last-seen live values so a disconnected watch doesn't leave stale data on screen: the
      * Sensors screen's "Live readings" return to "Waiting for data…", and the Home low-battery banner
-     * clears (no more warning for a watch that is no longer connected). Called on any transition to
-     * DISCONNECTED — explicit Stop ([onStop]) or the watchdog declaring the link gone ([recomputeStatus]).
+     * clears (no more warning for a watch that is no longer connected). Called only on an explicit Stop
+     * ([onStop]) — the watchdog never transitions to DISCONNECTED, so a dozing watch keeps its values.
      */
     private fun clearLiveData() {
         _latestByType.value = emptyMap()
@@ -299,36 +288,26 @@ class WatchSensorReceiver @Inject constructor(
 
     /** Record a message arrival, recompute the link status, and ensure the watchdog is running. */
     private fun markActivity(arrivalMs: Long) {
-        lastMessageMs = arrivalMs
         recomputeStatus(arrivalMs)
         ensureWatchdog()
     }
 
     /**
-     * Derive the three-way link status from the two timestamps:
+     * Derive the link status from the last-reading timestamp:
      *  - a recent **reading** → LIVE,
-     *  - else a recent **message** (heartbeat) → DOZING (alive, buffering),
-     *  - else → DISCONNECTED (truly gone).
-     * [connectionState] mirrors this coarsely: LIVE/DOZING → CONNECTED, DISCONNECTED → DISCONNECTED,
-     * so existing consumers treat a dozing watch as still present.
+     *  - else → DOZING (alive, buffering on the watch).
+     * Once the watch has connected (any message seen), the watchdog never declares DISCONNECTED on its
+     * own: during a session the watch is *expected* to sleep for long stretches, sampling locally and
+     * shipping everything at session end, so a silence-based "Disconnected" would be a false alarm. The
+     * watch keeps its last-measured values on screen while DOZING. Only an explicit Stop from the watch
+     * ([onStop], normal session end) — or never having connected — reads DISCONNECTED.
+     * [connectionState] mirrors this coarsely: LIVE/DOZING → CONNECTED.
      */
     private fun recomputeStatus(now: Long) {
-        val previous = _linkStatus.value
-        val status = when {
-            now - lastReadingMs <= INACTIVITY_TIMEOUT_MS -> WatchLinkStatus.LIVE
-            now - lastMessageMs <= HEARTBEAT_TIMEOUT_MS -> WatchLinkStatus.DOZING
-            else -> WatchLinkStatus.DISCONNECTED
-        }
-        _linkStatus.value = status
-        _connectionState.value =
-            if (status == WatchLinkStatus.DISCONNECTED) ConnectionState.DISCONNECTED
-            else ConnectionState.CONNECTED
-        if (status == WatchLinkStatus.DISCONNECTED) {
-            minLiveSkewMs = Long.MAX_VALUE // fresh skew measurement on the next connection
-            // Clear stale live values only on the edge into DISCONNECTED (the watchdog polls ~1 Hz,
-            // so guard against re-clearing every tick while the watch stays gone).
-            if (previous != WatchLinkStatus.DISCONNECTED) clearLiveData()
-        }
+        _linkStatus.value =
+            if (now - lastReadingMs <= INACTIVITY_TIMEOUT_MS) WatchLinkStatus.LIVE
+            else WatchLinkStatus.DOZING
+        _connectionState.value = ConnectionState.CONNECTED
     }
 
     @Synchronized

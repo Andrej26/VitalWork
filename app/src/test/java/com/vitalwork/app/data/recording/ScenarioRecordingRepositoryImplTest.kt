@@ -2,7 +2,6 @@ package com.vitalwork.app.data.recording
 
 import com.vitalwork.app.data.db.FakeScenarioDao
 import com.vitalwork.app.data.db.FakeSensorSampleDao
-import com.vitalwork.app.data.db.ScenarioCategory
 import com.vitalwork.app.data.db.ScenarioCode
 import com.vitalwork.app.data.db.ScenarioEntity
 import com.vitalwork.app.data.db.SensorSampleEntity
@@ -65,8 +64,7 @@ class ScenarioRecordingRepositoryImplTest {
         val s = ScenarioEntity(
             id = id,
             sessionId = 1L,
-            scenarioCode = ScenarioCode.FALLING_PALLET,
-            scenarioCategory = ScenarioCategory.A,
+            scenarioCode = ScenarioCode.REFERENCE_STATE,
             startedAt = startedAt,
             endedAt = endedAt
         )
@@ -92,8 +90,7 @@ class ScenarioRecordingRepositoryImplTest {
         val s = ScenarioEntity(
             id = id,
             sessionId = 1L,
-            scenarioCode = ScenarioCode.FALLING_PALLET,
-            scenarioCategory = ScenarioCategory.A,
+            scenarioCode = ScenarioCode.REFERENCE_STATE,
             startedAt = System.currentTimeMillis()
         )
         fakeScenarioDao.scenarios.add(s)

@@ -27,7 +27,6 @@ import com.vitalwork.app.data.sensor.watch.model.WatchReading
 import com.vitalwork.app.presentation.components.BleDialogState
 import com.vitalwork.app.presentation.components.DialogAction
 import com.vitalwork.app.presentation.components.gattStatusToString
-import com.vitalwork.app.presentation.screens.sessions.components.NotesSaveStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.FlowPreview
@@ -102,6 +101,13 @@ class SessionControlViewModel @Inject constructor(
 
     val sessionId: Long = savedStateHandle.get<Long>("sessionId") ?: -1L
 
+    /**
+     * Scenario number (1..5) picked on the scenario-selection screen, or 0 when the session was
+     * opened without a pick (e.g. resumed from the sessions list). Maps to a [ScenarioCode] for
+     * manual recording so the chosen scenario is what gets recorded.
+     */
+    private val selectedScenarioNumber: Int = savedStateHandle.get<Int>("scenario") ?: 0
+
     private val _session = MutableStateFlow<SessionEntity?>(null)
     val session: StateFlow<SessionEntity?> = _session.asStateFlow()
 
@@ -163,16 +169,6 @@ class SessionControlViewModel @Inject constructor(
     /** Last disconnect/error reason from respiration sensor */
     val respirationDisconnectReason: StateFlow<String?> =
         connectionRepository.respirationDisconnectReason
-
-    /** Notes text */
-    private val _notes = MutableStateFlow("")
-    val notes: StateFlow<String> = _notes.asStateFlow()
-
-    /** Notes auto-save status indicator */
-    private val _notesSaveStatus = MutableStateFlow(NotesSaveStatus.Idle)
-    val notesSaveStatus: StateFlow<NotesSaveStatus> = _notesSaveStatus.asStateFlow()
-    private var userHasEditedNotes = false
-    private var savedDismissJob: Job? = null
 
     /**
      * Drives the End-Session dialog state machine: prompt to wake the watch (if dozing/gone) → show a
@@ -277,26 +273,35 @@ class SessionControlViewModel @Inject constructor(
             watchHrSampleCount = metadata?.watchHrSampleCount ?: 0,
             watchIbiSampleCount = metadata?.watchIbiSampleCount ?: 0,
             scenarioIdentifier = metadata?.scenarioIdentifier,
+            recordingStartElapsedMs = metadata?.startElapsedRealtimeMs,
             isRecording = state == DataRecordingState.RECORDING,
             heartRateWasEnabled = metadata?.heartRateRecording ?: false,
             respirationWasEnabled = metadata?.respirationRecording ?: false
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ScenarioRecordingUiState())
 
-    private var notesDebounceJob: Job? = null
-
     init {
         // Load session data
         if (sessionId > 0) {
             viewModelScope.launch {
-                val session = sessionRepository.getSessionById(sessionId)
-                _session.value = session
-                _notes.value = session?.notes ?: ""
+                _session.value = sessionRepository.getSessionById(sessionId)
             }
             // Begin continuous Galaxy Watch EDA capture for the whole session. Idempotent: the watch
             // streams independently of scenarios and buffers in Doze, so we accumulate session-wide
             // and slice into scenarios at End Session. Safe even if no watch is connected.
             sensorRecordingRepository.startWatchEdaSession()
+        }
+
+        // Auto-start recording when this screen is opened for an actual scenario run (1..N). The same
+        // ViewModel also backs the scenario-selection hub, the sensor-setup screen, and resumes — all
+        // of which open without a scenario pick (selectedScenarioNumber == 0) and must never record.
+        // We only wait for the session to load; startScenarioRecording() self-guards on IDLE state, an
+        // ACTIVE session, and at least one connected sensor, so it's safe and one-shot.
+        if (selectedScenarioNumber >= 1) {
+            viewModelScope.launch {
+                _session.first { it != null }
+                startManualRecording()
+            }
         }
 
         // Unified BLE connection-state handler: dialog dismissal, HR-notification kickoff,
@@ -414,7 +419,7 @@ class SessionControlViewModel @Inject constructor(
             if (session.status != com.vitalwork.app.data.db.SessionStatus.ACTIVE) return@launch
             if (!anySensorConnected()) return@launch
 
-            val scenarioCode = com.vitalwork.app.data.db.ScenarioCode.FALLING_PALLET
+            val scenarioCode = scenarioCodeForSelection()
             val scenario = scenarioRepository.createScenario(
                 sessionId = session.id,
                 scenarioCode = scenarioCode
@@ -423,6 +428,24 @@ class SessionControlViewModel @Inject constructor(
             sensorRecordingRepository.startRecording(scenario.id, scenarioIdentifier)
         }
     }
+
+    /**
+     * Resolve the [ScenarioCode] for the scenario picked on the selection screen. Numbers 1..5 map to
+     * the first five [ScenarioCode] entries (in declaration order); 0 / out-of-range falls back to the
+     * first entry so resuming a session from the list still records something sensible.
+     */
+    private fun scenarioCodeForSelection(): com.vitalwork.app.data.db.ScenarioCode {
+        val codes = com.vitalwork.app.data.db.ScenarioCode.entries
+        val index = (selectedScenarioNumber - 1).coerceIn(0, codes.lastIndex)
+        return codes[index]
+    }
+
+    /**
+     * Auto-return countdown length (seconds) for the selected scenario: A/E run 10 min, B/C 20 min,
+     * D 30 min ([ScenarioCode.countdownMinutes]), so the operator screen hands back to the hub after
+     * the scenario's full duration.
+     */
+    val countdownSeconds: Int = scenarioCodeForSelection().countdownMinutes * 60
 
     /** Stop sensor capture and finalize the scenario row. */
     fun stopManualRecording() {
@@ -433,34 +456,19 @@ class SessionControlViewModel @Inject constructor(
         }
     }
 
-    @OptIn(FlowPreview::class)
-    fun setupNotesAutoSave() {
-        notesDebounceJob?.cancel()
-        notesDebounceJob = viewModelScope.launch {
-            _notes
-                .debounce(500)
-                .distinctUntilChanged()
-                .collect { text ->
-                    if (sessionId > 0) {
-                        sessionRepository.updateNotes(sessionId, text)
-                        if (userHasEditedNotes) {
-                            _notesSaveStatus.value = NotesSaveStatus.Saved
-                            savedDismissJob?.cancel()
-                            savedDismissJob = viewModelScope.launch {
-                                delay(2000)
-                                _notesSaveStatus.value = NotesSaveStatus.Idle
-                            }
-                        }
-                    }
-                }
+    /**
+     * Finish the current scenario when its countdown ends: stop+finalize the recording (suspending,
+     * so the scenario row is closed and [recordingState] is back to IDLE) and only then invoke
+     * [onFinished] to navigate back to the hub. The ordering matters — navigating first would let the
+     * next scenario's ViewModel observe a still-RECORDING state and skip its auto-start.
+     */
+    fun finishScenario(onFinished: () -> Unit) {
+        viewModelScope.launch {
+            if (sensorRecordingRepository.recordingState.value == DataRecordingState.RECORDING) {
+                sensorRecordingRepository.stopRecording()
+            }
+            onFinished()
         }
-    }
-
-    fun updateNotes(text: String) {
-        userHasEditedNotes = true
-        savedDismissJob?.cancel()
-        _notesSaveStatus.value = NotesSaveStatus.Saving
-        _notes.value = text
     }
 
     /**

@@ -13,8 +13,8 @@ import javax.inject.Singleton
  *
  * Unlike [com.vitalwork.app.data.export.SessionExportMapper] (ISO strings, gaps, statistics), this
  * emits raw epoch-millisecond timestamps straight off the entities and **enum-NAME** sensor types, which is
- * what `POST /api/uploads/session` expects (doc §4/§9). No gap or statistics computation — the server
- * recomputes counts from the samples.
+ * what `POST /api/sessions/upload` expects (doc §6/§7). No gap computation, but the stored per-session
+ * sample counters ARE sent (doc §4.2) — the server persists them rather than recomputing from samples.
  */
 @Singleton
 class SessionUploadMapper @Inject constructor(
@@ -39,10 +39,18 @@ class SessionUploadMapper @Inject constructor(
             ),
             session = SessionUpload(
                 sessionCode = session.sessionCode,
-                startedAtMs = session.startedAt,
-                endedAtMs = session.endedAt,
+                startedAt = session.startedAt,
+                endedAt = session.endedAt,
                 status = session.status.name,
-                notes = session.notes
+                statistics = SessionStatisticsUpload(
+                    scenarioCount = session.scenarioCount,
+                    hrSampleCount = session.hrSampleCount,
+                    respirationSampleCount = session.respirationSampleCount,
+                    rrIntervalSampleCount = session.rrIntervalSampleCount,
+                    edaSampleCount = session.edaSampleCount,
+                    watchHrSampleCount = session.watchHrSampleCount,
+                    watchIbiSampleCount = session.watchIbiSampleCount
+                )
             ),
             scenarios = scenarioUploads
         )
@@ -53,15 +61,14 @@ class SessionUploadMapper @Inject constructor(
         samples: List<SensorSampleEntity>
     ): ScenarioUpload = ScenarioUpload(
         scenarioCode = scenario.scenarioCode.name,
-        startedAtMs = scenario.startedAt,
-        endedAtMs = scenario.endedAt,
-        eventTimestampMs = scenario.eventTimestampMs,
-        reactionTimestampMs = scenario.reactionTimestampMs,
+        startedAt = scenario.startedAt,
+        endedAt = scenario.endedAt,
         samples = samples.map { sample ->
             SampleUpload(
                 // Enum NAME, not the lowercase label used by the local CSV export.
                 sensorType = sample.sensorType.name,
                 timestampMs = sample.timestampMs,
+                elapsedMs = sample.elapsedMs,
                 value = sample.value
             )
         }

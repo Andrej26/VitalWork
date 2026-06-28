@@ -33,10 +33,7 @@ class ScenarioRepository @Inject constructor(
     suspend fun getCompletedScenarioCount(sessionId: Long): Int =
         scenarioDao.getCompletedScenarioCount(sessionId)
 
-    /**
-     * Creates a new scenario for the given session. `scenarioCategory` is derived from
-     * `scenarioCode` and stored alongside it for fast category-level queries.
-     */
+    /** Creates a new scenario for the given session. */
     suspend fun createScenario(
         sessionId: Long,
         scenarioCode: ScenarioCode
@@ -44,23 +41,10 @@ class ScenarioRepository @Inject constructor(
         val scenario = ScenarioEntity(
             sessionId = sessionId,
             scenarioCode = scenarioCode,
-            scenarioCategory = scenarioCode.category,
             startedAt = timeProvider.nowMs()
         )
         val id = scenarioDao.insert(scenario)
         return scenario.copy(id = id)
-    }
-
-    /** Records the moment the critical event fired inside a scenario. */
-    suspend fun setEventTimestamp(scenarioId: Long, eventTimestampMs: Long) {
-        val scenario = scenarioDao.getScenarioById(scenarioId) ?: return
-        scenarioDao.update(scenario.copy(eventTimestampMs = eventTimestampMs))
-    }
-
-    /** Records the moment the user reacted via the VR controller. */
-    suspend fun setReactionTimestamp(scenarioId: Long, reactionTimestampMs: Long) {
-        val scenario = scenarioDao.getScenarioById(scenarioId) ?: return
-        scenarioDao.update(scenario.copy(reactionTimestampMs = reactionTimestampMs))
     }
 
     /** Marks the scenario as ended (sets endedAt). Sample counts roll up at session end. */

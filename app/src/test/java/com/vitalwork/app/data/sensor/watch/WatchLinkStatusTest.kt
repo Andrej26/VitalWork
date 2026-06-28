@@ -8,9 +8,11 @@ import org.junit.Test
 
 /**
  * Covers the immediate [WatchSensorReceiver.linkStatus] transitions driven synchronously by the
- * message entry points (the time-decay LIVE→DOZING→DISCONNECTED path is exercised on-device, since it
- * is wall-clock + watchdog driven). Confirms a fresh reading reads LIVE, a heartbeat-only reads DOZING,
- * and an explicit STOP reads DISCONNECTED — and that the coarse [connectionState] mirrors them.
+ * message entry points (the time-decay LIVE→DOZING path is exercised on-device, since it is wall-clock
+ * + watchdog driven). Confirms a fresh reading reads LIVE, a heartbeat-only reads DOZING, and an
+ * explicit STOP reads DISCONNECTED — and that the coarse [connectionState] mirrors them. Note the
+ * watchdog never auto-declares DISCONNECTED: a connected watch stays LIVE/DOZING until an explicit Stop,
+ * because during a session it is expected to sleep and buffer locally (no silence-based false alarm).
  */
 class WatchLinkStatusTest {
 

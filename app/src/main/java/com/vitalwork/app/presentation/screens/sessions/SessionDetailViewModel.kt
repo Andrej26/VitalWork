@@ -8,6 +8,7 @@ import com.vitalwork.app.data.db.SessionEntity
 import com.vitalwork.app.data.db.SessionStatus
 import com.vitalwork.app.data.export.SessionExporter
 import com.vitalwork.app.data.export.SessionUploader
+import com.vitalwork.app.data.repository.ParticipantRepository
 import com.vitalwork.app.data.repository.ScenarioRepository
 import com.vitalwork.app.data.repository.SessionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -32,6 +33,7 @@ sealed interface UploadState {
 
 data class SessionDetailUiState(
     val session: SessionEntity? = null,
+    val participantCode: String? = null,
     val scenarios: List<ScenarioEntity> = emptyList(),
     val isLoading: Boolean = true,
     val isDeleting: Boolean = false,
@@ -40,12 +42,13 @@ data class SessionDetailUiState(
     val uploadState: UploadState = UploadState.Idle
 )
 
-private const val AUTO_UPLOAD_ENABLED = false
+private const val AUTO_UPLOAD_ENABLED = true
 
 @HiltViewModel
 class SessionDetailViewModel @Inject constructor(
     private val sessionRepository: SessionRepository,
     private val scenarioRepository: ScenarioRepository,
+    private val participantRepository: ParticipantRepository,
     private val exporter: SessionExporter,
     private val uploader: SessionUploader,
     savedStateHandle: SavedStateHandle
@@ -72,8 +75,12 @@ class SessionDetailViewModel @Inject constructor(
             awaitAll(sessionDeferred, scenariosDeferred)
 
             val session = sessionDeferred.await()
+            val participantCode = session?.let {
+                participantRepository.getParticipantById(it.participantId)?.participantCode
+            }
             _uiState.value = _uiState.value.copy(
                 session = session,
+                participantCode = participantCode,
                 scenarios = scenariosDeferred.await(),
                 isLoading = false
             )

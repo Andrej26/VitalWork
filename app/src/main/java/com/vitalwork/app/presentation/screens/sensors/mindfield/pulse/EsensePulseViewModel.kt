@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.vitalwork.app.util.TimeFormats
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -66,6 +67,7 @@ class EsensePulseViewModel @Inject constructor(
     val uiState: StateFlow<EsensePulseUiState> = _uiState.asStateFlow()
 
     private val timeFormatter = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault())
+        .apply { timeZone = TimeFormats.UTC }
     private var lowBatteryShownForConnection = false
     private var lastConnectedDevice: BleDevice? = null
     private var scanTimeoutJob: Job? = null

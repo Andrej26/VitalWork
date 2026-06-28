@@ -3,7 +3,6 @@ package com.vitalwork.app.data.repository
 import com.vitalwork.app.data.db.FakeScenarioDao
 import com.vitalwork.app.data.db.FakeSensorSampleDao
 import com.vitalwork.app.data.db.FakeSessionDao
-import com.vitalwork.app.data.db.ScenarioCategory
 import com.vitalwork.app.data.db.ScenarioCode
 import com.vitalwork.app.data.db.ScenarioEntity
 import com.vitalwork.app.data.db.SensorSampleEntity
@@ -93,18 +92,6 @@ class SessionRepositoryTest {
     }
 
     @Test
-    fun updateNotes_persistsText() = runTest {
-        val session = repository.createSession(participantId = 1L)
-
-        repository.updateNotes(session.id, "WiFi dropped at minute 7")
-
-        assertEquals(
-            "WiFi dropped at minute 7",
-            fakeSessionDao.getSessionById(session.id)!!.notes
-        )
-    }
-
-    @Test
     fun markUploaded_changesStatus() = runTest {
         val session = repository.createSession(participantId = 1L)
 
@@ -130,8 +117,7 @@ class SessionRepositoryTest {
         val scenario = ScenarioEntity(
             id = nextId,
             sessionId = sessionId,
-            scenarioCode = ScenarioCode.FALLING_PALLET,
-            scenarioCategory = ScenarioCategory.A,
+            scenarioCode = ScenarioCode.REFERENCE_STATE,
             startedAt = System.currentTimeMillis(),
             endedAt = endedAt
         )

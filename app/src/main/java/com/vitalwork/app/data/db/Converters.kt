@@ -11,12 +11,6 @@ class Converters {
     fun toSessionStatus(value: String): SessionStatus = SessionStatus.valueOf(value)
 
     @TypeConverter
-    fun fromScenarioCategory(category: ScenarioCategory): String = category.name
-
-    @TypeConverter
-    fun toScenarioCategory(value: String): ScenarioCategory = ScenarioCategory.valueOf(value)
-
-    @TypeConverter
     fun fromScenarioCode(code: ScenarioCode): String = code.name
 
     @TypeConverter

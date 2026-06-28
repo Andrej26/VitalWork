@@ -5,26 +5,16 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-enum class ScenarioCategory {
-    A,
-    B,
-    C
-}
-
 enum class ScenarioCode(
     val officialCode: String,
     val displayName: String,
-    val category: ScenarioCategory
+    val countdownMinutes: Int
 ) {
-    FALLING_PALLET("A1", "Falling Pallet", ScenarioCategory.A),
-    BLIND_CORNER("A2", "Blind Corner", ScenarioCategory.A),
-    EQUIPMENT_COLLISION("A3", "Collision with Equipment", ScenarioCategory.A),
-    FLOOR_OBSTACLE("A4", "Obstacle on the Floor", ScenarioCategory.A),
-    MACHINE_JAM("B1", "Machine Jam", ScenarioCategory.B),
-    CONVEYOR_ACCELERATION("B2", "Uncontrolled Conveyor Acceleration", ScenarioCategory.B),
-    MEDIUM_LEAKAGE("B3", "Medium Leakage", ScenarioCategory.B),
-    ELECTRICAL_SHORT("B4", "Electrical Short Circuit", ScenarioCategory.B),
-    SLING_FAILURE("C1", "Sling Failure", ScenarioCategory.C);
+    REFERENCE_STATE("A", "Scenario A – Reference State", 10),
+    COGNITIVE_LOAD("B", "Scenario B – Increased Cognitive Load", 20),
+    DISTRACTING_ENVIRONMENT("C", "Scenario C – Distracting Environment", 20),
+    LONG_TERM_FATIGUE("D", "Scenario D – Long-Term Load and Fatigue", 30),
+    REACTION_TASKS("E", "Scenario E – Reaction Tasks", 10);
 
     companion object {
         fun fromOfficialCode(code: String): ScenarioCode? =
@@ -54,13 +44,7 @@ data class ScenarioEntity(
 
     val scenarioCode: ScenarioCode,
 
-    val scenarioCategory: ScenarioCategory,
-
     val startedAt: Long,
 
-    val endedAt: Long? = null,
-
-    val eventTimestampMs: Long? = null,
-
-    val reactionTimestampMs: Long? = null
+    val endedAt: Long? = null
 )

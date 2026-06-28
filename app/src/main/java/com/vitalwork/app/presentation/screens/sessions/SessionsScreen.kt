@@ -137,6 +137,11 @@ fun SessionsScreen(
                                 color = MaterialTheme.colorScheme.error
                             )
                         }
+                        Text(
+                            text = "All times UTC",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
 
                     items(uiState.sessions, key = { it.id }) { session ->

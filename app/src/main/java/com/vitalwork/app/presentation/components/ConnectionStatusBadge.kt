@@ -23,6 +23,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.vitalwork.app.data.model.ConnectionState
 
+/** Dot/label colour for a connection state — gray (disconnected), amber (connecting/reconnecting),
+ *  green (connected), red (error). Shared so sensors, the device link, etc. all match. */
+fun connectionStatusColor(state: ConnectionState): Color = when (state) {
+    ConnectionState.DISCONNECTED -> Color.Gray
+    ConnectionState.CONNECTING -> Color(0xFFFFA000)
+    ConnectionState.RECONNECTING -> Color(0xFFFFA000)
+    ConnectionState.CONNECTED -> Color(0xFF4CAF50)
+    ConnectionState.ERROR -> Color(0xFFF44336)
+}
+
 @Composable
 fun ConnectionStatusBadge(
     state: ConnectionState,
@@ -31,13 +41,7 @@ fun ConnectionStatusBadge(
     modifier: Modifier = Modifier
 ) {
     val color by animateColorAsState(
-        targetValue = when (state) {
-            ConnectionState.DISCONNECTED -> Color.Gray
-            ConnectionState.CONNECTING -> Color(0xFFFFA000)
-            ConnectionState.RECONNECTING -> Color(0xFFFFA000)
-            ConnectionState.CONNECTED -> Color(0xFF4CAF50)
-            ConnectionState.ERROR -> Color(0xFFF44336)
-        },
+        targetValue = connectionStatusColor(state),
         animationSpec = tween(300),
         label = "statusColor"
     )

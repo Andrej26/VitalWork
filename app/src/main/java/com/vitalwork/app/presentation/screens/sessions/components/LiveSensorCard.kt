@@ -56,8 +56,15 @@ fun LiveSensorCard(
     animate: Boolean = false,
     onClick: (() -> Unit)? = null,
     batteryLevel: Int? = null,
+    compact: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    // Compact mode roughly halves the card height for screens that must fit without scrolling
+    // (e.g. the transient post-scenario SessionControlScreen on a phone). Same content, smaller.
+    val cardPadding = if (compact) 8.dp else 16.dp
+    val iconSize = if (compact) 18.dp else 32.dp
+    val valueFontSize = if (compact) 24.sp else 48.sp
+    val gap = if (compact) 1.dp else 4.dp
     val isClickable = onClick != null &&
             (connectionState == ConnectionState.DISCONNECTED || connectionState == ConnectionState.ERROR)
     val borderColor by animateColorAsState(
@@ -99,14 +106,14 @@ fun LiveSensorCard(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
+                    .padding(cardPadding),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = label,
                     modifier = Modifier
-                        .size(32.dp)
+                        .size(iconSize)
                         .scale(iconScale),
                     tint = if (connectionState == ConnectionState.CONNECTED)
                         MaterialTheme.colorScheme.primary
@@ -114,7 +121,7 @@ fun LiveSensorCard(
                         MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(gap))
 
                 Text(
                     text = label,
@@ -123,13 +130,13 @@ fun LiveSensorCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(gap))
 
                 // Large value display
                 Text(
                     text = value,
                     style = MaterialTheme.typography.displaySmall.copy(
-                        fontSize = 48.sp,
+                        fontSize = valueFontSize,
                         fontWeight = FontWeight.Bold
                     ),
                     color = if (connectionState == ConnectionState.CONNECTED)
@@ -144,12 +151,12 @@ fun LiveSensorCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(if (compact) gap else 8.dp))
 
                 ConnectionStatusBadge(state = connectionState)
 
                 if (isClickable) {
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(gap))
                     Text(
                         text = "Tap to connect",
                         style = MaterialTheme.typography.labelSmall,
@@ -158,7 +165,7 @@ fun LiveSensorCard(
                 }
 
                 if (sampleCount > 0) {
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(gap))
                     Text(
                         text = "$sampleCount samples",
                         style = MaterialTheme.typography.labelSmall,

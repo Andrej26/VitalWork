@@ -360,15 +360,20 @@ data, lagged live preview.
 Because the transport is stateless fire-and-forget, the tablet has **no event** telling it the watch
 dropped. State is **inferred** in `WatchSensorReceiver`:
 
-- Every message updates a `@Volatile lastMessageMs` and sets `CONNECTED`.
-- A single poll loop (`POLL_INTERVAL_MS = 1 s`) sets `DISCONNECTED` if
-  `now - lastMessageMs > INACTIVITY_TIMEOUT_MS` (**6 s** — headroom over the 1 Hz cadence so an
-  occasional 1–2 s gap doesn't flap the state). One poll loop watching a volatile timestamp is
-  race-free vs. rearming a debounce job from a binder thread. (Note: this only smooths brief gaps;
-  it does **not** mask screen-off Doze bursts, whose gaps grow well past 6 s — see *Screen-Off Problem*.)
+- The first message moves the watch off `DISCONNECTED`; thereafter it is always `CONNECTED` (LIVE or
+  DOZING) until an explicit Stop.
+- A single poll loop (`POLL_INTERVAL_MS = 1 s`) flips `LIVE → DOZING` when
+  `now - lastReadingMs > INACTIVITY_TIMEOUT_MS` (**6 s** — headroom over the 1 Hz cadence so an
+  occasional 1–2 s gap doesn't flap). One poll loop watching a volatile timestamp is race-free vs.
+  rearming a debounce job from a binder thread.
+- **The watchdog never declares `DISCONNECTED` on its own.** During a session the watch is *expected*
+  to sleep for long stretches — sampling locally and shipping everything at session end — so a
+  silence-based "Disconnected" would be a false alarm. A dozing watch keeps its last-measured values
+  on screen indefinitely.
 - A normal **Stop is signalled explicitly**: the watch sends `{"type":"STOP"}` before teardown, and
-  `onStop()` flips to `DISCONNECTED` **instantly** (no watchdog wait). The watchdog is only the
-  safety net for the abnormal case — watch dies / out of range — where no goodbye can be sent.
+  `onStop()` flips to `DISCONNECTED` **instantly**. This (or never having connected) is the *only* way
+  the link reads DISCONNECTED. (Trade-off: a watch that dies / goes out of range without sending STOP
+  lingers as DOZING — accepted, since data is durable on the watch and flushed at session end.)
 
 ```
 DISCONNECTED
@@ -376,20 +381,18 @@ DISCONNECTED
   ▼
 LIVE ◄─── reading within 6 s ───┐
   │                              │
-  │ no reading > 6 s, but a      │ reading arrives again
-  │ HEARTBEAT within ~95 s       │
+  │ no reading > 6 s             │ reading arrives again
   ▼                              │
 DOZING (buffering) ─────────────┘
-  │ no reading AND no heartbeat > ~95 s   │  (STOP message)
-  ▼                                       ▼
-DISCONNECTED  ◄───────────────────────────  (instant, normal Stop)
+  │ (STOP message)
+  ▼
+DISCONNECTED  ◄─── (instant, normal Stop — the only watchdog-independent exit)
 ```
 
 `WatchSensorReceiver` exposes both a coarse `connectionState` (CONNECTED while LIVE *or* DOZING;
-DISCONNECTED only when truly gone — so existing consumers treat a dozing watch as present) and the
-finer `linkStatus { LIVE, DOZING, DISCONNECTED }`. The UI renders DOZING as **"Watch dozing —
-buffering"** so an expected screen-off gap doesn't look like a fault. `lastReadingMs` drives LIVE;
-`lastMessageMs` (any message, incl. HEARTBEAT) drives DOZING-vs-gone.
+DISCONNECTED only after an explicit Stop — so existing consumers treat a dozing watch as present) and
+the finer `linkStatus { LIVE, DOZING, DISCONNECTED }`. The UI renders DOZING as **"Watch dozing —
+buffering"** so an expected screen-off gap doesn't look like a fault. `lastReadingMs` drives LIVE-vs-DOZING.
 
 ## Watch-Side Service Lifecycle (gotchas)
 

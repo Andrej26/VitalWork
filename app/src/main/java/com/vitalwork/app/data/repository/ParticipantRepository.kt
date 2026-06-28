@@ -3,6 +3,8 @@ package com.vitalwork.app.data.repository
 import com.vitalwork.app.data.db.ParticipantDao
 import com.vitalwork.app.data.db.ParticipantEntity
 import com.vitalwork.app.data.prefs.SettingsRepository
+import com.vitalwork.app.data.time.TimeProvider
+import com.vitalwork.app.util.TimeFormats
 import kotlinx.coroutines.flow.Flow
 import java.util.Locale
 import javax.inject.Inject
@@ -11,7 +13,8 @@ import javax.inject.Singleton
 @Singleton
 class ParticipantRepository @Inject constructor(
     private val participantDao: ParticipantDao,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val timeProvider: TimeProvider
 ) {
     val allParticipants: Flow<List<ParticipantEntity>> = participantDao.getAllParticipants()
 
@@ -22,14 +25,19 @@ class ParticipantRepository @Inject constructor(
         participantDao.getParticipantByCode(code)
 
     /**
-     * Generates the next participant code in `<prefix>-NNN` format (e.g. `A-001`). The prefix is the
-     * per-device setting; the count is scoped to that prefix so each device numbers independently and
-     * codes never collide when several tablets test in parallel.
+     * Generates the next participant code in `<prefix>-NNN-yyMMdd-HHmmss` format (e.g.
+     * `A-001-260620-143022`), mirroring the session-code timestamp. The timestamp token is the
+     * NTP-corrected **UTC** wall-clock (same clock and zone as every persisted/exported stamp), so
+     * the code reads on the same timeline as the data it labels. The prefix is the per-device setting
+     * and guards against cross-tablet collisions; the timestamp guarantees global uniqueness even
+     * after a reinstall or destructive DB wipe (which reset the local count). The `NNN` counter is
+     * scoped to the prefix for readability/ordering only — the full string is the unique key.
      */
     suspend fun generateNextParticipantCode(): String {
         val prefix = settingsRepository.getDevicePrefix()
         val nextIndex = participantDao.getParticipantCountByPrefix(prefix) + 1
-        return String.format(Locale.US, "%s-%03d", prefix, nextIndex)
+        val timestampToken = TimeFormats.codeToken(timeProvider.nowMs())
+        return String.format(Locale.US, "%s-%03d-%s", prefix, nextIndex, timestampToken)
     }
 
     /**

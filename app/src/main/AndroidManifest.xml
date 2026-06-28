@@ -5,6 +5,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- Device-to-device link: NsdManager mDNS needs multicast to send/receive service records -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+
     <!-- Audio (eSense Respiration) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
@@ -14,6 +17,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
 
     <!-- Required to hold the Wi-Fi lock that keeps network access alive under Doze -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -23,6 +27,10 @@
 
     <!-- Optional: exempt from battery optimization so OEM power managers don't kill long sessions -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- Optional (special access): dim the sharer's backlight to near-black while screen sharing so
+         the phone looks off but MediaProjection keeps capturing. Granted via system Settings. -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" tools:ignore="ProtectedPermissions" />
 
     <!-- Bluetooth (eSense Pulse) - Android 12+ (API 31+) -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
@@ -73,11 +81,12 @@
             </intent-filter>
         </activity>
 
-        <!-- Keeps the process alive (and mic/BLE/network legal) while a session is recording -->
+        <!-- Single app-wide foreground service: keeps the process (sensors + device link) alive and
+             mic/BLE/network legal while any session or connection is active. -->
         <service
-            android:name=".service.SessionRecordingService"
+            android:name=".service.BackgroundConnectionService"
             android:exported="false"
-            android:foregroundServiceType="microphone|connectedDevice|dataSync" />
+            android:foregroundServiceType="microphone|connectedDevice|dataSync|mediaProjection" />
 
         <!-- Receives the Galaxy Watch sensor readings as Data Layer messages, AND the historical
              store flush as DataItems (DATA_CHANGED). Both auto-start the app on a matching event even

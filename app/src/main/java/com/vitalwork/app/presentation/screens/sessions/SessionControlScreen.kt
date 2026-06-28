@@ -36,7 +36,6 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Watch
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.WifiOff
@@ -53,7 +52,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -64,6 +62,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -75,12 +74,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.vitalwork.app.data.db.SessionStatus
 import com.vitalwork.app.data.model.ConnectionState
 import com.vitalwork.app.data.recording.model.DataRecordingState
 import com.vitalwork.app.data.sensor.ble.model.BleDevice
@@ -90,16 +92,20 @@ import com.vitalwork.app.data.system.SessionPrerequisite
 import com.vitalwork.app.presentation.components.ReadinessWarningCard
 import com.vitalwork.app.presentation.components.onPermissionDenied
 import com.vitalwork.app.service.BatteryOptimizationHelper
-import com.vitalwork.app.service.SessionRecordingService
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.vitalwork.app.data.sensor.audio.LowSignalWarning
 import android.Manifest
+import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.SystemClock
 import android.provider.Settings
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.vitalwork.app.presentation.components.BleDialogState
 import com.vitalwork.app.presentation.components.DialogAction
 import com.vitalwork.app.presentation.components.LowSignalWarningBanner
@@ -108,7 +114,6 @@ import com.vitalwork.app.presentation.screens.sensors.toConnectionState
 import com.vitalwork.app.presentation.screens.sessions.components.DeviceSensorGroup
 import com.vitalwork.app.presentation.screens.sessions.components.EndSessionWatchDialog
 import com.vitalwork.app.presentation.screens.sessions.components.LiveSensorCard
-import com.vitalwork.app.presentation.screens.sessions.components.SessionNotesField
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -117,7 +122,10 @@ import kotlinx.coroutines.launch
 fun SessionControlScreen(
     sessionId: Long,
     onNavigateBack: () -> Unit,
+    onCountdownFinished: () -> Unit,
     onSessionEnded: (sessionId: Long) -> Unit,
+    setupMode: Boolean = false,
+    onProceed: () -> Unit = {},
     viewModel: SessionControlViewModel = hiltViewModel()
 ) {
     // Connection states
@@ -144,9 +152,6 @@ fun SessionControlScreen(
 
     // Session state
     val session by viewModel.session.collectAsState()
-    val notes by viewModel.notes.collectAsState()
-    val notesSaveStatus by viewModel.notesSaveStatus.collectAsState()
-    val isEndingSession by viewModel.isEndingSession.collectAsState()
     val endSessionResult by viewModel.endSessionResult.collectAsState()
 
     // BLE scan state
@@ -195,10 +200,6 @@ fun SessionControlScreen(
     // Convert DeviceState to ConnectionState for UI consistency
     val respirationConnectionState = respirationSensorState.toConnectionState()
 
-    val isAnySensorConnected = pulseSensorState == ConnectionState.CONNECTED ||
-            respirationConnectionState == ConnectionState.CONNECTED ||
-            watchConnectionState == ConnectionState.CONNECTED
-
     val context = LocalContext.current
 
     // Snackbar
@@ -208,23 +209,11 @@ fun SessionControlScreen(
     // Dialog states
     var showBackDialog by remember { mutableStateOf(false) }
     var showDiscardConfirmation by remember { mutableStateOf(false) }
-    var showEndSessionConfirmation by remember { mutableStateOf(false) }
 
 
-    // Setup auto-save for notes
-    LaunchedEffect(Unit) {
-        viewModel.setupNotesAutoSave()
-    }
-
-    // Keep the process alive (and mic/BLE/network legal) while the session is ACTIVE, so the
-    // operator can lock the screen mid-session. Started from this foreground screen; the service
-    // self-stops once the session is ended or discarded. Keyed on status because `session` loads
-    // asynchronously and re-entry into a pre-existing active session must also start it.
-    LaunchedEffect(session?.status) {
-        if (session?.status == SessionStatus.ACTIVE) {
-            SessionRecordingService.start(context)
-        }
-    }
+    // The single BackgroundConnectionService keeps the process alive (and mic/BLE/network legal)
+    // while a session is ACTIVE, so the operator can lock the screen mid-session. It's driven
+    // app-wide by KeepAliveCoordinator observing the active session — no explicit start needed here.
 
     // Check BLE permissions on entry
     LaunchedEffect(Unit) {
@@ -341,31 +330,11 @@ fun SessionControlScreen(
         )
     }
 
-    // End session confirmation
-    if (showEndSessionConfirmation) {
-        AlertDialog(
-            onDismissRequest = { showEndSessionConfirmation = false },
-            title = { Text("End session?") },
-            text = { Text("Are you sure you want to end this session?") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showEndSessionConfirmation = false
-                    viewModel.requestEndSession()
-                }) {
-                    Text("End Session")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showEndSessionConfirmation = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
-
     // End-Session watch handshake: wake the watch → receive its stored data ("reconnecting" spinner) →
     // green check → auto-finalize. The watch store is only truncated after the data is persisted, so a
     // slow/partial transfer never loses data; "End without watch data" always escapes (keeps the store).
+    // End Session itself now lives on the scenario-selection hub; this dialog stays here only to drive
+    // the handshake/navigation if a finalize is already in flight when this screen is shown.
     EndSessionWatchDialog(
         phase = endSessionPhase,
         onEndWithoutWatchData = { viewModel.endWithoutWatchData() },
@@ -492,9 +461,9 @@ fun SessionControlScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp)
+                .padding(12.dp)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // Readiness backup banner (only shows when a prerequisite is missing)
             ReadinessWarningCard(
@@ -531,6 +500,22 @@ fun SessionControlScreen(
             // brief drop; warn so the operator restores Bluetooth (don't pause the session).
             if (watchBatteryLevel != null && watchConnectionState != ConnectionState.CONNECTED) {
                 WatchLinkLostBanner()
+            }
+
+            // Hero auto-return countdown: a scenario run's whole purpose is to hand back to the
+            // scenario-selection hub after the scenario's full duration (A/E 10 min, B/C 20 min,
+            // D 30 min), so it's the focal point at the top. When the countdown ends we stop+finalize
+            // the recording first, then return to the hub. Hidden in setup mode, which is just a
+            // sensor-connection gate before any scenario is picked.
+            if (!setupMode) {
+                ReturnCountdownHero(
+                    seconds = viewModel.countdownSeconds,
+                    startElapsedMs = recordingUiState.recordingStartElapsedMs,
+                    onFinished = { viewModel.finishScenario(onCountdownFinished) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                )
             }
 
             // Mindfield eSense device group
@@ -570,6 +555,7 @@ fun SessionControlScreen(
                     animate = heartRate != null && heartRate!! > 0,
                     onClick = { viewModel.onHeartRateCardClick() },
                     batteryLevel = bleBatteryLevel,
+                    compact = true,
                     modifier = Modifier.weight(1f)
                 )
                 LiveSensorCard(
@@ -582,6 +568,7 @@ fun SessionControlScreen(
                     connectionState = respirationConnectionState,
                     sampleCount = recordingUiState.respirationSampleCount,
                     onClick = { viewModel.onRespirationCardClick(context) },
+                    compact = true,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -641,6 +628,7 @@ fun SessionControlScreen(
                     sampleCount = recordingUiState.watchHrSampleCount,
                     animate = watchConnected && (watchHeartRate ?: 0) > 0,
                     batteryLevel = watchBatteryLevel,
+                    compact = true,
                     modifier = Modifier.weight(1f)
                 )
                 LiveSensorCard(
@@ -653,173 +641,176 @@ fun SessionControlScreen(
                     connectionState = watchConnectionState,
                     sampleCount = recordingUiState.edaSampleCount,
                     batteryLevel = watchBatteryLevel,
+                    compact = true,
                     modifier = Modifier.weight(1f)
                 )
             }
 
-            // Recording Control Section
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+            // Setup mode is a one-time sensor-connection gate before any scenario is picked: confirm
+            // which sensors are connected, then proceed to the scenario hub. Scenario runs themselves
+            // record fully automatically (start on entry, stop when the countdown ends), so there are
+            // no manual recording controls — the REC badge + red border in the top bar show state.
+            if (setupMode) {
+                Button(
+                    onClick = onProceed,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Recording",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Bluetooth,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Heart Rate",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Text(
-                            text = if (recordingUiState.isHeartRateConnected) {
-                                val rrPart = if (recordingUiState.esenseRrIntervalSampleCount > 0)
-                                    " · ${recordingUiState.esenseRrIntervalSampleCount} RR"
-                                else ""
-                                "${recordingUiState.heartRateSampleCount} HR$rrPart"
-                            } else "Not connected",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Mic,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Respiration",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Text(
-                            text = if (recordingUiState.isRespirationConnected)
-                                "${recordingUiState.respirationSampleCount} samples"
-                            else "Not connected",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Watch,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Galaxy Watch",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Text(
-                            text = if (watchConnectionState == ConnectionState.CONNECTED)
-                                "${recordingUiState.edaSampleCount} EDA · " +
-                                    "${recordingUiState.watchHrSampleCount} HR · " +
-                                    "${recordingUiState.watchIbiSampleCount} IBI"
-                            else "Not connected",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    HorizontalDivider()
-
-                    // Start/stop recording from the phone.
-                    val isIdle = recordingUiState.recordingState == DataRecordingState.IDLE
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Button(
-                            onClick = { viewModel.startManualRecording() },
-                            enabled = isIdle && isAnySensorConnected,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.PlayArrow,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Start Recording")
-                        }
-                        OutlinedButton(
-                            onClick = { viewModel.stopManualRecording() },
-                            enabled = !isIdle,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Stop Recording")
-                        }
-                    }
-                }
-            }
-
-            // Notes section
-            SessionNotesField(
-                notes = notes,
-                onNotesChange = { viewModel.updateNotes(it) },
-                saveStatus = notesSaveStatus
-            )
-
-            // End Session button
-            Button(
-                onClick = { showEndSessionConfirmation = true },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !isEndingSession
-            ) {
-                if (isEndingSession) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
+                    Text("Proceed to scenarios")
                     Spacer(modifier = Modifier.width(8.dp))
+                    Icon(
+                        imageVector = Icons.Default.SkipNext,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
-                Text("End Session & Save")
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
         }
     }
+    // While a scenario is recording (the auto-return countdown), make the phone safe to pocket:
+    // hide the system bars and swallow every touch so accidental taps do nothing. The screen stays
+    // on (dimmed) so the operator keeps seeing it mirrored. Drawn last → sits on top of the Scaffold.
+    RecordingTouchLock(active = isRecording, modifier = Modifier.matchParentSize())
     } // Box
+}
+
+/**
+ * Pocket-safe lock used during a scenario's auto-return countdown. While [active]:
+ *  - hides the status/navigation bars (immersive, transient-on-swipe) so a pocket touch can't pull the
+ *    shade or hit nav buttons, and
+ *  - overlays a transparent layer that consumes every pointer event (Initial pass, before any child
+ *    sees it), so accidental taps on the app do nothing.
+ *
+ * It does NOT (and on stock Android cannot) block system gestures or hardware buttons — that needs
+ * kiosk/device-owner provisioning. For pocketing a phone during a fixed countdown this is sufficient.
+ * The system bars are always restored when this leaves composition (e.g. navigating away mid-record).
+ */
+@Composable
+private fun RecordingTouchLock(active: Boolean, modifier: Modifier = Modifier) {
+    val view = LocalView.current
+    DisposableEffect(active) {
+        (view.context as? Activity)?.window?.let { window ->
+            val controller = WindowCompat.getInsetsController(window, view)
+            if (active) {
+                controller.systemBarsBehavior =
+                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                controller.hide(WindowInsetsCompat.Type.systemBars())
+            } else {
+                controller.show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+        onDispose {
+            (view.context as? Activity)?.window?.let { window ->
+                WindowCompat.getInsetsController(window, view)
+                    .show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+    }
+    if (active) {
+        Box(
+            modifier = modifier.pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+                    }
+                }
+            }
+        )
+    }
+}
+
+/**
+ * The countdown as the screen's focal point: the ring + a caption explaining the auto-return and a
+ * Skip button so the operator can return immediately instead of waiting the [seconds] out.
+ */
+@Composable
+private fun ReturnCountdownHero(
+    seconds: Int,
+    startElapsedMs: Long?,
+    onFinished: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        ReturnCountdown(
+            seconds = seconds,
+            startElapsedMs = startElapsedMs,
+            onFinished = onFinished,
+            size = 200.dp
+        )
+        Text(
+            text = "Time remaining until the end of the scenario",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+/**
+ * A round [seconds]-second countdown: a circular ring that drains as time passes, with the remaining
+ * whole seconds shown in the center. Calls [onFinished] once when it reaches zero. [size] sets the
+ * ring diameter (and scales the number).
+ *
+ * It is anchored to [startElapsedMs] — the monotonic origin of the data recording — rather than to
+ * its own start instant, so the countdown begins, ticks, and ends *exactly* with the sensor capture
+ * (the data window equals the scenario duration). While [startElapsedMs] is null (recording hasn't
+ * begun yet) the ring sits full and idle and never fires.
+ */
+@Composable
+private fun ReturnCountdown(
+    seconds: Int,
+    startElapsedMs: Long?,
+    onFinished: () -> Unit,
+    size: Dp = 96.dp,
+    modifier: Modifier = Modifier
+) {
+    val totalMs = seconds * 1000L
+    var remainingMs by remember(startElapsedMs) { mutableStateOf(totalMs) }
+
+    LaunchedEffect(startElapsedMs) {
+        if (startElapsedMs == null) return@LaunchedEffect
+        while (true) {
+            val elapsed = SystemClock.elapsedRealtime() - startElapsedMs
+            remainingMs = (totalMs - elapsed).coerceAtLeast(0L)
+            if (remainingMs == 0L) break
+            delay(50L)
+        }
+        onFinished()
+    }
+
+    val progress = (remainingMs.toFloat() / totalMs.toFloat()).coerceIn(0f, 1f)
+    val secondsLeft = ((remainingMs + 999L) / 1000L).toInt() // ceil so it shows 10..1 then fires
+    // Sub-minute durations read fine as a bare number; minutes-long scenarios need mm:ss.
+    val countdownLabel = if (seconds >= 60) {
+        "%d:%02d".format(secondsLeft / 60, secondsLeft % 60)
+    } else {
+        secondsLeft.toString()
+    }
+
+    Box(
+        modifier = modifier.size(size),
+        contentAlignment = Alignment.Center
+    ) {
+        CircularProgressIndicator(
+            progress = { progress },
+            modifier = Modifier.fillMaxSize(),
+            strokeWidth = if (size >= 160.dp) 12.dp else if (size >= 120.dp) 8.dp else 6.dp,
+            color = MaterialTheme.colorScheme.primary,
+            trackColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+        Text(
+            text = countdownLabel,
+            style = if (size >= 160.dp) MaterialTheme.typography.displayLarge
+                    else if (size >= 120.dp) MaterialTheme.typography.displayMedium
+                    else MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
 }
 
 @Composable

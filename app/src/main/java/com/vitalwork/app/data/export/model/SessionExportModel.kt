@@ -24,7 +24,6 @@ data class SessionInfo(
     val startedAt: String,
     val endedAt: String? = null,
     val status: String,
-    val notes: String,
     val statistics: SessionStatistics
 )
 
@@ -42,12 +41,8 @@ data class SessionStatistics(
 @Serializable
 data class ScenarioExport(
     val scenarioCode: String,
-    val scenarioCategory: String,
     val startedAt: String,
     val endedAt: String? = null,
-    val eventTimestampMs: Long? = null,
-    val reactionTimestampMs: Long? = null,
-    val reactionTimeMs: Long? = null,
     val gaps: ScenarioGaps? = null,
     val samples: List<SensorSampleExport>
 )

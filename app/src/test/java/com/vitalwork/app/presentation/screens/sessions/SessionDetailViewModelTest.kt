@@ -1,9 +1,11 @@
 package com.vitalwork.app.presentation.screens.sessions
 
 import androidx.lifecycle.SavedStateHandle
+import com.vitalwork.app.data.db.FakeParticipantDao
 import com.vitalwork.app.data.db.FakeScenarioDao
 import com.vitalwork.app.data.db.FakeSensorSampleDao
 import com.vitalwork.app.data.db.FakeSessionDao
+import com.vitalwork.app.data.db.ParticipantEntity
 import com.vitalwork.app.data.db.ScenarioCode
 import com.vitalwork.app.data.db.ScenarioEntity
 import com.vitalwork.app.data.db.SessionEntity
@@ -11,6 +13,7 @@ import com.vitalwork.app.data.db.SessionStatus
 import com.vitalwork.app.data.export.SessionExporter
 import com.vitalwork.app.data.export.SessionUploader
 import com.vitalwork.app.data.prefs.FakeSettingsRepository
+import com.vitalwork.app.data.repository.ParticipantRepository
 import com.vitalwork.app.data.repository.ScenarioRepository
 import com.vitalwork.app.data.repository.SessionRepository
 import com.vitalwork.app.data.time.TimeProvider
@@ -35,8 +38,10 @@ class SessionDetailViewModelTest {
     private lateinit var fakeSessionDao: FakeSessionDao
     private lateinit var fakeScenarioDao: FakeScenarioDao
     private lateinit var fakeSampleDao: FakeSensorSampleDao
+    private lateinit var fakeParticipantDao: FakeParticipantDao
     private lateinit var sessionRepository: SessionRepository
     private lateinit var scenarioRepository: ScenarioRepository
+    private lateinit var participantRepository: ParticipantRepository
     private lateinit var exporter: FakeSessionExporter
     private lateinit var uploader: FakeSessionUploader
 
@@ -56,6 +61,12 @@ class SessionDetailViewModelTest {
             TimeProvider.system()
         )
         scenarioRepository = ScenarioRepository(fakeScenarioDao, fakeSampleDao, TimeProvider.system())
+        fakeParticipantDao = FakeParticipantDao()
+        participantRepository = ParticipantRepository(
+            fakeParticipantDao,
+            FakeSettingsRepository("A"),
+            TimeProvider.system()
+        )
         exporter = FakeSessionExporter()
         uploader = FakeSessionUploader()
     }
@@ -66,6 +77,9 @@ class SessionDetailViewModelTest {
     }
 
     private fun seedSession(status: SessionStatus = SessionStatus.COMPLETED): SessionEntity {
+        fakeParticipantDao.participants.add(
+            ParticipantEntity(id = 1L, participantCode = "A-001-260101-120000")
+        )
         val session = SessionEntity(
             id = sessionId,
             participantId = 1L,
@@ -77,13 +91,12 @@ class SessionDetailViewModelTest {
         return session
     }
 
-    private fun seedScenario(id: Long, code: ScenarioCode = ScenarioCode.FALLING_PALLET) {
+    private fun seedScenario(id: Long, code: ScenarioCode = ScenarioCode.REFERENCE_STATE) {
         fakeScenarioDao.scenarios.add(
             ScenarioEntity(
                 id = id,
                 sessionId = sessionId,
                 scenarioCode = code,
-                scenarioCategory = code.category,
                 startedAt = 2_000L + id
             )
         )
@@ -91,14 +104,21 @@ class SessionDetailViewModelTest {
 
     private fun newViewModel(): SessionDetailViewModel {
         val handle = SavedStateHandle(mapOf("sessionId" to sessionId))
-        return SessionDetailViewModel(sessionRepository, scenarioRepository, exporter, uploader, handle)
+        return SessionDetailViewModel(
+            sessionRepository,
+            scenarioRepository,
+            participantRepository,
+            exporter,
+            uploader,
+            handle
+        )
     }
 
     @Test
     fun loadSession_populatesStateAndClearsLoading() = runTest {
         val session = seedSession()
         seedScenario(id = 10)
-        seedScenario(id = 11, code = ScenarioCode.MACHINE_JAM)
+        seedScenario(id = 11, code = ScenarioCode.COGNITIVE_LOAD)
 
         val vm = newViewModel()
         advanceUntilIdle()
@@ -106,6 +126,7 @@ class SessionDetailViewModelTest {
         val state = vm.uiState.value
         assertFalse(state.isLoading)
         assertEquals(session.sessionCode, state.session?.sessionCode)
+        assertEquals("A-001-260101-120000", state.participantCode)
         assertEquals(2, state.scenarios.size)
     }
 
