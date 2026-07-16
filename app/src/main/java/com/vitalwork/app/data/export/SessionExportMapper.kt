@@ -62,13 +62,13 @@ class SessionExportMapper @Inject constructor(
                 endedAt = session.endedAt?.let { TimeFormats.iso(it) },
                 status = session.status.name,
                 statistics = SessionStatistics(
-                    scenarioCount = session.scenarioCount,
-                    hrSampleCount = session.hrSampleCount,
-                    respirationSampleCount = session.respirationSampleCount,
-                    rrIntervalSampleCount = session.rrIntervalSampleCount,
-                    edaSampleCount = session.edaSampleCount,
-                    watchHrSampleCount = session.watchHrSampleCount,
-                    watchIbiSampleCount = session.watchIbiSampleCount
+                    scenarioCount = scenarios.size,
+                    hrSampleCount = countOf(SensorType.ESENSE_HEART_RATE),
+                    respirationSampleCount = countOf(SensorType.RESPIRATION),
+                    rrIntervalSampleCount = countOf(SensorType.ESENSE_RR_INTERVAL),
+                    edaSampleCount = countOf(SensorType.WATCH_EDA),
+                    watchHrSampleCount = countOf(SensorType.WATCH_HR),
+                    watchIbiSampleCount = countOf(SensorType.WATCH_IBI)
                 )
             ),
             scenarios = scenarioExports
