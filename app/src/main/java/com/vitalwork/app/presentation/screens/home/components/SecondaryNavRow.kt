@@ -9,7 +9,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -22,13 +21,12 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun SecondaryNavRow(
-    onChangeMode: () -> Unit,
+    onSettings: () -> Unit,
     modifier: Modifier = Modifier,
-    /** Sensors/Tutorial/Settings belong to the operator (client) home; omit them in Server mode,
-     *  where the row carries only Change Mode. */
+    /** Sensors/Tutorial belong to the operator (client) home; omit them in Server mode, where the
+     *  row carries only Settings (which also hosts the device-mode switch). */
     onSensors: (() -> Unit)? = null,
-    onTutorial: (() -> Unit)? = null,
-    onSettings: (() -> Unit)? = null
+    onTutorial: (() -> Unit)? = null
 ) {
     Row(
         modifier = modifier
@@ -39,8 +37,7 @@ fun SecondaryNavRow(
     ) {
         if (onSensors != null) NavItem(icon = Icons.Default.Sensors, label = "Sensors", onClick = onSensors)
         if (onTutorial != null) NavItem(icon = Icons.Default.School, label = "Tutorial", onClick = onTutorial)
-        if (onSettings != null) NavItem(icon = Icons.Default.Settings, label = "Settings", onClick = onSettings)
-        NavItem(icon = Icons.Default.SwapHoriz, label = "Change Mode", onClick = onChangeMode)
+        NavItem(icon = Icons.Default.Settings, label = "Settings", onClick = onSettings)
     }
 }
 

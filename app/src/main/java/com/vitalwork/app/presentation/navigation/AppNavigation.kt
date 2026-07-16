@@ -89,9 +89,6 @@ fun AppNavigation(
                 },
                 onNavigateToLinkClient = {
                     navController.navigate(Route.PeerLink.createRoute("client"))
-                },
-                onNavigateToModeSelection = {
-                    navController.navigate(Route.ModeSelection.route)
                 }
             )
         }

@@ -36,7 +36,7 @@ class HomeViewModel @Inject constructor(
 ) : ViewModel() {
 
     /** Persisted device-link role; decides which connect button Home shows. Re-read on [refresh]
-     *  so a change made from the mode screen is reflected when Home resumes. */
+     *  so a change made in Settings is reflected when Home resumes. */
     private val _deviceMode = MutableStateFlow(deviceModePreferences.getMode())
     val deviceMode: StateFlow<PeerRole?> = _deviceMode.asStateFlow()
 
