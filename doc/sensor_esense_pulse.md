@@ -134,7 +134,7 @@ Both are cleared on disconnect and when HR notifications are disabled. `RrInterv
 
 ### Recording Integration
 
-eSense Pulse data is **recording-scoped** — it is collected within the `start_recording` → `stop_recording` VR window, alongside eSense Respiration.
+eSense Pulse data is **recording-scoped** — it is collected while a scenario is recording (start → stop), alongside eSense Respiration.
 
 When a recording starts, `SensorRecordingRepositoryImpl` checks if the eSense Pulse is connected (`ConnectionState.CONNECTED`). If so:
 1. `enableHeartRateNotifications()` is called explicitly to ensure HR notifications are active before collecting begins.

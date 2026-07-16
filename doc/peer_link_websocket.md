@@ -11,7 +11,6 @@ they exchange small JSON messages over a single WebSocket. The link is used for 
    mirroring (see [webrtc_screen_share.md](webrtc_screen_share.md)). The actual video does **not** flow
    over this socket — only the offer/answer/ICE setup messages do.
 
-This is distinct from the **VR link** (`data/vr/`), which is a Ktor HTTP server the Meta Quest POSTs to.
 The peer link is symmetric device↔device and built on the Java-WebSocket library.
 
 **Connection URL:** `ws://{host}:9090` (fixed port **9090**)

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-VitalWork is an Android mobile application written in Kotlin using Jetpack Compose. It is the **operator-side control app** for a research study measuring **operator reaction time in VR-simulated logistics and industrial scenarios** (Project 3 with PBN partner — see `test/Assignment for PBN Partner_Project 3.docx`). The tablet pairs with a Meta Quest VR headset over local Wi-Fi, captures physiological data from BLE / audio-jack sensors during each scenario, and exports the bundled dataset (participant + session + scenarios + samples) to a central server at session end.
+VitalWork is an Android mobile application written in Kotlin using Jetpack Compose. It is the **operator-side app** for a research study monitoring **operator physiological state during simulated work scenarios**. The tablet/phone captures physiological data (heart rate, RR/IBI intervals, respiration, EDA) from BLE / audio-jack / Galaxy Watch sensors during each of five biofeedback scenarios (A–E), and uploads the bundled dataset (participant + session + scenarios + samples) to the VitalWork server at session end. A second device can pair over local Wi-Fi (device-to-device link) so the operator watches the monitored device's live screen. (The former VR/reaction-time phase — Meta Quest link, Ktor HTTP server, UDP beacon — was removed in the biofeedback pivot; see DB history v5/v6.)
 
 **Package:** `com.vitalwork.app`
 
@@ -14,8 +14,9 @@ VitalWork is an Android mobile application written in Kotlin using Jetpack Compo
 - Gradle 9.3.0 with Kotlin DSL and version catalog
 - Hilt/Dagger for dependency injection
 - Room 2.7.1 for local database
-- Ktor 3.3.0 (CIO embedded HTTP server) — receives VR scenario events from the Quest
-- Vico 2.1.2 for charts
+- Ktor 3.3.0 (client, CIO engine) — uploads completed sessions to the VitalWork server
+- Kronos — NTP clock offset for all persisted timestamps (never sets the system clock)
+- Java-WebSocket + stream-webrtc-android — device-to-device link + screen mirroring
 - Play Services Wearable (Data Layer) for the watch ↔ tablet link
 - Samsung Health Sensor SDK (local AAR, `:wear` only) for Galaxy Watch sensors
 - Target: Android API 24–36 (`:app`); `:wear` floors at API 28 (Samsung SDK requirement)
@@ -44,7 +45,7 @@ VitalWork is an Android mobile application written in Kotlin using Jetpack Compo
 ./gradlew clean
 ```
 
-**Note:** The system JDK may be Java 11, which is too old for Gradle 9. Set `JAVA_HOME` to Android Studio's bundled JBR (`C:/Program Files/Android/Android Studio/jbr`) or add `org.gradle.java.home=...` to `gradle.properties`.
+**Note:** Gradle 9 requires JDK 17+. The system JDK on this machine is Temurin 17 and works as-is; if `java -version` reports something older, point `JAVA_HOME` at a JDK 17+ (e.g. Android Studio's bundled JBR) or add `org.gradle.java.home=...` to `gradle.properties`.
 
 ## Architecture
 
@@ -72,14 +73,13 @@ MainActivity (entry point)
 
 ## Application Purpose
 
-The app has four main responsibilities:
+The app has three main responsibilities:
 
-1. **VR Control** — embedded HTTP server (Ktor) that the Meta Quest VR app POSTs scenario events to over local Wi-Fi; the tablet advertises itself via a UDP presence beacon (Unreal Engine has no mDNS). The tablet stamps each event's arrival time (tablet clock only; no device sync)
-2. **Sensor Data Collection** — Gather physiological data (heart rate, RR intervals, ECG, respiration) from BLE and audio jack sensors
-3. **Test Management** — Organize anonymous clinical test sessions with recordings, SUDS scores, local storage, and JSON/CSV export
-4. **Device-to-Device Link + Screen Mirroring** — a direct tablet↔tablet/phone link over local Wi-Fi (server hosts, client connects; mDNS discovery + a WebSocket on port 9090) that also carries WebRTC signaling so the operator (server) can watch the monitored device's (client) live screen, peer-to-peer with no media server or cloud cost. See **Device-to-Device Link** below.
+1. **Sensor Data Collection** — gather physiological data (heart rate, RR/IBI intervals, respiration, EDA) from BLE, audio-jack, and Galaxy Watch sensors
+2. **Session Management + Export/Upload** — organize anonymous test sessions (participant → session → five biofeedback scenarios A–E → samples), local JSON/CSV export to Documents, and HTTP upload of the full session bundle to the VitalWork server (`SessionHttpUploader`, config in `local.properties`)
+3. **Device-to-Device Link + Screen Mirroring** — a direct tablet↔tablet/phone link over local Wi-Fi (server hosts, client connects; mDNS discovery + a WebSocket on port 9090) that also carries WebRTC signaling so the operator (server) can watch the monitored device's (client) live screen, peer-to-peer with no media server or cloud cost. See **Device-to-Device Link** below.
 
-**Device mode (launch picker):** on first launch the app asks whether this device is **Server** or **Client** (`ModeSelectionScreen`); the choice is persisted (`DeviceModePreferencesRepository`) so later launches skip straight to Home. Home is mode-aware: in **Server** mode it shows only **Connect as Server** plus a **Change Mode** button; in **Client** mode it shows the full operator home (sessions, sensors, etc.) minus **Connect as Server**. The mode can be changed any time via **Change Mode** on Home.
+**Device mode (launch picker):** on first launch the app asks whether this device is **Server** or **Client** (`ModeSelectionScreen`); the choice is persisted (`DeviceModePreferencesRepository`) so later launches skip straight to Home. Home is mode-aware: in **Server** mode it shows only **Connect as Server** (+ Settings); in **Client** mode it shows the full operator home (sessions, sensors, etc.) minus **Connect as Server**. The mode can be changed any time under **Settings → Device mode**; Home re-reads it on resume.
 
 **Target devices:** Android tablet and phone
 
@@ -145,7 +145,7 @@ FCM/Wi-Fi were rejected, and what does *not* work).
 
 ## Device-to-Device Link & Screen Mirroring
 
-A direct tablet↔tablet/phone link over local Wi-Fi, separate from the VR link. One device is the
+A direct tablet↔tablet/phone link over local Wi-Fi. One device is the
 **server** (host) and the other the **client**; the server opens a `WebSocketServer` on **port 9090**
 (advertised via mDNS), the client discovers and connects. The same WebSocket carries (a) pairing +
 a free-text diagnostics log and (b) **WebRTC signaling** (offer/answer/ICE) for **screen mirroring** —
@@ -173,23 +173,27 @@ com.vitalwork.app/
 ├── di/
 │   └── AppModule.kt                        # Hilt dependency injection module
 ├── data/
-│   ├── db/                                 # Room database (v2, 4 entities, 4 DAOs)
+│   ├── db/                                 # Room database (v6, 4 entities, 4 DAOs)
 │   │   ├── AppDatabase.kt
 │   │   ├── Converters.kt                   # Enum type converters
 │   │   ├── ParticipantEntity.kt            # Anonymized test subject
 │   │   ├── ParticipantDao.kt
-│   │   ├── SessionEntity.kt                # Session + SessionStatus enum
+│   │   ├── SessionEntity.kt                # Session + SessionStatus enum + per-type sample counters
 │   │   ├── SessionDao.kt
-│   │   ├── ScenarioEntity.kt               # VR scenario run + ScenarioCode + ScenarioCategory enums
+│   │   ├── ScenarioEntity.kt               # Scenario run + ScenarioCode enum (A–E biofeedback scenarios)
 │   │   ├── ScenarioDao.kt
-│   │   ├── SensorSampleEntity.kt           # Sensor samples + SensorType enum (HR/Resp/eSenseRR/EDA/WatchIBI)
+│   │   ├── SensorSampleEntity.kt           # Sensor samples + SensorType enum (6 types)
 │   │   └── SensorSampleDao.kt
-│   ├── export/                             # Session export (Section 7 shape; JSON + CSV)
-│   │   ├── SessionExportService.kt
-│   │   ├── SessionExportMapper.kt
-│   │   ├── SessionUploader.kt
-│   │   └── model/
-│   │       └── SessionExportModel.kt
+│   ├── export/                             # Local session export (JSON + CSV to Documents)
+│   │   ├── SessionExportService.kt         # implements SessionExporter; MediaStore/legacy writes
+│   │   ├── SessionExportMapper.kt          # entities → export shape; statistics counted from exported samples
+│   │   ├── SessionUploader.kt              # upload interface (bound to SessionHttpUploader)
+│   │   ├── model/
+│   │   │   └── SessionExportModel.kt
+│   │   └── upload/                         # HTTP upload to the VitalWork server
+│   │       ├── SessionHttpUploader.kt      # Ktor client; POST /api/sessions/upload; idempotent on sessionCode
+│   │       ├── SessionUploadMapper.kt      # entities → upload DTOs (epoch ms, enum names)
+│   │       └── UploadDtos.kt
 │   ├── model/
 │   │   └── ConnectionState.kt
 │   ├── network/
@@ -199,25 +203,30 @@ com.vitalwork.app/
 │   │   ├── PeerLinkManagerImpl.kt           # Java-WebSocket server/client + WebRTC signaling relay
 │   │   ├── PeerRole.kt                     # SERVER | CLIENT
 │   │   ├── PeerMdnsService.kt              # advertise/discover the peer over mDNS
+│   │   ├── PeerNaming.kt                   # service-name scheme carrying the device prefix (pair scoping)
 │   │   ├── LanAddress.kt                   # local LAN IP helper
 │   │   └── model/
 │   │       ├── PeerDevice.kt
 │   │       └── PeerMessage.kt              # @Serializable link envelope (greeting/test-msg/signaling)
 │   ├── webrtc/                             # Screen mirroring (server views client's screen, P2P)
 │   │   ├── WebRtcEngine.kt                 # libwebrtc (stream-webrtc-android) peer connection
-│   │   └── ScreenShareController.kt         # MediaProjection capture + offer/answer/ICE driving
+│   │   ├── ScreenShareController.kt         # MediaProjection capture + offer/answer/ICE driving
+│   │   └── model/
+│   │       └── ShareState.kt
 │   ├── prefs/
 │   │   ├── TutorialPreferencesRepository.kt
-│   │   ├── DeviceModePreferencesRepository.kt # Persisted Server/Client launch mode (SharedPrefs)
+│   │   ├── DeviceModePreferencesRepository.kt # Persisted Server/Client mode (SharedPrefs); switched in Settings
 │   │   └── SettingsRepository.kt            # Device prefix (A/B/C/D) for code generation; interface + SharedPrefs impl
 │   ├── recording/
 │   │   ├── GapDetector.kt                  # Sensor data gap detection
 │   │   ├── ScenarioRecordingRepository.kt
-│   │   ├── ScenarioRecordingRepositoryImpl.kt
+│   │   ├── ScenarioRecordingRepositoryImpl.kt # per-scenario capture + session-long watch collector
+│   │   ├── WatchSessionDrainer.kt          # splits session-long watch readings into scenario windows (de-dup)
+│   │   ├── WatchReconciliationReport.kt    # end-session watch flush verification (claimed vs received vs DB)
 │   │   └── model/
 │   │       └── ScenarioRecordingSession.kt
 │   ├── repository/
-│   │   ├── ConnectionRepository.kt
+│   │   ├── ConnectionRepository.kt         # facade aggregating all sensor connection states
 │   │   ├── ParticipantRepository.kt
 │   │   ├── ScenarioRepository.kt
 │   │   └── SessionRepository.kt
@@ -228,32 +237,34 @@ com.vitalwork.app/
 │   │   ├── ble/
 │   │   │   ├── BleManager.kt               # eSense Pulse BLE interface
 │   │   │   ├── BleManagerImpl.kt            # eSense Pulse BLE implementation
+│   │   │   ├── BleParsers.kt               # HR-measurement / battery characteristic parsing
 │   │   │   └── model/
 │   │   │       ├── BleDevice.kt
 │   │   │       └── BleGattService.kt
 │   │   └── watch/                          # Galaxy Watch (Data Layer receiver side)
 │   │       ├── WatchListenerService.kt     # WearableListenerService; parses live messages + ingests flush DataItems (onDataChanged)
-│   │       ├── WatchSensorReceiver.kt      # Hilt singleton sink; linkStatus (LIVE/DOZING/DISCONNECTED) + flushed-reading ingest
+│   │       ├── WatchSensorReceiver.kt      # Hilt singleton sink; linkStatus (LIVE/DOZING/DISCONNECTED) + flush handshake
 │   │       ├── WatchCommandSender.kt       # phone→watch commands (START/FLUSH/STOP/FLUSH_ACK); interface + impl
+│   │       ├── WatchBatteryThresholds.kt   # low-battery warning tiers (WARNING/CRITICAL)
 │   │       └── model/
 │   │           └── WatchReading.kt
-│   └── vr/                                 # VR link (tablet = HTTP server; Quest = client)
-│       ├── VrHttpServer.kt                  # Ktor CIO server; 4 routes → VrEventReceiver
-│       ├── VrEventReceiver.kt              # Hilt singleton sink; accept/reject + ack-after-write + inferred connection state
-│       ├── VrUdpBeacon.kt                   # UDP presence broadcast (ip/port/sessionId) every 5 s
-│       ├── VrEvent.kt                       # sealed VrEvent (ScenarioStart/StimulusEvent/Reaction/ScenarioStop) + VrEventResult
-│       └── http/
-│           └── VrHttpDtos.kt                # @Serializable wire DTOs (ScenarioRequest + responses)
+│   ├── system/
+│   │   ├── ForegroundServiceLauncher.kt    # starts BackgroundConnectionService on the empty→non-empty edge
+│   │   ├── KeepAliveCoordinator.kt         # reason set (SESSION/LINK/SCREEN_SHARE) driving the FGS lifecycle
+│   │   ├── LocationChecker.kt              # Location Services check (BLE scan prerequisite)
+│   │   └── SystemReadinessChecker.kt       # missing-prerequisite detection (permissions, battery optimization)
+│   └── time/
+│       └── TimeProvider.kt                 # NTP-corrected clock (Kronos) for all persisted timestamps
 ├── presentation/
 │   ├── components/                          # Reusable UI components
 │   │   ├── BioSensorCard.kt
 │   │   ├── BleDialogTypes.kt
+│   │   ├── BluetoothDisabledCard.kt
 │   │   ├── ConnectionStatusBadge.kt
 │   │   ├── LowSignalWarningBanner.kt
-│   │   ├── NavigationCard.kt
-│   │   ├── RecordingIndicator.kt
-│   │   ├── RecordingPanel.kt
-│   │   └── SensorTypeCard.kt
+│   │   ├── ReadinessWarningCard.kt         # missing-prerequisite banner with Fix buttons
+│   │   ├── SensorTypeCard.kt
+│   │   └── WatchBatteryWarningCard.kt
 │   ├── log/
 │   │   ├── LogEntry.kt
 │   │   └── BleLogEntry.kt
@@ -266,7 +277,7 @@ com.vitalwork.app/
 │       │   └── components/
 │       │       ├── PrimaryActionButton.kt
 │       │       └── SecondaryNavRow.kt
-│       ├── mode/                           # First-launch Server/Client picker (+ Change Mode)
+│       ├── mode/                           # First-launch Server/Client picker
 │       │   ├── ModeSelectionScreen.kt
 │       │   └── ModeSelectionViewModel.kt
 │       ├── link/                           # Peer-link diagnostics + screen-mirror controls
@@ -297,7 +308,8 @@ com.vitalwork.app/
 │       │   └── ParticipantEntryViewModel.kt
 │       ├── sessions/
 │       │   ├── ScenarioRecordingUiState.kt
-│       │   ├── SessionControlScreen.kt
+│       │   ├── ScenarioSelectionScreen.kt  # scenario hub: pick A–E, end session
+│       │   ├── SessionControlScreen.kt     # scenario recording (also reused as the sensor-setup gate)
 │       │   ├── SessionControlViewModel.kt
 │       │   ├── SessionDetailScreen.kt
 │       │   ├── SessionDetailViewModel.kt
@@ -306,22 +318,24 @@ com.vitalwork.app/
 │       │   └── components/
 │       │       ├── ActiveSessionBanner.kt
 │       │       ├── DeviceSensorGroup.kt
+│       │       ├── EndSessionWatchDialog.kt # end-session watch wake/transfer state machine UI
 │       │       ├── LiveSensorCard.kt
 │       │       ├── SensorSummaryCard.kt
 │       │       ├── SessionCard.kt
-│       │       └── SessionNotesField.kt
-│       ├── settings/                       # Device prefix selection (A/B/C/D)
+│       │       └── UploadProgressDialog.kt
+│       ├── settings/                       # Device prefix (A/B/C/D) + device mode (Server/Client)
 │       │   ├── SettingsScreen.kt
 │       │   └── SettingsViewModel.kt
-│       ├── tutorial/
-│       │   ├── TutorialScreen.kt
-│       │   └── TutorialViewModel.kt
-│       └── vr/
-│           ├── VRConnectionScreen.kt
-│           └── VRConnectionViewModel.kt
+│       └── tutorial/
+│           ├── TutorialScreen.kt
+│           └── TutorialViewModel.kt
 ├── service/
-│   ├── BackgroundConnectionService.kt       # Foreground service keeping link + screen-share alive
-│   └── BatteryOptimizationHelper.kt         # Prompts Doze exemption so the link survives sleep
+│   ├── BackgroundConnectionService.kt       # Single app-wide FGS keeping session/link/screen-share alive
+│   ├── BatteryOptimizationHelper.kt         # Prompts Doze exemption so the link survives sleep
+│   └── ScreenDimController.kt               # Dims the sharer's screen while capturing
+├── util/
+│   ├── DurationFormatting.kt                # formatDuration(ms) → HH:MM:SS
+│   └── TimeFormats.kt                       # ISO-UTC + session-code time tokens
 └── ui/theme/
     ├── Color.kt
     ├── Theme.kt
@@ -347,18 +361,19 @@ com.vitalwork.wear/
 
 | Route | Screen | Description |
 |-------|--------|-------------|
-| `mode` | ModeSelectionScreen | First-launch Server/Client picker; also reachable from Home via **Change Mode** |
+| `mode` | ModeSelectionScreen | First-launch Server/Client picker (later changes happen in Settings) |
 | `tutorial` | TutorialScreen | First-launch onboarding |
-| `home` | HomeScreen | Mode-aware dashboard (Server shows only Connect-as-Server + Change Mode; Client shows the full home) |
+| `home` | HomeScreen | Mode-aware dashboard (Server shows only Connect-as-Server + Settings; Client shows the full home) |
 | `link/{role}` | PeerLinkScreen | Device-to-device link (`server`/`client`): pairing, diagnostics, and screen-mirror controls |
-| `vr_control` | VRConnectionScreen | VR link diagnostics (tablet IP/port + live received-event log) |
-| `settings` | SettingsScreen | Device prefix (A/B/C/D) tagging participant + session codes so parallel tablets don't collide |
+| `settings` | SettingsScreen | Device prefix (A/B/C/D) for code generation + pair scoping, and the Server/Client device-mode switch |
 | `sensors` | SensorsScreen | List of available sensors |
 | `sensors/{sensorId}` | SensorDetailScreen | Router to vendor-specific sensor screen |
 | `participants/new` | ParticipantEntryScreen | Anonymized participant entry (creates participant + session) |
 | `sessions` | SessionsScreen | List of completed sessions |
-| `sessions/active/{sessionId}` | SessionControlScreen | Active session control panel |
-| `sessions/review/{sessionId}` | SessionDetailScreen | Session review with export to Documents |
+| `sessions/setup/{sessionId}` | SessionControlScreen (setup mode) | One-time sensor-connection gate after participant entry; Proceed → scenario hub |
+| `sessions/scenario-select/{sessionId}` | ScenarioSelectionScreen | Scenario hub: pick scenario A–E or end the session |
+| `sessions/active/{sessionId}?scenario={n}` | SessionControlScreen | Records the picked scenario (auto-start + countdown), returns to the hub |
+| `sessions/review/{sessionId}?showCsvSaved={bool}` | SessionDetailScreen | Session review; local export to Documents + upload to server |
 
 ## Database Schema
 
@@ -399,14 +414,12 @@ clock (`TimeProvider`) on the same UTC timeline, so cross-stream alignment needs
 ## Data Flow
 
 ```
-Meta Quest VR ──HTTP POST──► VrHttpServer ──► VrEventReceiver ──► SessionControlViewModel ──► UI
-                  ▲                               │ (ack-after-write)
-       VrUdpBeacon (tablet advertises ip/port/sessionId)   └──► ScenarioRepository (event/reaction timestamps)
-
 eSense Pulse  ◄────BLE──────► BleManager ──────────► EsensePulseViewModel ──► UI
 eSense Resp.  ◄────Audio────► MindfieldRespiration ► EsenseRespirationViewModel ► UI
+Galaxy Watch  ──Data Layer──► WatchListenerService ► WatchSensorReceiver ──► UI + recording
 
-All sensors ──► ScenarioRecordingRepository ──► Room DB ──► SessionExportService ──► JSON/CSV
+All sensors ──► ScenarioRecordingRepository ──► Room DB ──┬──► SessionExportService ──► JSON/CSV (Documents)
+                                                          └──► SessionHttpUploader ──► VitalWork server
 
 Server (operator) ⇄ WebSocket :9090 (signaling) ⇄ Client (monitored)   via PeerLinkManager
 Server (viewer)   ◄── WebRTC P2P/UDP (live screen video) ── Client (sharer)   via WebRtcEngine/ScreenShareController
@@ -465,21 +478,32 @@ Unit tests live under `app/src/test/` and run on the host JVM (no device/emulato
 | File | Target | What it covers |
 |------|--------|----------------|
 | `data/recording/GapDetectorTest.kt` | `GapDetector.kt` | Gap detection edge cases: empty input, startup threshold, boundary conditions, mixed sensor types, unsorted input, per-sensor-type routing |
-| `data/vr/VrEventReceiverTest.kt` | `VrEventReceiver.kt` | Event/reaction persistence + accept, reject when no active scenario, first-write-wins, late-reaction grace window, heartbeat-less liveness watchdog |
-| `data/repository/ParticipantRepositoryTest.kt` | `ParticipantRepository.kt` | Code generation (`A-001`…, per-device-prefix scoped), uniqueness validation, fetch by ID/code |
-| `data/repository/SessionRepositoryTest.kt` | `SessionRepository.kt` | Session lifecycle: `sessionCode` format (VW-{prefix}-yyMMdd-HHmmss), participant FK, sample-count aggregation from scenarios at end, status transitions, notes persistence, deletion |
-| `data/repository/ScenarioRepositoryTest.kt` | `ScenarioRepository.kt` | Scenario lifecycle: create, end (sets `endedAt`), close dangling scenarios, batch sample insert |
-| `data/export/SessionExportMapperTest.kt` | `SessionExportMapper.kt` | Export data transformation (Section 7 shape): participant + session + scenarios + samples; sensor type mapping, gap detection per scenario, derived reaction time |
 | `data/recording/ScenarioRecordingRepositoryImplTest.kt` | `ScenarioRecordingRepositoryImpl.kt` | Start/stop state machine, sensor detection, sample buffering + flushing, scenario-end finalization |
-| `data/sensor/audio/MindfieldRespirationTest.kt` | `MindfieldRespiration.kt` | Zero-crossing breathing rate algorithm and signal verification logic |
-| `presentation/screens/participants/ParticipantEntryViewModelTest.kt` | `ParticipantEntryViewModel.kt` | Form validation, duplicate-code rejection, success emission, active-session redirect |
-| `presentation/screens/sessions/SessionControlViewModelTest.kt` | `SessionControlViewModel.kt` | Session loading, scenario-driven recording, end-session flow |
-| `presentation/screens/sessions/SessionDetailViewModelTest.kt` | `SessionDetailViewModel.kt` | Session/scenario loading, export workflow with `markUploaded` transition |
 | `data/recording/WatchSessionDrainerTest.kt` | `WatchSessionDrainer.kt` | Per-(scenario,type) timestamp-window attribution + de-dup for EDA/HR/IBI; gap/boundary/back-to-back rules |
+| `data/recording/WatchReconciliationReportTest.kt` | `WatchReconciliationReport.kt` | ok/mismatch verdict + summary formatting |
+| `data/repository/ParticipantRepositoryTest.kt` | `ParticipantRepository.kt` | Code generation (`A-001`…, per-device-prefix scoped), uniqueness validation, fetch by ID/code |
+| `data/repository/SessionRepositoryTest.kt` | `SessionRepository.kt` | Session lifecycle: `sessionCode` format (VW-{prefix}-yyMMdd-HHmmss), participant FK, sample-count aggregation from scenarios at end, status transitions, deletion |
+| `data/repository/ScenarioRepositoryTest.kt` | `ScenarioRepository.kt` | Scenario lifecycle: create, end (sets `endedAt`), close dangling scenarios, batch sample insert |
+| `data/export/SessionExportMapperTest.kt` | `SessionExportMapper.kt` | Export data transformation: participant + session + scenarios + samples; sensor type mapping, gap detection per scenario, statistics counted from exported samples, UTC timestamps |
+| `data/export/upload/SessionUploadMapperTest.kt` | `SessionUploadMapper.kt` | Upload DTO mapping: epoch-ms timestamps, enum-name sensor/scenario codes, statistics counted from uploaded samples |
+| `data/export/upload/SessionHttpUploaderTest.kt` | `SessionHttpUploader.kt` | Upload request shape/auth, 200/201 vs 401 vs error handling, unconfigured-server failure (MockEngine) |
+| `data/link/PeerMessageTest.kt` | `PeerMessage.kt` | Link envelope JSON round-trip + unknown-key tolerance |
+| `data/link/PeerNamingTest.kt` | `PeerNaming.kt` | Prefix-scoped mDNS service naming + matching |
+| `data/sensor/audio/MindfieldRespirationTest.kt` | `MindfieldRespiration.kt` | Zero-crossing breathing rate algorithm and signal verification logic |
+| `data/sensor/ble/BleParsersTest.kt` | `BleParsers.kt` | HR measurement + battery characteristic parsing |
 | `data/sensor/watch/WatchLinkStatusTest.kt` | `WatchSensorReceiver.kt` | LIVE/DOZING/DISCONNECTED transitions (reading→LIVE, heartbeat→DOZING, STOP→DISCONNECTED) |
 | `data/sensor/watch/WatchSensorReceiverBatteryAlertTest.kt` | `WatchSensorReceiver.kt` | Low-battery alert tier snapshot (`currentBatteryAlert`) |
+| `data/sensor/watch/WatchSensorReceiverFlushStateTest.kt` | `WatchSensorReceiver.kt` | Flush handshake bookkeeping (chunks, batch adoption, completion) |
+| `data/sensor/watch/WatchCorrectedTimestampTest.kt` | `WatchSensorReceiver.kt` | Watch-timestamp correction onto the NTP timeline + skew proxy |
+| `data/system/KeepAliveCoordinatorTest.kt` | `KeepAliveCoordinator.kt` | Reason-set acquire/release edges driving the FGS lifecycle |
+| `data/time/TimeProviderTest.kt` | `TimeProvider.kt` | NTP-offset clock behavior + fallback |
+| `util/TimeFormatsTest.kt` | `TimeFormats.kt` | ISO-UTC rendering + session-code time token |
+| `presentation/screens/participants/ParticipantEntryViewModelTest.kt` | `ParticipantEntryViewModel.kt` | Form validation, duplicate-code rejection, success emission, active-session redirect |
+| `presentation/screens/sessions/SessionControlViewModelTest.kt` | `SessionControlViewModel.kt` | Session loading, scenario-driven recording, end-session flow (incl. watch wake/transfer phases) |
+| `presentation/screens/sessions/SessionDetailViewModelTest.kt` | `SessionDetailViewModel.kt` | Session/scenario loading, export workflow, upload with `markUploaded` transition |
 
 **`:wear` module tests** (`wear/src/test/`): `WatchSampleStoreTest.kt` — append, truncate-after-ack
-(inclusive boundary, keep-unparseable, keep-un-acked-tail), clear, `shouldPersist` filtering.
+(inclusive boundary, keep-unparseable, keep-un-acked-tail), clear, `shouldPersist` filtering;
+`WatchMessageTest.kt` — JSON line building (reading/capabilities/batch/stop/heartbeat).
 
 Tests mirror the production package structure (e.g., `GapDetectorTest.kt` is in the same package as `GapDetector.kt`). This enables Android Studio's **Ctrl+Shift+T** navigation between production code and its test.
