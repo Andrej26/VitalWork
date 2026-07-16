@@ -37,9 +37,7 @@ class SessionExportService @Inject constructor(
     private val participantRepository: ParticipantRepository,
     private val scenarioRepository: ScenarioRepository,
     private val mapper: SessionExportMapper
-) : SessionExporter, SessionUploader {
-
-    override suspend fun upload(sessionId: Long): Result<String> = exportSession(sessionId)
+) : SessionExporter {
 
     private val json = Json {
         prettyPrint = true

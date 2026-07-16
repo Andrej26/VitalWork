@@ -61,7 +61,6 @@ fun HomeScreen(
     onNavigateToSessions: () -> Unit,
     onNavigateToParticipantEntry: () -> Unit,
     onNavigateToSessionActive: (Long) -> Unit,
-    @Suppress("UNUSED_PARAMETER") onNavigateToSessionReview: (Long) -> Unit,
     onNavigateToLinkServer: () -> Unit,
     onNavigateToLinkClient: () -> Unit,
     onNavigateToModeSelection: () -> Unit,

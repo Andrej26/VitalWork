@@ -27,6 +27,7 @@ import com.vitalwork.app.data.sensor.watch.model.WatchReading
 import com.vitalwork.app.presentation.components.BleDialogState
 import com.vitalwork.app.presentation.components.DialogAction
 import com.vitalwork.app.presentation.components.gattStatusToString
+import com.vitalwork.app.util.formatDuration
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.FlowPreview
@@ -48,7 +49,6 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
-import java.util.Locale
 import javax.inject.Inject
 
 @HiltViewModel
@@ -480,9 +480,6 @@ class SessionControlViewModel @Inject constructor(
         endSessionJob = viewModelScope.launch { runEndSession() }
     }
 
-    /** Kept as the public name some callers/tests use; identical to [requestEndSession]. */
-    fun endSessionAndSave() = requestEndSession()
-
     /**
      * Operator chose "End without watch data" from the wake/transfer dialog. If the finalize coroutine
      * is waiting (for the watch to wake or the flush to complete), unblock it so it finalizes with what
@@ -754,17 +751,6 @@ class SessionControlViewModel @Inject constructor(
         _endSessionResult.value = null
     }
 
-    @Suppress("unused")
-    private fun formatDurationStatic(ms: Long): String = formatDuration(ms)
-
-    private fun formatDuration(ms: Long): String {
-        val totalSeconds = ms / 1000
-        val hours = totalSeconds / 3600
-        val minutes = (totalSeconds % 3600) / 60
-        val seconds = totalSeconds % 60
-        return String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds)
-    }
-
     private companion object {
         const val TAG = "SessionControlVM"
 
@@ -776,8 +762,8 @@ class SessionControlViewModel @Inject constructor(
     }
 }
 
+/** Session-end failure surfaced as a snackbar (success is driven by [EndSessionPhase.Complete]). */
 sealed class EndSessionResult {
-    data class Success(val sessionId: Long) : EndSessionResult()
     data class Error(val message: String) : EndSessionResult()
 }
 

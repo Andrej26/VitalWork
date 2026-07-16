@@ -118,9 +118,6 @@ dependencies {
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
 
-    // Vico Charts
-    implementation(libs.vico.compose.m3)
-
     // Kronos — NTP clock offset (does not set the system clock)
     implementation(libs.kronos.android)
 
