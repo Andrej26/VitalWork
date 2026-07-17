@@ -2,9 +2,16 @@ package com.vitalwork.app.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import com.vitalwork.app.R
+
+/** Wordmark face matching the logo's geometric lettering (Montserrat SemiBold, OFL). */
+val BrandFontFamily = FontFamily(
+    Font(R.font.montserrat_semibold, FontWeight.SemiBold)
+)
 
 // Set of Material typography styles to start with
 val Typography = Typography(

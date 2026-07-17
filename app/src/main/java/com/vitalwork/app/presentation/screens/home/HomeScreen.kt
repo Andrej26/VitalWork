@@ -13,13 +13,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.WifiFind
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
@@ -33,13 +32,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import android.Manifest
+import com.vitalwork.app.R
 import com.vitalwork.app.data.link.PeerRole
 import com.vitalwork.app.data.model.ConnectionState
 import com.vitalwork.app.data.system.SessionPrerequisite
@@ -52,8 +54,9 @@ import com.vitalwork.app.presentation.components.onPermissionDenied
 import com.vitalwork.app.service.BatteryOptimizationHelper
 import com.vitalwork.app.presentation.screens.home.components.PrimaryActionButton
 import com.vitalwork.app.presentation.screens.home.components.SecondaryNavRow
+import com.vitalwork.app.ui.theme.BrandDeepTeal
+import com.vitalwork.app.ui.theme.BrandFontFamily
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     onNavigateToTutorial: () -> Unit,
@@ -126,21 +129,7 @@ fun HomeScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "VitalWork Operator",
-                        fontWeight = FontWeight.SemiBold
-                    )
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
-            )
-        }
-    ) { paddingValues ->
+    Scaffold { paddingValues ->
         WatermarkedBackground(modifier = Modifier.padding(paddingValues)) {
             Box(
                 modifier = Modifier
@@ -169,6 +158,30 @@ fun HomeScreen(
                         .padding(horizontal = 16.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+                    // Brand header — the logo mark with the wordmark set in the logo's lettering
+                    // style (Poppins), replacing the old plain top-app-bar title.
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 24.dp, bottom = 8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Image(
+                            painter = painterResource(R.drawable.logo_mark),
+                            contentDescription = null,
+                            modifier = Modifier.size(76.dp)
+                        )
+                        Text(
+                            text = "VitalWork",
+                            fontFamily = BrandFontFamily,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 32.sp,
+                            letterSpacing = 0.sp,
+                            color = BrandDeepTeal
+                        )
+                    }
+
                     ReadinessWarningCard(
                         missing = missingPrerequisites,
                         onFix = onFix
