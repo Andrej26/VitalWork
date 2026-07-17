@@ -7,8 +7,11 @@ import com.vitalwork.app.data.link.PeerLinkManager
 import com.vitalwork.app.data.link.PeerRole
 import com.vitalwork.app.data.model.ConnectionState
 import com.vitalwork.app.data.prefs.DeviceModePreferencesRepository
+import com.vitalwork.app.data.prefs.SettingsRepository
 import com.vitalwork.app.data.prefs.TutorialPreferencesRepository
+import com.vitalwork.app.data.repository.ConnectionRepository
 import com.vitalwork.app.data.repository.SessionRepository
+import com.vitalwork.app.data.sensor.DeviceState
 import com.vitalwork.app.data.sensor.watch.WatchBatteryAlert
 import com.vitalwork.app.data.sensor.watch.WatchSensorReceiver
 import com.vitalwork.app.data.system.SessionPrerequisite
@@ -20,6 +23,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -32,8 +36,28 @@ class HomeViewModel @Inject constructor(
     private val deviceModePreferences: DeviceModePreferencesRepository,
     private val readinessChecker: SystemReadinessChecker,
     private val watchReceiver: WatchSensorReceiver,
-    linkManager: PeerLinkManager
+    private val settingsRepository: SettingsRepository,
+    linkManager: PeerLinkManager,
+    connectionRepository: ConnectionRepository
 ) : ViewModel() {
+
+    /** How many physiological sensors are currently connected (eSense Pulse, eSense Respiration,
+     *  Galaxy Watch) — drives the honest "N sensors connected" line in the Home status card. */
+    val connectedSensorCount: StateFlow<Int> = combine(
+        connectionRepository.bleConnectionState,
+        connectionRepository.respirationState,
+        connectionRepository.watchConnectionState
+    ) { ble, respiration, watch ->
+        listOf(
+            ble == ConnectionState.CONNECTED,
+            respiration == DeviceState.Connected || respiration == DeviceState.Streaming,
+            watch == ConnectionState.CONNECTED
+        ).count { it }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    /** Device prefix (A–D) shown in the Home status chip; re-read on [refresh] like the mode. */
+    private val _devicePrefix = MutableStateFlow(settingsRepository.getDevicePrefix())
+    val devicePrefix: StateFlow<String> = _devicePrefix.asStateFlow()
 
     /** Persisted device-link role; decides which connect button Home shows. Re-read on [refresh]
      *  so a change made in Settings is reflected when Home resumes. */
@@ -75,6 +99,7 @@ class HomeViewModel @Inject constructor(
     fun refresh() {
         _missingPrerequisites.value = readinessChecker.missingPrerequisites()
         _deviceMode.value = deviceModePreferences.getMode()
+        _devicePrefix.value = settingsRepository.getDevicePrefix()
         // Watch battery is a live push value (no settings-lag like OS permissions), so read it once
         // here and leave it out of the delayed re-check loop below.
         _watchBatteryAlert.value = watchReceiver.currentBatteryAlert()

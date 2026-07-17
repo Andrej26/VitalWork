@@ -1,0 +1,16 @@
+<!-- The exact ECG pulse line from logo_mark.xml (same path data, viewport, and stroke ratio),
+     so the center-button icon is identical to the curve in the gear logo. Drawn white, tinted
+     at use site. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <path
+        android:pathData="M25,100 L62,100 L72,85 L85,116 L97,58 L111,140 L123,82 L131,100 L175,100"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000" />
+</vector>
