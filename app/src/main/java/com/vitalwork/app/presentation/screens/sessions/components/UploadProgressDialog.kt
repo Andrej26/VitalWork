@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.vitalwork.app.presentation.screens.sessions.UploadState
+import com.vitalwork.app.ui.theme.SuccessGreenDeep
 
 private const val SUCCESS_AUTO_DISMISS_MS = 1500L
 
@@ -70,7 +71,7 @@ fun UploadProgressDialog(
                         Icon(
                             imageVector = Icons.Default.CheckCircle,
                             contentDescription = null,
-                            tint = Color(0xFF2E7D32),
+                            tint = SuccessGreenDeep,
                             modifier = Modifier.size(48.dp)
                         )
                         Spacer(Modifier.height(16.dp))

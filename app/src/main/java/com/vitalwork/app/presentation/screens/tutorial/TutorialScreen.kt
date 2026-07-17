@@ -111,6 +111,8 @@ import android.media.MediaPlayer
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import androidx.compose.ui.viewinterop.AndroidView
+import com.vitalwork.app.ui.theme.SuccessGreen
+import com.vitalwork.app.ui.theme.WarningAmber
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Slide data model
@@ -246,7 +248,7 @@ private val TUTORIAL_SLIDES = listOf(
 private val PhaseColorHR      = Color(0xFFE57373)   // Red 300        — Heart Rate
 private val PhaseColorResp    = Color(0xFF4DB6AC)   // Teal 300       — Respiration
 private val PhaseColorWatch   = Color(0xFF64B5F6)   // Blue 300       — Galaxy Watch
-private val PhaseColorDefault = Color(0xFF9575CD)   // Deep Purple 300 — Welcome / Complete
+private val PhaseColorDefault = Color(0xFF4FA8C5)   // Brand teal 300 — Welcome / Complete
 
 private fun phaseAccentColor(phase: SlidePhase): Color = when (phase) {
     SlidePhase.HEART_RATE      -> PhaseColorHR
@@ -909,7 +911,7 @@ private fun TutorialPulseConnectStep(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFF4CAF50).copy(alpha = 0.15f)
+                        containerColor = SuccessGreen.copy(alpha = 0.15f)
                     )
                 ) {
                     Row(
@@ -920,7 +922,7 @@ private fun TutorialPulseConnectStep(
                         Icon(
                             imageVector = Icons.Default.CheckCircle,
                             contentDescription = null,
-                            tint = Color(0xFF4CAF50),
+                            tint = SuccessGreen,
                             modifier = Modifier.size(24.dp)
                         )
                         Text(
@@ -1169,7 +1171,7 @@ private fun TutorialRespirationConnectStep(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFF4CAF50).copy(alpha = 0.15f)
+                        containerColor = SuccessGreen.copy(alpha = 0.15f)
                     )
                 ) {
                     Row(
@@ -1180,7 +1182,7 @@ private fun TutorialRespirationConnectStep(
                         Icon(
                             imageVector = Icons.Default.CheckCircle,
                             contentDescription = null,
-                            tint = Color(0xFF4CAF50),
+                            tint = SuccessGreen,
                             modifier = Modifier.size(24.dp)
                         )
                         Text(
@@ -1385,8 +1387,8 @@ private fun WatchStatusCard(
     }
     val dotColor by animateColorAsState(
         targetValue = when (linkStatus) {
-            WatchLinkStatus.LIVE -> Color(0xFF4CAF50)
-            WatchLinkStatus.DOZING -> Color(0xFFFFA000)
+            WatchLinkStatus.LIVE -> SuccessGreen
+            WatchLinkStatus.DOZING -> WarningAmber
             WatchLinkStatus.DISCONNECTED -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
         },
         animationSpec = tween(300),
@@ -1465,7 +1467,7 @@ private fun TutorialCompleteStep(onGoToTests: () -> Unit) {
                 imageVector = Icons.Default.CheckCircle,
                 contentDescription = null,
                 modifier = Modifier.size(80.dp),
-                tint = Color(0xFF4CAF50)
+                tint = SuccessGreen
             )
 
             Text(
@@ -1539,8 +1541,8 @@ private fun DeviceStatusCard(
 
     val dotColor by animateColorAsState(
         targetValue = when {
-            isConnected -> Color(0xFF4CAF50)
-            isConnecting -> Color(0xFFFFA000)
+            isConnected -> SuccessGreen
+            isConnecting -> WarningAmber
             else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
         },
         animationSpec = tween(300),

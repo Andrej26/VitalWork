@@ -40,6 +40,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.vitalwork.app.data.model.ConnectionState
 import com.vitalwork.app.presentation.components.ConnectionStatusBadge
+import com.vitalwork.app.ui.theme.SuccessGreen
+import com.vitalwork.app.ui.theme.WarningAmber
+import com.vitalwork.app.ui.theme.ErrorRed
 
 @Composable
 fun DeviceSensorGroup(
@@ -60,10 +63,10 @@ fun DeviceSensorGroup(
             (connectionState == ConnectionState.DISCONNECTED || connectionState == ConnectionState.ERROR)
     val borderColor by animateColorAsState(
         targetValue = when (connectionState) {
-            ConnectionState.CONNECTED -> Color(0xFF4CAF50)
-            ConnectionState.CONNECTING -> Color(0xFFFFA000)
-            ConnectionState.RECONNECTING -> Color(0xFFFFA000)
-            ConnectionState.ERROR -> Color(0xFFF44336)
+            ConnectionState.CONNECTED -> SuccessGreen
+            ConnectionState.CONNECTING -> WarningAmber
+            ConnectionState.RECONNECTING -> WarningAmber
+            ConnectionState.ERROR -> ErrorRed
             ConnectionState.DISCONNECTED -> MaterialTheme.colorScheme.outlineVariant
         },
         animationSpec = tween(300),

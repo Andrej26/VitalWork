@@ -116,6 +116,8 @@ import com.vitalwork.app.presentation.screens.sessions.components.EndSessionWatc
 import com.vitalwork.app.presentation.screens.sessions.components.LiveSensorCard
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.vitalwork.app.ui.theme.WarningAmber
+import com.vitalwork.app.ui.theme.ErrorRed
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -404,7 +406,7 @@ fun SessionControlScreen(
             .then(
                 if (isRecording) Modifier.border(
                     width = 4.dp,
-                    color = Color(0xFFF44336).copy(alpha = borderAlpha)
+                    color = ErrorRed.copy(alpha = borderAlpha)
                 ) else Modifier
             )
     ) {
@@ -444,7 +446,7 @@ fun SessionControlScreen(
                 },
                 colors = if (isRecording) {
                     TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color(0xFFF44336)
+                        containerColor = ErrorRed
                     )
                 } else {
                     TopAppBarDefaults.topAppBarColors(
@@ -841,7 +843,7 @@ private fun RecordingBadge(
                     color = if (recordingState == DataRecordingState.RECORDING)
                         Color.White
                     else
-                        Color(0xFFFFA000),
+                        WarningAmber,
                     shape = CircleShape
                 )
         )

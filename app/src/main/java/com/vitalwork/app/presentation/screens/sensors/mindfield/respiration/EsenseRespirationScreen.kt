@@ -69,6 +69,8 @@ import com.vitalwork.app.presentation.components.ConnectionStatusBadge
 import com.vitalwork.app.presentation.components.LowSignalWarningBanner
 import com.vitalwork.app.presentation.log.LogEntry
 import com.vitalwork.app.presentation.log.LogType
+import com.vitalwork.app.ui.theme.SuccessGreen
+import com.vitalwork.app.ui.theme.ErrorRed
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -376,11 +378,11 @@ private fun LogEntryItem(entry: LogEntry) {
         }
         LogType.SUCCESS -> {
             icon = Icons.Outlined.CheckCircle
-            color = Color(0xFF4CAF50)
+            color = SuccessGreen
         }
         LogType.ERROR -> {
             icon = Icons.Outlined.Error
-            color = Color(0xFFF44336)
+            color = ErrorRed
         }
         LogType.INFO -> {
             icon = Icons.Outlined.Info
@@ -388,7 +390,7 @@ private fun LogEntryItem(entry: LogEntry) {
         }
         LogType.NOTIFICATION -> {
             icon = Icons.Outlined.Notifications
-            color = Color(0xFF9C27B0)
+            color = MaterialTheme.colorScheme.tertiary
         }
     }
 

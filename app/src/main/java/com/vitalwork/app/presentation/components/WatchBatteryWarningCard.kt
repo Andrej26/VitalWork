@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.vitalwork.app.data.sensor.watch.WatchBatteryAlert
+import com.vitalwork.app.ui.theme.WarningAmber
 
 /**
  * Persistent (while shown) low-battery banner for the Galaxy Watch, hosted at the top of Home so
@@ -43,7 +44,7 @@ fun WatchBatteryWarningCard(
     if (alert == WatchBatteryAlert.NONE) return
 
     val isCritical = alert == WatchBatteryAlert.CRITICAL
-    val backgroundColor = if (isCritical) MaterialTheme.colorScheme.error else Color(0xFFFFA000)
+    val backgroundColor = if (isCritical) MaterialTheme.colorScheme.error else WarningAmber
     val contentColor = if (isCritical) MaterialTheme.colorScheme.onError else Color.White
     val pct = level?.let { "$it%" } ?: ""
     val text = if (isCritical) {

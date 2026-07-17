@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.vitalwork.app.data.sensor.DeviceState
+import com.vitalwork.app.ui.theme.SuccessGreen
 
 @Composable
 fun BioSensorCard(
@@ -40,7 +41,7 @@ fun BioSensorCard(
                 // Small badge for state
                 Surface(
                     shape = RoundedCornerShape(16.dp),
-                    color = if (state == DeviceState.Streaming) Color(0xFF4CAF50) else Color.Gray.copy(alpha = 0.5f)
+                    color = if (state == DeviceState.Streaming) SuccessGreen else Color.Gray.copy(alpha = 0.5f)
                 ) {
                     Text(
                         text = state.name.uppercase(),

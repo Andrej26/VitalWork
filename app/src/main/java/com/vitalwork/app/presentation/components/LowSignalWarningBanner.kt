@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.vitalwork.app.data.sensor.audio.LowSignalWarning
+import com.vitalwork.app.ui.theme.WarningAmber
 
 @Composable
 fun LowSignalWarningBanner(
@@ -35,7 +36,7 @@ fun LowSignalWarningBanner(
 ) {
     if (warningLevel == LowSignalWarning.NONE) return
 
-    val backgroundColor = Color(0xFFFFA000)
+    val backgroundColor = WarningAmber
     val text = "Low respiration signal detected. Check chest strap placement."
 
     val infiniteTransition = rememberInfiniteTransition(label = "lowSignalPulse")

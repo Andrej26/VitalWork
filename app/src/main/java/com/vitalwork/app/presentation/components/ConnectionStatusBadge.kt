@@ -22,15 +22,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.vitalwork.app.data.model.ConnectionState
+import com.vitalwork.app.ui.theme.SuccessGreen
+import com.vitalwork.app.ui.theme.WarningAmber
+import com.vitalwork.app.ui.theme.ErrorRed
 
 /** Dot/label colour for a connection state — gray (disconnected), amber (connecting/reconnecting),
  *  green (connected), red (error). Shared so sensors, the device link, etc. all match. */
 fun connectionStatusColor(state: ConnectionState): Color = when (state) {
     ConnectionState.DISCONNECTED -> Color.Gray
-    ConnectionState.CONNECTING -> Color(0xFFFFA000)
-    ConnectionState.RECONNECTING -> Color(0xFFFFA000)
-    ConnectionState.CONNECTED -> Color(0xFF4CAF50)
-    ConnectionState.ERROR -> Color(0xFFF44336)
+    ConnectionState.CONNECTING -> WarningAmber
+    ConnectionState.RECONNECTING -> WarningAmber
+    ConnectionState.CONNECTED -> SuccessGreen
+    ConnectionState.ERROR -> ErrorRed
 }
 
 @Composable
