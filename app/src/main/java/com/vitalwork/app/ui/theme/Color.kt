@@ -80,6 +80,14 @@ val DarkInverseSurface = Color(0xFFDFE3E6)
 val DarkInverseOnSurface = Color(0xFF2C3134)
 val DarkInversePrimary = Color(0xFF0E5871)
 
+// ── Alert-card accents (outline-style warning cards: red = blocking, amber = advisory) ──
+val AlertRed = Color(0xFFB3261E)           // icon + eyebrow + Fix pills
+val AlertRedDeep = Color(0xFF8C1D18)       // title text
+val AlertRedBorder = Color(0xFFE5B6B2)     // card outline
+val AlertRedContainer = Color(0xFFFDE7E5)  // icon bubble fill
+val AlertAmberDeep = Color(0xFFB26A00)     // advisory icon tint
+val AlertAmberContainer = Color(0xFFFFF4DE) // advisory icon bubble fill
+
 // ── Semantic status colors (connection/recording states, shared across screens) ──
 val SuccessGreen = Color(0xFF4CAF50)      // connected / streaming / OK
 val SuccessGreenDeep = Color(0xFF2E7D32)  // success icons and text on light surfaces
