@@ -72,6 +72,8 @@ import com.vitalwork.app.presentation.log.LogType
 import com.vitalwork.app.ui.theme.SuccessGreen
 import com.vitalwork.app.ui.theme.ErrorRed
 import com.vitalwork.app.presentation.components.WatermarkedBackground
+import com.vitalwork.app.presentation.components.AlertSeverity
+import com.vitalwork.app.presentation.components.AlertCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -260,45 +262,15 @@ private fun PermissionRequestCard(
     onRequestPermissions: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.Security,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onErrorContainer
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Permissions Required",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onErrorContainer
-                )
-            }
-
-            Text(
-                text = "Microphone permission is required to connect to the eSense Respiration sensor via audio jack.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onErrorContainer
-            )
-
-            Button(
-                onClick = onRequestPermissions,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Grant Permissions")
-            }
-        }
-    }
+    AlertCard(
+        title = "Permissions Required",
+        description = "Microphone permission is required to connect to the eSense Respiration sensor via audio jack.",
+        icon = Icons.Default.Security,
+        severity = AlertSeverity.BLOCKING,
+        actionLabel = "Grant Permissions",
+        onAction = onRequestPermissions,
+        modifier = modifier
+    )
 }
 
 @Composable

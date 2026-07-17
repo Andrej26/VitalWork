@@ -73,6 +73,8 @@ import com.vitalwork.app.presentation.screens.sensors.components.HeartRateDispla
 import com.vitalwork.app.presentation.screens.sensors.components.RrIntervalCard
 import kotlinx.coroutines.launch
 import com.vitalwork.app.presentation.components.WatermarkedBackground
+import com.vitalwork.app.presentation.components.AlertSeverity
+import com.vitalwork.app.presentation.components.AlertCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -311,45 +313,15 @@ private fun PermissionRequestCard(
     onRequestPermissions: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.Security,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onErrorContainer
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Permissions Required",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onErrorContainer
-                )
-            }
-
-            Text(
-                text = "Bluetooth and Location permissions are required to scan for and connect to BLE devices.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onErrorContainer
-            )
-
-            Button(
-                onClick = onRequestPermissions,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Grant Permissions")
-            }
-        }
-    }
+    AlertCard(
+        title = "Permissions Required",
+        description = "Bluetooth and Location permissions are required to scan for and connect to BLE devices.",
+        icon = Icons.Default.Security,
+        severity = AlertSeverity.BLOCKING,
+        actionLabel = "Grant Permissions",
+        onAction = onRequestPermissions,
+        modifier = modifier
+    )
 }
 
 @Composable
@@ -357,45 +329,15 @@ private fun LocationDisabledCard(
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer
-        )
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.Security,
-                contentDescription = null,
-                modifier = Modifier.size(32.dp),
-                tint = MaterialTheme.colorScheme.onErrorContainer
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Location Services Disabled",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onErrorContainer
-                )
-                Text(
-                    text = "Location Services must be enabled for BLE scanning to work.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onErrorContainer
-                )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            TextButton(onClick = onOpenSettings) {
-                Text(
-                    text = "Settings",
-                    color = MaterialTheme.colorScheme.onErrorContainer
-                )
-            }
-        }
-    }
+    AlertCard(
+        title = "Location Services Disabled",
+        description = "Location Services must be enabled for BLE scanning to work.",
+        icon = Icons.Default.Security,
+        severity = AlertSeverity.BLOCKING,
+        actionLabel = "Settings",
+        onAction = onOpenSettings,
+        modifier = modifier
+    )
 }
 
 @Composable

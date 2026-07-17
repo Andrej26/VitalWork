@@ -119,6 +119,8 @@ import kotlinx.coroutines.launch
 import com.vitalwork.app.ui.theme.WarningAmber
 import com.vitalwork.app.ui.theme.ErrorRed
 import com.vitalwork.app.presentation.components.WatermarkedBackground
+import com.vitalwork.app.presentation.components.AlertSeverity
+import com.vitalwork.app.presentation.components.AlertCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1156,116 +1158,38 @@ private fun respirationErrorMessage(reason: String): String = when {
 
 @Composable
 private fun SensorLostDuringRecordingBanner(sensorNames: List<String>) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer
-        )
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Warning,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onErrorContainer,
-                modifier = Modifier.size(24.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Column {
-                Text(
-                    text = "${sensorNames.joinToString(" & ")} disconnected",
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Recording continues — reconnect to resume data capture",
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-        }
-    }
+    AlertCard(
+        title = "${sensorNames.joinToString(" & ")} disconnected",
+        description = "Recording continues — reconnect to resume data capture",
+        icon = Icons.Outlined.Warning,
+        severity = AlertSeverity.BLOCKING,
+        pulse = true
+    )
 }
 
 @Composable
 private fun WatchLinkLostBanner() {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer
-        )
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.Watch,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onErrorContainer,
-                modifier = Modifier.size(24.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Column {
-                Text(
-                    text = "Galaxy Watch link lost",
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Sensor data keeps buffering on the watch — turn its Bluetooth back on to recover it",
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-        }
-    }
+    AlertCard(
+        title = "Galaxy Watch link lost",
+        description = "Sensor data keeps buffering on the watch — turn its Bluetooth back on to recover it",
+        icon = Icons.Default.Watch,
+        severity = AlertSeverity.BLOCKING
+    )
 }
 
 @Composable
 private fun WatchBatteryWarningBanner(level: Int, critical: Boolean) {
-    val container = if (critical) MaterialTheme.colorScheme.errorContainer
-                    else MaterialTheme.colorScheme.tertiaryContainer
-    val onContainer = if (critical) MaterialTheme.colorScheme.onErrorContainer
-                      else MaterialTheme.colorScheme.onTertiaryContainer
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = container)
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Warning,
-                contentDescription = null,
-                tint = onContainer,
-                modifier = Modifier.size(24.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Column {
-                Text(
-                    text = if (critical) "Galaxy Watch battery critical ($level%)"
-                           else "Galaxy Watch battery low ($level%)",
-                    color = onContainer,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = if (critical)
-                        "At this level the watch can stop recording sensor data while the screen is off — that data will be lost. Charge it before continuing."
-                    else
-                        "Charge it before a long session — if it drops further the watch can stop recording during sleep and lose that data.",
-                    color = onContainer,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-        }
-    }
+    AlertCard(
+        title = if (critical) "Galaxy Watch battery critical ($level%)"
+            else "Galaxy Watch battery low ($level%)",
+        description = if (critical)
+            "At this level the watch can stop recording sensor data while the screen is off — that data will be lost. Charge it before continuing."
+        else
+            "Charge it before a long session — if it drops further the watch can stop recording during sleep and lose that data.",
+        icon = Icons.Outlined.Warning,
+        severity = if (critical) AlertSeverity.BLOCKING else AlertSeverity.ADVISORY,
+        pulse = critical
+    )
 }
 
 @Composable

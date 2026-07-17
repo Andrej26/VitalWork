@@ -113,6 +113,9 @@ import android.view.SurfaceView
 import androidx.compose.ui.viewinterop.AndroidView
 import com.vitalwork.app.ui.theme.SuccessGreen
 import com.vitalwork.app.ui.theme.WarningAmber
+import androidx.compose.material.icons.filled.Security
+import com.vitalwork.app.presentation.components.AlertSeverity
+import com.vitalwork.app.presentation.components.AlertCard
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Slide data model
@@ -933,123 +936,36 @@ private fun TutorialPulseConnectStep(
                     }
                 }
             } else {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = "Bluetooth & Location permissions required",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Text(
-                            text = "Grant Bluetooth and Location permissions so the app can scan for and connect to the eSense Pulse sensor.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Button(
-                            onClick = onRequestPermissions,
-                            modifier = Modifier.align(Alignment.End)
-                        ) {
-                            Text("Grant Permissions")
-                        }
-                    }
-                }
+                AlertCard(
+                    title = "Bluetooth & Location permissions required",
+                    description = "Grant Bluetooth and Location permissions so the app can scan for and connect to the eSense Pulse sensor.",
+                    icon = Icons.Default.Security,
+                    severity = AlertSeverity.BLOCKING,
+                    actionLabel = "Grant Permissions",
+                    onAction = onRequestPermissions
+                )
             }
 
             // 2. Bluetooth disabled warning
             if (uiState.blePermissionsGranted && !uiState.bluetoothEnabled) {
-                Card(
-                    onClick = onEnableBluetooth,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.BluetoothDisabled,
-                            contentDescription = null,
-                            modifier = Modifier.size(32.dp),
-                            tint = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Bluetooth Disabled",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                            Text(
-                                text = "Bluetooth must be enabled to scan for the eSense Pulse sensor.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
-                }
+                AlertCard(
+                    title = "Bluetooth Disabled",
+                    description = "Bluetooth must be enabled to scan for the eSense Pulse sensor.",
+                    icon = Icons.Default.BluetoothDisabled,
+                    severity = AlertSeverity.BLOCKING,
+                    onClick = onEnableBluetooth
+                )
             }
 
             // 3. Location disabled warning
             if (uiState.blePermissionsGranted && !uiState.locationEnabled) {
-                Card(
-                    onClick = onOpenLocationSettings,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.LocationOff,
-                            contentDescription = null,
-                            modifier = Modifier.size(32.dp),
-                            tint = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Location Services Disabled",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                            Text(
-                                text = "Location Services must be enabled for BLE scanning to work.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
-                }
+                AlertCard(
+                    title = "Location Services Disabled",
+                    description = "Location Services must be enabled for BLE scanning to work.",
+                    icon = Icons.Default.LocationOff,
+                    severity = AlertSeverity.BLOCKING,
+                    onClick = onOpenLocationSettings
+                )
             }
 
             // 4. Connection / scan UI (only when permissions granted and BT enabled)
@@ -1193,35 +1109,14 @@ private fun TutorialRespirationConnectStep(
                     }
                 }
             } else {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = "Microphone permission required",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Text(
-                            text = "The audio jack sensor needs microphone access to receive breathing data.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Button(
-                            onClick = onRequestAudioPermission,
-                            modifier = Modifier.align(Alignment.End)
-                        ) {
-                            Text("Grant Permission")
-                        }
-                    }
-                }
+                AlertCard(
+                    title = "Microphone permission required",
+                    description = "The audio jack sensor needs microphone access to receive breathing data.",
+                    icon = Icons.Default.Security,
+                    severity = AlertSeverity.BLOCKING,
+                    actionLabel = "Grant Permission",
+                    onAction = onRequestAudioPermission
+                )
             }
 
             Text(
@@ -1296,46 +1191,13 @@ private fun TutorialWatchConnectStep(
             // link falls back to a cloud relay that can't deliver to a sleeping tablet. Same card and
             // behaviour as the heart-rate step.
             if (!bluetoothEnabled) {
-                Card(
-                    onClick = onEnableBluetooth,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.BluetoothDisabled,
-                            contentDescription = null,
-                            modifier = Modifier.size(32.dp),
-                            tint = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Bluetooth Disabled",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                            Text(
-                                text = "Turn on Bluetooth so the watch can stream over the direct link.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
-                }
+                AlertCard(
+                    title = "Bluetooth Disabled",
+                    description = "Turn on Bluetooth so the watch can stream over the direct link.",
+                    icon = Icons.Default.BluetoothDisabled,
+                    severity = AlertSeverity.BLOCKING,
+                    onClick = onEnableBluetooth
+                )
             }
 
             when (linkStatus) {

@@ -59,6 +59,9 @@ import org.webrtc.RendererCommon
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
 import com.vitalwork.app.presentation.components.WatermarkedBackground
+import androidx.compose.material.icons.outlined.Warning
+import com.vitalwork.app.presentation.components.AlertSeverity
+import com.vitalwork.app.presentation.components.AlertCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -202,28 +205,15 @@ fun PeerLinkScreen(
 
 @Composable
 private fun BatteryReminderCard(onAllow: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer
-        )
-    ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                text = "Allow background",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onErrorContainer
-            )
-            Text(
-                text = "This device may kill the connection when the screen is off. Exempt VitalWork " +
-                    "from battery optimization to keep the link alive in the background.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onErrorContainer
-            )
-            Button(onClick = onAllow) { Text("Allow") }
-        }
-    }
+    AlertCard(
+        title = "Allow background",
+        description = "This device may kill the connection when the screen is off. Exempt VitalWork " +
+            "from battery optimization to keep the link alive in the background.",
+        icon = Icons.Outlined.Warning,
+        severity = AlertSeverity.BLOCKING,
+        actionLabel = "Allow",
+        onAction = onAllow
+    )
 }
 
 @Composable
