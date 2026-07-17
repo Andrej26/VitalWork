@@ -306,7 +306,7 @@ class SessionControlViewModelTest {
 
         fakeScenarioRecordingRepo.recordingState.value = DataRecordingState.RECORDING
 
-        vm.endSessionAndSave()
+        vm.requestEndSession()
         advanceUntilIdle()
 
         assertEquals(1, fakeScenarioRecordingRepo.stopRecordingCallCount)
@@ -335,7 +335,7 @@ class SessionControlViewModelTest {
 
         // Unconfined dispatcher runs the end-session job eagerly to its transfer-wait suspension; do
         // NOT advance time here or the bounded transfer wait would elapse before the chunk lands.
-        vm.endSessionAndSave()
+        vm.requestEndSession()
 
         // The watch streams its store; a chunk completes the batch (max watch ts = 5000).
         watchReceiver.onFlushChunk(batchId = 1L, index = 0, count = 1, maxWatchTsInChunk = 5_000L)
@@ -359,7 +359,7 @@ class SessionControlViewModelTest {
         feedWatchReading("BATTERY", 80f)
         advanceUntilIdle()
 
-        vm.endSessionAndSave()
+        vm.requestEndSession()
         advanceUntilIdle() // no flush ever completes → the bounded transfer wait elapses
 
         assertTrue(vm.endSessionPhase.value is EndSessionPhase.Failed)
@@ -381,7 +381,7 @@ class SessionControlViewModelTest {
         advanceUntilIdle()
 
         // Runs eagerly to the transfer-wait suspension (no time advanced yet).
-        vm.endSessionAndSave()
+        vm.requestEndSession()
 
         vm.endWithoutWatchData() // operator aborts the wait
         advanceUntilIdle()

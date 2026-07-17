@@ -9,7 +9,7 @@ import javax.inject.Singleton
 /**
  * Remembers which device-link role this device runs as (Server or Client). Chosen once on first
  * launch via the mode-selection screen; persisted so subsequent launches go straight to Home. The
- * operator can change it later from Home. Until a mode is picked, [getMode] returns null and the
+ * operator can change it later in Settings. Until a mode is picked, [getMode] returns null and the
  * app shows the selection screen at startup.
  */
 @Singleton

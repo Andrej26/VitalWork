@@ -66,17 +66,47 @@ class SessionUploadMapperTest {
     }
 
     @Test
-    fun session_sendsStoredSampleCounters() = runTest {
-        val request = mapper.buildUploadRequest(participant(), session(), emptyList())
+    fun session_statisticsCountedFromUploadedSamples_notStoredCounters() = runTest {
+        // The session's stored counters (120/60/118/…) are deliberately wrong — the statistics
+        // block must be counted from the samples actually uploaded so it always matches the payload.
+        val scenario = ScenarioEntity(
+            id = 5L,
+            sessionId = 1L,
+            scenarioCode = ScenarioCode.REFERENCE_STATE,
+            startedAt = 1_790_509_820_000L,
+            endedAt = null // abnormally ended scenarios count too
+        )
+        sampleDao.samples.addAll(
+            listOf(
+                SensorSampleEntity(
+                    scenarioId = 5L, timestampMs = 1L, elapsedMs = 1L,
+                    sensorType = SensorType.ESENSE_HEART_RATE, value = 82f
+                ),
+                SensorSampleEntity(
+                    scenarioId = 5L, timestampMs = 2L, elapsedMs = 2L,
+                    sensorType = SensorType.ESENSE_HEART_RATE, value = 83f
+                ),
+                SensorSampleEntity(
+                    scenarioId = 5L, timestampMs = 3L, elapsedMs = 3L,
+                    sensorType = SensorType.RESPIRATION, value = 14f
+                ),
+                SensorSampleEntity(
+                    scenarioId = 5L, timestampMs = 4L, elapsedMs = 4L,
+                    sensorType = SensorType.WATCH_EDA, value = 0.4f
+                )
+            )
+        )
+
+        val request = mapper.buildUploadRequest(participant(), session(), listOf(scenario))
         val stats = request.session.statistics
 
-        assertEquals(3, stats.scenarioCount)
-        assertEquals(120, stats.hrSampleCount)
-        assertEquals(60, stats.respirationSampleCount)
-        assertEquals(118, stats.rrIntervalSampleCount)
-        assertEquals(40, stats.edaSampleCount)
-        assertEquals(110, stats.watchHrSampleCount)
-        assertEquals(105, stats.watchIbiSampleCount)
+        assertEquals(1, stats.scenarioCount)
+        assertEquals(2, stats.hrSampleCount)
+        assertEquals(1, stats.respirationSampleCount)
+        assertEquals(0, stats.rrIntervalSampleCount)
+        assertEquals(1, stats.edaSampleCount)
+        assertEquals(0, stats.watchHrSampleCount)
+        assertEquals(0, stats.watchIbiSampleCount)
     }
 
     @Test

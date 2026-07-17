@@ -84,17 +84,11 @@ fun AppNavigation(
                     // Resuming an active session lands on the scenario hub (setup is a one-time gate).
                     navController.navigate(Route.ScenarioSelection.createRoute(sessionId))
                 },
-                onNavigateToSessionReview = { sessionId ->
-                    navController.navigate(Route.SessionReview.createRoute(sessionId))
-                },
                 onNavigateToLinkServer = {
                     navController.navigate(Route.PeerLink.createRoute("server"))
                 },
                 onNavigateToLinkClient = {
                     navController.navigate(Route.PeerLink.createRoute("client"))
-                },
-                onNavigateToModeSelection = {
-                    navController.navigate(Route.ModeSelection.route)
                 }
             )
         }

@@ -189,8 +189,6 @@ fun SessionControlScreen(
         viewModel.setBlePermissionsGranted(permissions.values.all { it })
     }
 
-    // VR auto-recording cue (set when the Quest's scenario_start triggers recording)
-
     // Low signal warning
     val respirationLowSignalWarning by viewModel.respirationLowSignalWarning.collectAsState()
 
@@ -267,7 +265,6 @@ fun SessionControlScreen(
                 )
                 viewModel.clearEndSessionResult()
             }
-            is EndSessionResult.Success -> viewModel.clearEndSessionResult()
             null -> {}
         }
     }

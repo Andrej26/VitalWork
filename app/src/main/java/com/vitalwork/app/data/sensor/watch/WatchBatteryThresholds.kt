@@ -4,7 +4,7 @@ package com.vitalwork.app.data.sensor.watch
  * Battery-level thresholds (percent) at which the tablet warns the operator that the Galaxy Watch
  * needs charging. Evaluated as a snapshot when the Home screen is shown (between sessions), never
  * during a running scenario — so the warning never injects a stimulus that could contaminate
- * reaction-time data.
+ * the recorded physiological data.
  *
  * The real risk to screen-off recording is the watch enabling Power Saving / "Limit health
  * features", which **turns off background sensor sampling** — not a fixed battery percentage.

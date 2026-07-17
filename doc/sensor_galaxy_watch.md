@@ -72,7 +72,7 @@
 
 ## Transport: Wearable Data Layer (MessageClient)
 
-The watch↔tablet link uses **`MessageClient`**, not a socket, not BLE GATT, not the VR WebSocket.
+The watch↔tablet link uses **`MessageClient`**, not a socket, not BLE GATT, not the peer-link WebSocket.
 
 | Property | Value |
 |----------|-------|
@@ -174,7 +174,7 @@ parses the same shape.
 ```
 
 `t` is stamped on the watch with `System.currentTimeMillis()` — same clock convention as the rest of
-the app, so watch samples align to VR events with no clock-sync step.
+the app, so watch samples align to the scenario timeline with no clock-sync step.
 
 **Phone → watch commands** ride a separate `MessageClient` path `/vitalwork/command` as plain strings:
 `START`, `STOP`, `FLUSH`, and `FLUSH_ACK:<maxTimestampMs>`. **Bulk flush data does NOT use

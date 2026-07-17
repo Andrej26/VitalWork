@@ -3,6 +3,7 @@ package com.vitalwork.app.data.export.upload
 import com.vitalwork.app.data.db.ParticipantEntity
 import com.vitalwork.app.data.db.ScenarioEntity
 import com.vitalwork.app.data.db.SensorSampleEntity
+import com.vitalwork.app.data.db.SensorType
 import com.vitalwork.app.data.db.SessionEntity
 import com.vitalwork.app.data.repository.ScenarioRepository
 import javax.inject.Inject
@@ -11,10 +12,12 @@ import javax.inject.Singleton
 /**
  * Maps the local Room entities to the server's full-session upload shape ([SessionUploadRequest]).
  *
- * Unlike [com.vitalwork.app.data.export.SessionExportMapper] (ISO strings, gaps, statistics), this
- * emits raw epoch-millisecond timestamps straight off the entities and **enum-NAME** sensor types, which is
- * what `POST /api/sessions/upload` expects (doc §6/§7). No gap computation, but the stored per-session
- * sample counters ARE sent (doc §4.2) — the server persists them rather than recomputing from samples.
+ * Unlike [com.vitalwork.app.data.export.SessionExportMapper] (ISO strings, gaps), this emits raw
+ * epoch-millisecond timestamps straight off the entities and **enum-NAME** sensor types, which is
+ * what `POST /api/sessions/upload` expects (doc §6/§7). No gap computation. The statistics block
+ * (doc §4.2) is counted from the samples actually being uploaded — the server persists it rather
+ * than recomputing, so it must always match the uploaded payload (the stored session counters can
+ * lag it, e.g. for a scenario that ended abnormally).
  */
 @Singleton
 class SessionUploadMapper @Inject constructor(
@@ -26,10 +29,15 @@ class SessionUploadMapper @Inject constructor(
         session: SessionEntity,
         scenarios: List<ScenarioEntity>
     ): SessionUploadRequest {
-        val scenarioUploads = scenarios.map { scenario ->
-            val samples = scenarioRepository.getSamplesForScenario(scenario.id)
+        val scenarioSamples = scenarios.map { scenario ->
+            scenario to scenarioRepository.getSamplesForScenario(scenario.id)
+        }
+        val scenarioUploads = scenarioSamples.map { (scenario, samples) ->
             buildScenarioUpload(scenario, samples)
         }
+
+        val allSamples = scenarioSamples.flatMap { it.second }
+        fun countOf(type: SensorType) = allSamples.count { it.sensorType == type }
 
         return SessionUploadRequest(
             participant = ParticipantUpload(
@@ -43,13 +51,13 @@ class SessionUploadMapper @Inject constructor(
                 endedAt = session.endedAt,
                 status = session.status.name,
                 statistics = SessionStatisticsUpload(
-                    scenarioCount = session.scenarioCount,
-                    hrSampleCount = session.hrSampleCount,
-                    respirationSampleCount = session.respirationSampleCount,
-                    rrIntervalSampleCount = session.rrIntervalSampleCount,
-                    edaSampleCount = session.edaSampleCount,
-                    watchHrSampleCount = session.watchHrSampleCount,
-                    watchIbiSampleCount = session.watchIbiSampleCount
+                    scenarioCount = scenarios.size,
+                    hrSampleCount = countOf(SensorType.ESENSE_HEART_RATE),
+                    respirationSampleCount = countOf(SensorType.RESPIRATION),
+                    rrIntervalSampleCount = countOf(SensorType.ESENSE_RR_INTERVAL),
+                    edaSampleCount = countOf(SensorType.WATCH_EDA),
+                    watchHrSampleCount = countOf(SensorType.WATCH_HR),
+                    watchIbiSampleCount = countOf(SensorType.WATCH_IBI)
                 )
             ),
             scenarios = scenarioUploads

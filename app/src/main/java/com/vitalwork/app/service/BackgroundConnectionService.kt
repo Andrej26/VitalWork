@@ -27,6 +27,7 @@ import com.vitalwork.app.data.recording.model.DataRecordingState
 import com.vitalwork.app.data.system.KeepAliveCoordinator
 import com.vitalwork.app.data.system.KeepAliveReason
 import com.vitalwork.app.data.webrtc.ScreenShareController
+import com.vitalwork.app.util.formatDuration
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -36,7 +37,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
-import java.util.Locale
 import javax.inject.Inject
 
 /**
@@ -294,14 +294,6 @@ class BackgroundConnectionService : Service() {
     private fun releaseWifiLock() {
         wifiLock?.let { if (it.isHeld) it.release() }
         wifiLock = null
-    }
-
-    private fun formatDuration(ms: Long): String {
-        val totalSeconds = ms / 1000
-        val hours = totalSeconds / 3600
-        val minutes = (totalSeconds % 3600) / 60
-        val seconds = totalSeconds % 60
-        return String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds)
     }
 
     /**

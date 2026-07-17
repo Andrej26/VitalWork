@@ -31,7 +31,7 @@ class NetworkChecker @Inject constructor(
     /**
      * Checks if the device has WiFi or Ethernet connectivity (LAN).
      * Does NOT check for internet access — only local network availability,
-     * since the VR headset is on the same local network.
+     * since the peer device is on the same local network.
      */
     fun isLanAvailable(): Boolean {
         val network = cm.activeNetwork ?: return false
@@ -42,21 +42,5 @@ class NetworkChecker @Inject constructor(
 
     private fun updateLanState() {
         _lanAvailable.value = isLanAvailable()
-    }
-
-    /**
-     * The device's IPv4 address on the active LAN (Wi-Fi/Ethernet), or null if unavailable.
-     * Used by the VR UDP beacon to advertise where the Quest should POST. Read fresh each tick
-     * so it survives a DHCP change. Returns the first site-local IPv4 link address on the active
-     * network's link properties.
-     */
-    fun localIpv4(): String? {
-        val network = cm.activeNetwork ?: return null
-        val linkProps = cm.getLinkProperties(network) ?: return null
-        return linkProps.linkAddresses
-            .map { it.address }
-            .filterIsInstance<java.net.Inet4Address>()
-            .firstOrNull { !it.isLoopbackAddress && it.isSiteLocalAddress }
-            ?.hostAddress
     }
 }

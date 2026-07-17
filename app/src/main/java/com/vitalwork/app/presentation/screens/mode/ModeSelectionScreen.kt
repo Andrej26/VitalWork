@@ -25,8 +25,8 @@ import com.vitalwork.app.presentation.screens.home.components.PrimaryActionButto
 
 /**
  * First-launch picker for the device's link role. Persists the choice (so later launches skip
- * straight to Home) and reports it so navigation can land on Home in the chosen mode. Also reachable
- * later from Home to switch modes.
+ * straight to Home) and reports it so navigation can land on Home in the chosen mode. Later mode
+ * changes are made in Settings.
  */
 @Composable
 fun ModeSelectionScreen(
@@ -56,7 +56,7 @@ fun ModeSelectionScreen(
                 )
                 Text(
                     text = "Pick how this device participates in the device-to-device link. " +
-                        "You can change it later from the home screen.",
+                        "You can change it later in Settings.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,

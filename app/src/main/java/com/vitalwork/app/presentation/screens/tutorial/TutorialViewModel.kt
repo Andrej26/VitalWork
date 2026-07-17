@@ -54,8 +54,7 @@ class TutorialViewModel @Inject constructor(
 
     /**
      * Total tutorial slides — must match the slide list in TutorialScreen (1 welcome + 3 heart-rate
-     * + 4 respiration + 4 galaxy-watch + 1 complete = 13). Used to bound step navigation. The VR phase
-     * was removed.
+     * + 4 respiration + 4 galaxy-watch + 1 complete = 13). Used to bound step navigation.
      */
     val totalSteps: Int = 13
 

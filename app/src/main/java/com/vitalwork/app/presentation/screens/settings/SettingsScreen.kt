@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.vitalwork.app.data.link.PeerRole
 
 /**
  * Per-device settings. The device prefix (A/B/C/D) tags every participant code (`A-001`) and session
@@ -34,6 +35,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
  * Rule: **both devices of a pair (server + client) use the same letter**; different pairs use
  * different letters, so codes don't collide and each client only links to its own server. Operators
  * must agree beforehand which letter each pair owns.
+ *
+ * Also hosts the device-link mode (Server/Client) — the same choice as the first-launch picker;
+ * Home re-reads it on resume, so switching here re-shapes Home immediately on return.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,6 +46,7 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val devicePrefix by viewModel.devicePrefix.collectAsState()
+    val deviceMode by viewModel.deviceMode.collectAsState()
 
     Scaffold(
         topBar = {
@@ -114,6 +119,49 @@ fun SettingsScreen(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
+                }
+            }
+
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "Device mode",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "How this device participates in the device-to-device link. " +
+                            "The Server hosts the link and watches the paired device; the Client " +
+                            "runs the full operator app and connects to its Server. The home " +
+                            "screen changes to match the selected mode.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+
+                    val modes = listOf(PeerRole.SERVER to "Server", PeerRole.CLIENT to "Client")
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        modes.forEachIndexed { index, (role, label) ->
+                            SegmentedButton(
+                                selected = role == deviceMode,
+                                onClick = { viewModel.onModeSelected(role) },
+                                shape = SegmentedButtonDefaults.itemShape(
+                                    index = index,
+                                    count = modes.size
+                                )
+                            ) {
+                                Text(label)
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -61,10 +61,8 @@ fun HomeScreen(
     onNavigateToSessions: () -> Unit,
     onNavigateToParticipantEntry: () -> Unit,
     onNavigateToSessionActive: (Long) -> Unit,
-    @Suppress("UNUSED_PARAMETER") onNavigateToSessionReview: (Long) -> Unit,
     onNavigateToLinkServer: () -> Unit,
     onNavigateToLinkClient: () -> Unit,
-    onNavigateToModeSelection: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val activeSession by viewModel.activeSession.collectAsState()
@@ -190,7 +188,8 @@ fun HomeScreen(
                 )
 
                 // Server mode is intentionally bare: the host device only ever needs to start
-                // hosting, so we show just "Connect as Server" (+ the Change Mode escape hatch).
+                // hosting, so we show just "Connect as Server" (+ Settings, which hosts the
+                // device-mode switch).
                 if (deviceMode == PeerRole.SERVER) {
                     PrimaryActionButton(
                         title = "Connect as Server",
@@ -248,20 +247,18 @@ fun HomeScreen(
 
                 HorizontalDivider()
 
-                // Change Mode lives in the small-icon row alongside Sensors/Tutorial/Settings.
-                // Sensors/Tutorial are operator-only, but Settings carries the device prefix (A–D)
-                // that now also scopes the link to one pair, so the server needs it too.
+                // Sensors/Tutorial are operator-only; Settings is shown in both modes — it carries
+                // the device prefix (A–D) that scopes the link to one pair, and the device-mode
+                // (Server/Client) switch.
                 if (deviceMode == PeerRole.SERVER) {
                     SecondaryNavRow(
-                        onChangeMode = onNavigateToModeSelection,
                         onSettings = onNavigateToSettings
                     )
                 } else {
                     SecondaryNavRow(
-                        onChangeMode = onNavigateToModeSelection,
+                        onSettings = onNavigateToSettings,
                         onSensors = onNavigateToSensors,
-                        onTutorial = onNavigateToTutorial,
-                        onSettings = onNavigateToSettings
+                        onTutorial = onNavigateToTutorial
                     )
                 }
             }

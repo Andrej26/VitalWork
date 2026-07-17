@@ -1,10 +1,9 @@
 ﻿package com.vitalwork.app.data.export
 
 /**
- * Persists a completed test to a long-term destination.
- *
- * Today: local export to Documents (see [SessionExportService]).
- * Future: HTTP upload to the VitalWork web server.
+ * Uploads a completed session to the VitalWork server. Implemented by
+ * [com.vitalwork.app.data.export.upload.SessionHttpUploader]; the local Documents export is the
+ * separate [SessionExporter] (see [SessionExportService]).
  */
 interface SessionUploader {
     suspend fun upload(sessionId: Long): Result<String>
