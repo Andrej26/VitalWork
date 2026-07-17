@@ -47,6 +47,7 @@ import com.vitalwork.app.data.system.SystemReadinessChecker
 import com.vitalwork.app.presentation.components.ReadinessWarningCard
 import com.vitalwork.app.presentation.components.connectionStatusColor
 import com.vitalwork.app.presentation.components.WatchBatteryWarningCard
+import com.vitalwork.app.presentation.components.WatermarkedBackground
 import com.vitalwork.app.presentation.components.onPermissionDenied
 import com.vitalwork.app.service.BatteryOptimizationHelper
 import com.vitalwork.app.presentation.screens.home.components.PrimaryActionButton
@@ -140,126 +141,127 @@ fun HomeScreen(
             )
         }
     ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .verticalScroll(rememberScrollState()),
-            contentAlignment = Alignment.Center
-        ) {
-            val currentActive = activeSession
+        WatermarkedBackground(modifier = Modifier.padding(paddingValues)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState()),
+                contentAlignment = Alignment.Center
+            ) {
+                val currentActive = activeSession
 
-            // While a session is active, tick once a second so the button shows live elapsed time.
-            var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
-            LaunchedEffect(currentActive?.id) {
-                if (currentActive != null) {
-                    while (true) {
-                        nowMs = System.currentTimeMillis()
-                        delay(1000L)
+                // While a session is active, tick once a second so the button shows live elapsed time.
+                var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+                LaunchedEffect(currentActive?.id) {
+                    if (currentActive != null) {
+                        while (true) {
+                            nowMs = System.currentTimeMillis()
+                            delay(1000L)
+                        }
                     }
                 }
-            }
-            val elapsedLabel = currentActive?.let { formatElapsed(nowMs - it.startedAt) }
+                val elapsedLabel = currentActive?.let { formatElapsed(nowMs - it.startedAt) }
 
-            Column(
-                modifier = Modifier
-                    .widthIn(max = 560.dp)
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                ReadinessWarningCard(
-                    missing = missingPrerequisites,
-                    onFix = onFix
-                )
-
-                WatchBatteryWarningCard(
-                    alert = watchBatteryAlert,
-                    level = watchBatteryLevel
-                )
-
-                // A link runs in one role at a time: show the live status dot on that role's button,
-                // gray on the other. Same gray/green indicator the sensors use.
-                val serverDotColor = connectionStatusColor(
-                    if (linkActiveRole == PeerRole.SERVER) linkConnectionState else ConnectionState.DISCONNECTED
-                )
-                val clientDotColor = connectionStatusColor(
-                    if (linkActiveRole == PeerRole.CLIENT) linkConnectionState else ConnectionState.DISCONNECTED
-                )
-
-                // Server mode is intentionally bare: the host device only ever needs to start
-                // hosting, so we show just "Connect as Server" (+ Settings, which hosts the
-                // device-mode switch).
-                if (deviceMode == PeerRole.SERVER) {
-                    PrimaryActionButton(
-                        title = "Connect as Server",
-                        subtitle = "Host the device link (other device connects)",
-                        onClick = onNavigateToLinkServer,
-                        icon = Icons.Default.Wifi,
-                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                        trailingDotColor = serverDotColor
-                    )
-                } else {
-                    // Client mode (and the unpicked state) shows the full operator home, minus the
-                    // "Connect as Server" button.
-                    PrimaryActionButton(
-                        title = if (currentActive != null) "Resume Active Session" else "Start New Session",
-                        subtitle = elapsedLabel,
-                        enabled = !isStarting,
-                        containerColor = if (currentActive != null) ActiveSessionOrange
-                            else MaterialTheme.colorScheme.primary,
-                        contentColor = if (currentActive != null) Color.White
-                            else MaterialTheme.colorScheme.onPrimary,
-                        onClick = {
-                            if (currentActive != null) {
-                                onNavigateToSessionActive(currentActive.id)
-                            } else {
-                                viewModel.beginSession(
-                                    onResumeActive = onNavigateToSessionActive,
-                                    onStartNewParticipantFlow = onNavigateToParticipantEntry
-                                )
-                            }
-                        }
+                Column(
+                    modifier = Modifier
+                        .widthIn(max = 560.dp)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    ReadinessWarningCard(
+                        missing = missingPrerequisites,
+                        onFix = onFix
                     )
 
-                    if (deviceMode == PeerRole.CLIENT) {
+                    WatchBatteryWarningCard(
+                        alert = watchBatteryAlert,
+                        level = watchBatteryLevel
+                    )
+
+                    // A link runs in one role at a time: show the live status dot on that role's button,
+                    // gray on the other. Same gray/green indicator the sensors use.
+                    val serverDotColor = connectionStatusColor(
+                        if (linkActiveRole == PeerRole.SERVER) linkConnectionState else ConnectionState.DISCONNECTED
+                    )
+                    val clientDotColor = connectionStatusColor(
+                        if (linkActiveRole == PeerRole.CLIENT) linkConnectionState else ConnectionState.DISCONNECTED
+                    )
+
+                    // Server mode is intentionally bare: the host device only ever needs to start
+                    // hosting, so we show just "Connect as Server" (+ Settings, which hosts the
+                    // device-mode switch).
+                    if (deviceMode == PeerRole.SERVER) {
                         PrimaryActionButton(
-                            title = "Connect as Client",
-                            subtitle = "Find and connect to a hosting device",
-                            onClick = onNavigateToLinkClient,
-                            icon = Icons.Default.WifiFind,
+                            title = "Connect as Server",
+                            subtitle = "Host the device link (other device connects)",
+                            onClick = onNavigateToLinkServer,
+                            icon = Icons.Default.Wifi,
                             containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                             contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                            trailingDotColor = clientDotColor
+                            trailingDotColor = serverDotColor
+                        )
+                    } else {
+                        // Client mode (and the unpicked state) shows the full operator home, minus the
+                        // "Connect as Server" button.
+                        PrimaryActionButton(
+                            title = if (currentActive != null) "Resume Active Session" else "Start New Session",
+                            subtitle = elapsedLabel,
+                            enabled = !isStarting,
+                            containerColor = if (currentActive != null) ActiveSessionOrange
+                                else MaterialTheme.colorScheme.primary,
+                            contentColor = if (currentActive != null) Color.White
+                                else MaterialTheme.colorScheme.onPrimary,
+                            onClick = {
+                                if (currentActive != null) {
+                                    onNavigateToSessionActive(currentActive.id)
+                                } else {
+                                    viewModel.beginSession(
+                                        onResumeActive = onNavigateToSessionActive,
+                                        onStartNewParticipantFlow = onNavigateToParticipantEntry
+                                    )
+                                }
+                            }
+                        )
+
+                        if (deviceMode == PeerRole.CLIENT) {
+                            PrimaryActionButton(
+                                title = "Connect as Client",
+                                subtitle = "Find and connect to a hosting device",
+                                onClick = onNavigateToLinkClient,
+                                icon = Icons.Default.WifiFind,
+                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                                trailingDotColor = clientDotColor
+                            )
+                        }
+
+                        PrimaryActionButton(
+                            title = "Completed Sessions",
+                            subtitle = "Browse and export past sessions",
+                            onClick = onNavigateToSessions,
+                            icon = Icons.Default.Folder,
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                         )
                     }
 
-                    PrimaryActionButton(
-                        title = "Completed Sessions",
-                        subtitle = "Browse and export past sessions",
-                        onClick = onNavigateToSessions,
-                        icon = Icons.Default.Folder,
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                }
+                    HorizontalDivider()
 
-                HorizontalDivider()
-
-                // Sensors/Tutorial are operator-only; Settings is shown in both modes — it carries
-                // the device prefix (A–D) that scopes the link to one pair, and the device-mode
-                // (Server/Client) switch.
-                if (deviceMode == PeerRole.SERVER) {
-                    SecondaryNavRow(
-                        onSettings = onNavigateToSettings
-                    )
-                } else {
-                    SecondaryNavRow(
-                        onSettings = onNavigateToSettings,
-                        onSensors = onNavigateToSensors,
-                        onTutorial = onNavigateToTutorial
-                    )
+                    // Sensors/Tutorial are operator-only; Settings is shown in both modes — it carries
+                    // the device prefix (A–D) that scopes the link to one pair, and the device-mode
+                    // (Server/Client) switch.
+                    if (deviceMode == PeerRole.SERVER) {
+                        SecondaryNavRow(
+                            onSettings = onNavigateToSettings
+                        )
+                    } else {
+                        SecondaryNavRow(
+                            onSettings = onNavigateToSettings,
+                            onSensors = onNavigateToSensors,
+                            onTutorial = onNavigateToTutorial
+                        )
+                    }
                 }
             }
         }
