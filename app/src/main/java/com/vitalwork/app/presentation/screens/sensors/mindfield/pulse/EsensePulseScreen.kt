@@ -72,6 +72,7 @@ import com.vitalwork.app.presentation.screens.sensors.components.BleServiceExplo
 import com.vitalwork.app.presentation.screens.sensors.components.HeartRateDisplay
 import com.vitalwork.app.presentation.screens.sensors.components.RrIntervalCard
 import kotlinx.coroutines.launch
+import com.vitalwork.app.presentation.components.WatermarkedBackground
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -102,10 +103,12 @@ fun EsensePulseScreen(
             )
         }
     ) { paddingValues ->
-        EsensePulseContent(
-            viewModel = viewModel,
-            modifier = Modifier.padding(paddingValues)
-        )
+        WatermarkedBackground {
+            EsensePulseContent(
+                viewModel = viewModel,
+                modifier = Modifier.padding(paddingValues)
+            )
+        }
     }
 }
 

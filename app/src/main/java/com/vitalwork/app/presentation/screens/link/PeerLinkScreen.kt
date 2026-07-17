@@ -58,6 +58,7 @@ import org.webrtc.EglBase
 import org.webrtc.RendererCommon
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
+import com.vitalwork.app.presentation.components.WatermarkedBackground
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -119,59 +120,73 @@ fun PeerLinkScreen(
             )
         }
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            if (!batteryExempt) {
-                BatteryReminderCard(
-                    onAllow = { BatteryOptimizationHelper.openExemptionSettings(context) }
-                )
-            }
+        WatermarkedBackground {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                if (!batteryExempt) {
+                    BatteryReminderCard(
+                        onAllow = { BatteryOptimizationHelper.openExemptionSettings(context) }
+                    )
+                }
 
-            StatusCard(role = role, connectionState = connectionState, peerLabel = peerLabel)
+                StatusCard(role = role, connectionState = connectionState, peerLabel = peerLabel)
 
-            if (role == PeerRole.SERVER) {
-                ScreenMonitorCard(
-                    // While viewing, let the card grow to fill the screen so the mirror is as large
-                    // as possible; collapse to natural height when there's nothing to show.
-                    modifier = if (remoteVideoTrack != null) Modifier.weight(1f) else Modifier,
-                    connected = connectionState == ConnectionState.CONNECTED,
-                    shareState = shareState,
-                    remoteVideoTrack = remoteVideoTrack,
-                    eglBase = viewModel.eglBase,
-                    onView = viewModel::requestScreen,
-                    onStop = viewModel::stopShare
-                )
-            } else if (shareState == ShareState.SHARING) {
-                SharingCard(onStop = viewModel::stopShare)
-            }
+                if (role == PeerRole.SERVER) {
+                    ScreenMonitorCard(
+                        // While viewing, let the card grow to fill the screen so the mirror is as large
+                        // as possible; collapse to natural height when there's nothing to show.
+                        modifier = if (remoteVideoTrack != null) Modifier.weight(1f) else Modifier,
+                        connected = connectionState == ConnectionState.CONNECTED,
+                        shareState = shareState,
+                        remoteVideoTrack = remoteVideoTrack,
+                        eglBase = viewModel.eglBase,
+                        onView = viewModel::requestScreen,
+                        onStop = viewModel::stopShare
+                    )
+                } else if (shareState == ShareState.SHARING) {
+                    SharingCard(onStop = viewModel::stopShare)
+                }
 
-            if (role == PeerRole.CLIENT && connectionState != ConnectionState.CONNECTED) {
-                DiscoveredDevicesCard(devices = devices, onSelect = viewModel::onDeviceSelected)
-            }
+                if (role == PeerRole.CLIENT && connectionState != ConnectionState.CONNECTED) {
+                    DiscoveredDevicesCard(devices = devices, onSelect = viewModel::onDeviceSelected)
+                }
 
-            if (role == PeerRole.SERVER) {
-                // Server is started manually: Connect to host, Disconnect to stop.
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Button(
-                        onClick = viewModel::connect,
-                        enabled = !isActive,
-                        modifier = Modifier.weight(1f)
+                if (role == PeerRole.SERVER) {
+                    // Server is started manually: Connect to host, Disconnect to stop.
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(Icons.Default.Link, contentDescription = null)
-                        Text("  Connect")
+                        Button(
+                            onClick = viewModel::connect,
+                            enabled = !isActive,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Link, contentDescription = null)
+                            Text("  Connect")
+                        }
+                        OutlinedButton(
+                            onClick = viewModel::disconnect,
+                            enabled = isActive,
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Icon(Icons.Default.LinkOff, contentDescription = null)
+                            Text("  Disconnect")
+                        }
                     }
+                } else if (isActive) {
+                    // Client connects by tapping a discovered device; only needs Disconnect.
                     OutlinedButton(
                         onClick = viewModel::disconnect,
-                        enabled = isActive,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = MaterialTheme.colorScheme.error
                         )
@@ -179,18 +194,6 @@ fun PeerLinkScreen(
                         Icon(Icons.Default.LinkOff, contentDescription = null)
                         Text("  Disconnect")
                     }
-                }
-            } else if (isActive) {
-                // Client connects by tapping a discovered device; only needs Disconnect.
-                OutlinedButton(
-                    onClick = viewModel::disconnect,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    )
-                ) {
-                    Icon(Icons.Default.LinkOff, contentDescription = null)
-                    Text("  Disconnect")
                 }
             }
         }

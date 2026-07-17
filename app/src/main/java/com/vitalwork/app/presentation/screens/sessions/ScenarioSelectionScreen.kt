@@ -33,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.vitalwork.app.presentation.screens.sessions.components.EndSessionWatchDialog
+import com.vitalwork.app.presentation.components.WatermarkedBackground
 
 /**
  * Scenario picker that doubles as the session's home/hub: one vertically-centered button per
@@ -103,52 +104,54 @@ fun ScenarioSelectionScreen(
             )
         }
     ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = 24.dp)
-        ) {
-            // Five scenario buttons, vertically centered.
-            Column(
+        WatermarkedBackground {
+            Box(
                 modifier = Modifier
-                    .align(Alignment.Center)
-                    .widthIn(max = 480.dp)
-                    .fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(horizontal = 24.dp)
             ) {
-                com.vitalwork.app.data.db.ScenarioCode.entries.forEachIndexed { index, code ->
-                    Button(
-                        onClick = { onScenarioSelected(index + 1) },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = code.displayName,
-                            style = MaterialTheme.typography.titleMedium
-                        )
+                // Five scenario buttons, vertically centered.
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .widthIn(max = 480.dp)
+                        .fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    com.vitalwork.app.data.db.ScenarioCode.entries.forEachIndexed { index, code ->
+                        Button(
+                            onClick = { onScenarioSelected(index + 1) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = code.displayName,
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
                     }
                 }
-            }
 
-            // End Session & Save, pinned to the bottom of the hub.
-            Button(
-                onClick = { showEndSessionConfirmation = true },
-                enabled = !isEndingSession,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .widthIn(max = 480.dp)
-                    .fillMaxWidth()
-                    .padding(bottom = 24.dp)
-            ) {
-                if (isEndingSession) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
+                // End Session & Save, pinned to the bottom of the hub.
+                Button(
+                    onClick = { showEndSessionConfirmation = true },
+                    enabled = !isEndingSession,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .widthIn(max = 480.dp)
+                        .fillMaxWidth()
+                        .padding(bottom = 24.dp)
+                ) {
+                    if (isEndingSession) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    Text("End Session & Save")
                 }
-                Text("End Session & Save")
             }
         }
     }

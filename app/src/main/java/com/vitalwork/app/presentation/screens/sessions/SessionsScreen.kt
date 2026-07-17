@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.vitalwork.app.presentation.screens.sessions.components.ActiveSessionBanner
 import com.vitalwork.app.presentation.screens.sessions.components.SessionCard
+import com.vitalwork.app.presentation.components.WatermarkedBackground
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -78,83 +79,85 @@ fun SessionsScreen(
             )
         }
     ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            uiState.activeSession?.let { activeSession ->
-                ActiveSessionBanner(
-                    sessionCode = activeSession.sessionCode,
-                    duration = uiState.activeSessionDuration,
-                    heartRate = uiState.activeSessionHeartRate,
-                    isRecording = uiState.isRecording,
-                    onResume = { onOpenactiveSession(activeSession.id) },
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                )
-            }
-
-            if (uiState.sessions.isEmpty() && !uiState.isLoading) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = "No completed sessions yet",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Start a session from the home screen to see it here",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+        WatermarkedBackground {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+            ) {
+                uiState.activeSession?.let { activeSession ->
+                    ActiveSessionBanner(
+                        sessionCode = activeSession.sessionCode,
+                        duration = uiState.activeSessionDuration,
+                        heartRate = uiState.activeSessionHeartRate,
+                        isRecording = uiState.isRecording,
+                        onResume = { onOpenactiveSession(activeSession.id) },
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
                 }
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    item {
-                        Text(
-                            text = "${uiState.sessions.size} session${if (uiState.sessions.size != 1) "s" else ""}",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        if (uiState.pendingUploadCount > 0) {
+
+                if (uiState.sessions.isEmpty() && !uiState.isLoading) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
                             Text(
-                                text = "${uiState.pendingUploadCount} pending upload",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error
+                                text = "No completed sessions yet",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Start a session from the home screen to see it here",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        Text(
-                            text = "All times UTC",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                     }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        item {
+                            Text(
+                                text = "${uiState.sessions.size} session${if (uiState.sessions.size != 1) "s" else ""}",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (uiState.pendingUploadCount > 0) {
+                                Text(
+                                    text = "${uiState.pendingUploadCount} pending upload",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
+                            Text(
+                                text = "All times UTC",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
 
-                    items(uiState.sessions, key = { it.id }) { session ->
-                        SessionCard(
-                            session = session,
-                            onClick = { onOpenSession(session.id) },
-                            isUploading = session.id in uploadingIds,
-                            onUpload = { viewModel.uploadSession(session.id) }
-                        )
-                    }
+                        items(uiState.sessions, key = { it.id }) { session ->
+                            SessionCard(
+                                session = session,
+                                onClick = { onOpenSession(session.id) },
+                                isUploading = session.id in uploadingIds,
+                                onUpload = { viewModel.uploadSession(session.id) }
+                            )
+                        }
 
-                    item {
-                        Spacer(modifier = Modifier.height(80.dp))
+                        item {
+                            Spacer(modifier = Modifier.height(80.dp))
+                        }
                     }
                 }
             }

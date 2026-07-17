@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.vitalwork.app.data.link.PeerRole
 import com.vitalwork.app.presentation.screens.home.components.PrimaryActionButton
+import com.vitalwork.app.presentation.components.WatermarkedBackground
 
 /**
  * First-launch picker for the device's link role. Persists the choice (so later launches skip
@@ -34,58 +35,60 @@ fun ModeSelectionScreen(
     viewModel: ModeSelectionViewModel = hiltViewModel()
 ) {
     Scaffold { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
+        WatermarkedBackground {
+            Box(
                 modifier = Modifier
-                    .widthIn(max = 560.dp)
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .fillMaxSize()
+                    .padding(paddingValues),
+                contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "Choose this device's mode",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    textAlign = TextAlign.Center
-                )
-                Text(
-                    text = "Pick how this device participates in the device-to-device link. " +
-                        "You can change it later in Settings.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
+                Column(
+                    modifier = Modifier
+                        .widthIn(max = 560.dp)
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Choose this device's mode",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        text = "Pick how this device participates in the device-to-device link. " +
+                            "You can change it later in Settings.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
 
-                PrimaryActionButton(
-                    title = "Server",
-                    subtitle = "Host the device link (other device connects)",
-                    icon = Icons.Default.Wifi,
-                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                    onClick = {
-                        viewModel.selectMode(PeerRole.SERVER)
-                        onModeSelected()
-                    }
-                )
+                    PrimaryActionButton(
+                        title = "Server",
+                        subtitle = "Host the device link (other device connects)",
+                        icon = Icons.Default.Wifi,
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                        onClick = {
+                            viewModel.selectMode(PeerRole.SERVER)
+                            onModeSelected()
+                        }
+                    )
 
-                PrimaryActionButton(
-                    title = "Client",
-                    subtitle = "Find and connect to a hosting device",
-                    icon = Icons.Default.WifiFind,
-                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                    onClick = {
-                        viewModel.selectMode(PeerRole.CLIENT)
-                        onModeSelected()
-                    }
-                )
+                    PrimaryActionButton(
+                        title = "Client",
+                        subtitle = "Find and connect to a hosting device",
+                        icon = Icons.Default.WifiFind,
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                        onClick = {
+                            viewModel.selectMode(PeerRole.CLIENT)
+                            onModeSelected()
+                        }
+                    )
+                }
             }
         }
     }

@@ -118,6 +118,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.vitalwork.app.ui.theme.WarningAmber
 import com.vitalwork.app.ui.theme.ErrorRed
+import com.vitalwork.app.presentation.components.WatermarkedBackground
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -456,215 +457,217 @@ fun SessionControlScreen(
             )
         }
     ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(12.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // Readiness backup banner (only shows when a prerequisite is missing)
-            ReadinessWarningCard(
-                missing = missingPrerequisites,
-                onFix = onReadinessFix
-            )
-
-            // Low signal warning banner
-            if (respirationLowSignalWarning != LowSignalWarning.NONE) {
-                LowSignalWarningBanner(warningLevel = respirationLowSignalWarning)
-            }
-
-            // Sensor-lost-during-recording warning banner
-            if (recordingUiState.isRecording) {
-                val lostSensors = buildList {
-                    if (recordingUiState.heartRateWasEnabled && !recordingUiState.isHeartRateConnected) add("eSense Pulse")
-                    if (recordingUiState.respirationWasEnabled && !recordingUiState.isRespirationConnected) add("eSense Respiration")
-                }
-                if (lostSensors.isNotEmpty()) {
-                    SensorLostDuringRecordingBanner(sensorNames = lostSensors)
-                }
-            }
-
-            // Galaxy Watch low-battery warning — surfaced before/while a session runs so the operator
-            // doesn't start a long session on a dying watch (and risk losing the End-Session flush).
-            if (watchBatteryAlert != WatchBatteryAlert.NONE && watchBatteryLevel != null) {
-                WatchBatteryWarningBanner(
-                    level = watchBatteryLevel!!,
-                    critical = watchBatteryAlert == WatchBatteryAlert.CRITICAL
-                )
-            }
-
-            // Galaxy Watch link-lost warning — the watch buffers EDA locally, so data isn't lost on a
-            // brief drop; warn so the operator restores Bluetooth (don't pause the session).
-            if (watchBatteryLevel != null && watchConnectionState != ConnectionState.CONNECTED) {
-                WatchLinkLostBanner()
-            }
-
-            // Hero auto-return countdown: a scenario run's whole purpose is to hand back to the
-            // scenario-selection hub after the scenario's full duration (A/E 10 min, B/C 20 min,
-            // D 30 min), so it's the focal point at the top. When the countdown ends we stop+finalize
-            // the recording first, then return to the hub. Hidden in setup mode, which is just a
-            // sensor-connection gate before any scenario is picked.
-            if (!setupMode) {
-                ReturnCountdownHero(
-                    seconds = viewModel.countdownSeconds,
-                    startElapsedMs = recordingUiState.recordingStartElapsedMs,
-                    onFinished = { viewModel.finishScenario(onCountdownFinished) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp)
-                )
-            }
-
-            // Mindfield eSense device group
-            val eSenseConnectionState = when {
-                pulseSensorState == ConnectionState.CONNECTED ||
-                        respirationConnectionState == ConnectionState.CONNECTED -> ConnectionState.CONNECTED
-                pulseSensorState == ConnectionState.CONNECTING ||
-                        respirationConnectionState == ConnectionState.CONNECTING -> ConnectionState.CONNECTING
-                pulseSensorState == ConnectionState.ERROR ||
-                        respirationConnectionState == ConnectionState.ERROR -> ConnectionState.ERROR
-                else -> ConnectionState.DISCONNECTED
-            }
-            DeviceSensorGroup(
-                deviceName = "Mindfield eSense",
-                connectionState = eSenseConnectionState,
-                footer = if (recordingUiState.isHeartRateConnected || recordingUiState.heartRateWasEnabled) {
-                    {
-                        PulseRrRow(
-                            latestValue = pulseLatestRr,
-                            sampleCount = recordingUiState.esenseRrIntervalSampleCount,
-                            connectionState = pulseSensorState
-                        )
-                    }
-                } else null
+        WatermarkedBackground {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(12.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                LiveSensorCard(
-                    icon = Icons.Default.FavoriteBorder,
-                    label = "Heart Rate",
-                    value = when {
-                        heartRate != null -> heartRate.toString()
-                        pulseSensorState == ConnectionState.CONNECTED -> "..."
-                        else -> "--"
-                    },
-                    unit = "BPM",
-                    connectionState = pulseSensorState,
-                    sampleCount = recordingUiState.heartRateSampleCount,
-                    animate = heartRate != null && heartRate!! > 0,
-                    onClick = { viewModel.onHeartRateCardClick() },
-                    batteryLevel = bleBatteryLevel,
-                    compact = true,
-                    modifier = Modifier.weight(1f)
+                // Readiness backup banner (only shows when a prerequisite is missing)
+                ReadinessWarningCard(
+                    missing = missingPrerequisites,
+                    onFix = onReadinessFix
                 )
-                LiveSensorCard(
-                    icon = Icons.Default.Mic,
-                    label = "Respiration",
-                    value = if (respirationConnectionState == ConnectionState.CONNECTED)
-                        String.format(java.util.Locale.US, "%.1f", respirationRate)
-                    else "--",
-                    unit = "RA",
-                    connectionState = respirationConnectionState,
-                    sampleCount = recordingUiState.respirationSampleCount,
-                    onClick = { viewModel.onRespirationCardClick(context) },
-                    compact = true,
-                    modifier = Modifier.weight(1f)
-                )
-            }
 
-            // Galaxy Watch 8 device group — live HR (BPM) + EDA (µS) cards with an IBI footer. The watch
-            // streams HR/IBI/EDA over the Data Layer; all three are captured/sliced into scenarios on the
-            // tablet. Header label reflects the finer link status so an expected Doze gap reads as
-            // "buffering", not "Disconnected" (consistent with the Sensors → Galaxy Watch screen).
-            // IBI capture pauses while the wearer moves, so its footer value is gated on freshness.
-            val watchConnected = watchConnectionState == ConnectionState.CONNECTED
-            val ibiFresh = watchIbi?.let {
-                System.currentTimeMillis() - it.timestampMs < WATCH_IBI_STALE_MS
-            } == true
-            DeviceSensorGroup(
-                deviceName = "Galaxy Watch 8",
-                connectionState = watchConnectionState,
-                batteryLevel = watchBatteryLevel,
-                statusLabel = watchLinkStatusLabel(watchConnectionState, watchLinkStatus),
-                // The watch needs no pairing (the Wave app manages that) — it only needs the phone's
-                // Bluetooth on for the Data Layer to run over direct BT. So a tap anywhere on the group
-                // enables Bluetooth when it's off, otherwise nudges the operator to start tracking.
-                onClick = {
-                    if (!bluetoothEnabled) {
-                        @Suppress("DEPRECATION")
-                        enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
-                    } else {
-                        scope.launch {
-                            snackbarHostState.showSnackbar(
-                                message = "Bluetooth is on. Make sure the watch's Wave app is " +
-                                    "running and tracking.",
-                                duration = SnackbarDuration.Short
+                // Low signal warning banner
+                if (respirationLowSignalWarning != LowSignalWarning.NONE) {
+                    LowSignalWarningBanner(warningLevel = respirationLowSignalWarning)
+                }
+
+                // Sensor-lost-during-recording warning banner
+                if (recordingUiState.isRecording) {
+                    val lostSensors = buildList {
+                        if (recordingUiState.heartRateWasEnabled && !recordingUiState.isHeartRateConnected) add("eSense Pulse")
+                        if (recordingUiState.respirationWasEnabled && !recordingUiState.isRespirationConnected) add("eSense Respiration")
+                    }
+                    if (lostSensors.isNotEmpty()) {
+                        SensorLostDuringRecordingBanner(sensorNames = lostSensors)
+                    }
+                }
+
+                // Galaxy Watch low-battery warning — surfaced before/while a session runs so the operator
+                // doesn't start a long session on a dying watch (and risk losing the End-Session flush).
+                if (watchBatteryAlert != WatchBatteryAlert.NONE && watchBatteryLevel != null) {
+                    WatchBatteryWarningBanner(
+                        level = watchBatteryLevel!!,
+                        critical = watchBatteryAlert == WatchBatteryAlert.CRITICAL
+                    )
+                }
+
+                // Galaxy Watch link-lost warning — the watch buffers EDA locally, so data isn't lost on a
+                // brief drop; warn so the operator restores Bluetooth (don't pause the session).
+                if (watchBatteryLevel != null && watchConnectionState != ConnectionState.CONNECTED) {
+                    WatchLinkLostBanner()
+                }
+
+                // Hero auto-return countdown: a scenario run's whole purpose is to hand back to the
+                // scenario-selection hub after the scenario's full duration (A/E 10 min, B/C 20 min,
+                // D 30 min), so it's the focal point at the top. When the countdown ends we stop+finalize
+                // the recording first, then return to the hub. Hidden in setup mode, which is just a
+                // sensor-connection gate before any scenario is picked.
+                if (!setupMode) {
+                    ReturnCountdownHero(
+                        seconds = viewModel.countdownSeconds,
+                        startElapsedMs = recordingUiState.recordingStartElapsedMs,
+                        onFinished = { viewModel.finishScenario(onCountdownFinished) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                    )
+                }
+
+                // Mindfield eSense device group
+                val eSenseConnectionState = when {
+                    pulseSensorState == ConnectionState.CONNECTED ||
+                            respirationConnectionState == ConnectionState.CONNECTED -> ConnectionState.CONNECTED
+                    pulseSensorState == ConnectionState.CONNECTING ||
+                            respirationConnectionState == ConnectionState.CONNECTING -> ConnectionState.CONNECTING
+                    pulseSensorState == ConnectionState.ERROR ||
+                            respirationConnectionState == ConnectionState.ERROR -> ConnectionState.ERROR
+                    else -> ConnectionState.DISCONNECTED
+                }
+                DeviceSensorGroup(
+                    deviceName = "Mindfield eSense",
+                    connectionState = eSenseConnectionState,
+                    footer = if (recordingUiState.isHeartRateConnected || recordingUiState.heartRateWasEnabled) {
+                        {
+                            PulseRrRow(
+                                latestValue = pulseLatestRr,
+                                sampleCount = recordingUiState.esenseRrIntervalSampleCount,
+                                connectionState = pulseSensorState
                             )
                         }
-                    }
-                },
-                clickHint = if (!bluetoothEnabled) "Tap to enable Bluetooth"
-                            else "Tap for connection help",
-                footer = {
-                    PulseRrRow(
-                        label = "IBI",
-                        latestValue = if (watchConnected && ibiFresh) watchIbi?.value?.toInt() else null,
-                        sampleCount = recordingUiState.watchIbiSampleCount,
-                        connectionState = watchConnectionState
-                    )
-                }
-            ) {
-                LiveSensorCard(
-                    icon = Icons.Default.FavoriteBorder,
-                    label = "Heart Rate",
-                    value = when {
-                        watchConnected && watchHeartRate != null -> watchHeartRate.toString()
-                        watchConnected -> "..."
-                        else -> "--"
-                    },
-                    unit = "BPM",
-                    connectionState = watchConnectionState,
-                    sampleCount = recordingUiState.watchHrSampleCount,
-                    animate = watchConnected && (watchHeartRate ?: 0) > 0,
-                    batteryLevel = watchBatteryLevel,
-                    compact = true,
-                    modifier = Modifier.weight(1f)
-                )
-                LiveSensorCard(
-                    icon = Icons.Default.Watch,
-                    label = "EDA",
-                    value = if (watchConnected && watchEda != null)
-                        String.format(java.util.Locale.US, "%.2f", watchEda)
-                    else "--",
-                    unit = "µS",
-                    connectionState = watchConnectionState,
-                    sampleCount = recordingUiState.edaSampleCount,
-                    batteryLevel = watchBatteryLevel,
-                    compact = true,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            // Setup mode is a one-time sensor-connection gate before any scenario is picked: confirm
-            // which sensors are connected, then proceed to the scenario hub. Scenario runs themselves
-            // record fully automatically (start on entry, stop when the countdown ends), so there are
-            // no manual recording controls — the REC badge + red border in the top bar show state.
-            if (setupMode) {
-                Button(
-                    onClick = onProceed,
-                    modifier = Modifier.fillMaxWidth()
+                    } else null
                 ) {
-                    Text("Proceed to scenarios")
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Icon(
-                        imageVector = Icons.Default.SkipNext,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
+                    LiveSensorCard(
+                        icon = Icons.Default.FavoriteBorder,
+                        label = "Heart Rate",
+                        value = when {
+                            heartRate != null -> heartRate.toString()
+                            pulseSensorState == ConnectionState.CONNECTED -> "..."
+                            else -> "--"
+                        },
+                        unit = "BPM",
+                        connectionState = pulseSensorState,
+                        sampleCount = recordingUiState.heartRateSampleCount,
+                        animate = heartRate != null && heartRate!! > 0,
+                        onClick = { viewModel.onHeartRateCardClick() },
+                        batteryLevel = bleBatteryLevel,
+                        compact = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    LiveSensorCard(
+                        icon = Icons.Default.Mic,
+                        label = "Respiration",
+                        value = if (respirationConnectionState == ConnectionState.CONNECTED)
+                            String.format(java.util.Locale.US, "%.1f", respirationRate)
+                        else "--",
+                        unit = "RA",
+                        connectionState = respirationConnectionState,
+                        sampleCount = recordingUiState.respirationSampleCount,
+                        onClick = { viewModel.onRespirationCardClick(context) },
+                        compact = true,
+                        modifier = Modifier.weight(1f)
                     )
                 }
-            }
 
-            Spacer(modifier = Modifier.height(8.dp))
+                // Galaxy Watch 8 device group — live HR (BPM) + EDA (µS) cards with an IBI footer. The watch
+                // streams HR/IBI/EDA over the Data Layer; all three are captured/sliced into scenarios on the
+                // tablet. Header label reflects the finer link status so an expected Doze gap reads as
+                // "buffering", not "Disconnected" (consistent with the Sensors → Galaxy Watch screen).
+                // IBI capture pauses while the wearer moves, so its footer value is gated on freshness.
+                val watchConnected = watchConnectionState == ConnectionState.CONNECTED
+                val ibiFresh = watchIbi?.let {
+                    System.currentTimeMillis() - it.timestampMs < WATCH_IBI_STALE_MS
+                } == true
+                DeviceSensorGroup(
+                    deviceName = "Galaxy Watch 8",
+                    connectionState = watchConnectionState,
+                    batteryLevel = watchBatteryLevel,
+                    statusLabel = watchLinkStatusLabel(watchConnectionState, watchLinkStatus),
+                    // The watch needs no pairing (the Wave app manages that) — it only needs the phone's
+                    // Bluetooth on for the Data Layer to run over direct BT. So a tap anywhere on the group
+                    // enables Bluetooth when it's off, otherwise nudges the operator to start tracking.
+                    onClick = {
+                        if (!bluetoothEnabled) {
+                            @Suppress("DEPRECATION")
+                            enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+                        } else {
+                            scope.launch {
+                                snackbarHostState.showSnackbar(
+                                    message = "Bluetooth is on. Make sure the watch's Wave app is " +
+                                        "running and tracking.",
+                                    duration = SnackbarDuration.Short
+                                )
+                            }
+                        }
+                    },
+                    clickHint = if (!bluetoothEnabled) "Tap to enable Bluetooth"
+                                else "Tap for connection help",
+                    footer = {
+                        PulseRrRow(
+                            label = "IBI",
+                            latestValue = if (watchConnected && ibiFresh) watchIbi?.value?.toInt() else null,
+                            sampleCount = recordingUiState.watchIbiSampleCount,
+                            connectionState = watchConnectionState
+                        )
+                    }
+                ) {
+                    LiveSensorCard(
+                        icon = Icons.Default.FavoriteBorder,
+                        label = "Heart Rate",
+                        value = when {
+                            watchConnected && watchHeartRate != null -> watchHeartRate.toString()
+                            watchConnected -> "..."
+                            else -> "--"
+                        },
+                        unit = "BPM",
+                        connectionState = watchConnectionState,
+                        sampleCount = recordingUiState.watchHrSampleCount,
+                        animate = watchConnected && (watchHeartRate ?: 0) > 0,
+                        batteryLevel = watchBatteryLevel,
+                        compact = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    LiveSensorCard(
+                        icon = Icons.Default.Watch,
+                        label = "EDA",
+                        value = if (watchConnected && watchEda != null)
+                            String.format(java.util.Locale.US, "%.2f", watchEda)
+                        else "--",
+                        unit = "µS",
+                        connectionState = watchConnectionState,
+                        sampleCount = recordingUiState.edaSampleCount,
+                        batteryLevel = watchBatteryLevel,
+                        compact = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                // Setup mode is a one-time sensor-connection gate before any scenario is picked: confirm
+                // which sensors are connected, then proceed to the scenario hub. Scenario runs themselves
+                // record fully automatically (start on entry, stop when the countdown ends), so there are
+                // no manual recording controls — the REC badge + red border in the top bar show state.
+                if (setupMode) {
+                    Button(
+                        onClick = onProceed,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Proceed to scenarios")
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(
+                            imageVector = Icons.Default.SkipNext,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+            }
         }
     }
     // While a scenario is recording (the auto-return countdown), make the phone safe to pocket:

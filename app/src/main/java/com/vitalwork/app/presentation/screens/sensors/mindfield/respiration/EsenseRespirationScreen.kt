@@ -71,6 +71,7 @@ import com.vitalwork.app.presentation.log.LogEntry
 import com.vitalwork.app.presentation.log.LogType
 import com.vitalwork.app.ui.theme.SuccessGreen
 import com.vitalwork.app.ui.theme.ErrorRed
+import com.vitalwork.app.presentation.components.WatermarkedBackground
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -128,73 +129,75 @@ fun EsenseRespirationScreen(
             )
         }
     ) { paddingValues ->
-        BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            val hPad = if (maxWidth >= 600.dp) 24.dp else 16.dp
-
-            Column(
+        WatermarkedBackground {
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = hPad)
+                    .padding(paddingValues)
             ) {
-                // Scrollable upper section (sensor info + controls)
+                val hPad = if (maxWidth >= 600.dp) 24.dp else 16.dp
+
                 Column(
                     modifier = Modifier
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                        .fillMaxSize()
+                        .padding(horizontal = hPad)
                 ) {
-                    Spacer(modifier = Modifier.height(8.dp))
+                    // Scrollable upper section (sensor info + controls)
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Spacer(modifier = Modifier.height(8.dp))
 
-                    // Sensor Info Card
-                    SensorInfoCard(state = uiState.state)
+                        // Sensor Info Card
+                        SensorInfoCard(state = uiState.state)
 
-                    // Low signal warning banner
-                    if (uiState.lowSignalWarning != LowSignalWarning.NONE) {
-                        LowSignalWarningBanner(warningLevel = uiState.lowSignalWarning)
+                        // Low signal warning banner
+                        if (uiState.lowSignalWarning != LowSignalWarning.NONE) {
+                            LowSignalWarningBanner(warningLevel = uiState.lowSignalWarning)
+                        }
+
+                        // Permission Card (if not granted)
+                        if (!uiState.permissionsGranted) {
+                            PermissionRequestCard(
+                                onRequestPermissions = { permissionLauncher.launch(Manifest.permission.RECORD_AUDIO) }
+                            )
+                        }
+
+                        // Sensor Control Card (only if permissions granted)
+                        if (uiState.permissionsGranted) {
+                            Text(
+                                text = "Sensor Control",
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
+
+                            BioSensorCard(
+                                sensorName = "Mindfield Respiration",
+                                state = uiState.state,
+                                rate = uiState.rate,
+                                stats = uiState.stats,
+                                unit = "RA",
+                                onToggle = viewModel::toggleConnection,
+                                showStreamData = uiState.showStreamData,
+                                onToggleStreamDisplay = viewModel::toggleStreamDisplay
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
                     }
 
-                    // Permission Card (if not granted)
-                    if (!uiState.permissionsGranted) {
-                        PermissionRequestCard(
-                            onRequestPermissions = { permissionLauncher.launch(Manifest.permission.RECORD_AUDIO) }
-                        )
-                    }
-
-                    // Sensor Control Card (only if permissions granted)
-                    if (uiState.permissionsGranted) {
-                        Text(
-                            text = "Sensor Control",
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
-
-                        BioSensorCard(
-                            sensorName = "Mindfield Respiration",
-                            state = uiState.state,
-                            rate = uiState.rate,
-                            stats = uiState.stats,
-                            unit = "RA",
-                            onToggle = viewModel::toggleConnection,
-                            showStreamData = uiState.showStreamData,
-                            onToggleStreamDisplay = viewModel::toggleStreamDisplay
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
+                    // Fixed-height log section at the bottom
+                    LogSection(
+                        logEntries = uiState.logEntries,
+                        onClearLog = viewModel::clearLog,
+                        modifier = Modifier
+                            .height(220.dp)
+                            .padding(bottom = 8.dp)
+                    )
                 }
-
-                // Fixed-height log section at the bottom
-                LogSection(
-                    logEntries = uiState.logEntries,
-                    onClearLog = viewModel::clearLog,
-                    modifier = Modifier
-                        .height(220.dp)
-                        .padding(bottom = 8.dp)
-                )
             }
         }
     }

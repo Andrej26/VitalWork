@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.vitalwork.app.data.link.PeerRole
+import com.vitalwork.app.presentation.components.WatermarkedBackground
 
 /**
  * Per-device settings. The device prefix (A/B/C/D) tags every participant code (`A-001`) and session
@@ -63,102 +64,104 @@ fun SettingsScreen(
             )
         }
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                ),
-                modifier = Modifier.fillMaxWidth()
+        WatermarkedBackground {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    ),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        text = "Device prefix",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = "This letter is added to every participant code (e.g. $devicePrefix-001) " +
-                            "and session code on this device, and links it to its pair. Both devices " +
-                            "in a set — the server and its client — use the same letter; a second " +
-                            "set uses a different letter. That way each client connects only to its " +
-                            "own server, and codes never collide. Agree beforehand which letter each " +
-                            "set owns.",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = "Device prefix",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "This letter is added to every participant code (e.g. $devicePrefix-001) " +
+                                "and session code on this device, and links it to its pair. Both devices " +
+                                "in a set — the server and its client — use the same letter; a second " +
+                                "set uses a different letter. That way each client connects only to its " +
+                                "own server, and codes never collide. Agree beforehand which letter each " +
+                                "set owns.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
 
-                    val prefixes = viewModel.devicePrefixes
-                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                        prefixes.forEachIndexed { index, prefix ->
-                            SegmentedButton(
-                                selected = prefix == devicePrefix,
-                                onClick = { viewModel.onPrefixSelected(prefix) },
-                                shape = SegmentedButtonDefaults.itemShape(
-                                    index = index,
-                                    count = prefixes.size
-                                )
-                            ) {
-                                Text(prefix)
+                        val prefixes = viewModel.devicePrefixes
+                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                            prefixes.forEachIndexed { index, prefix ->
+                                SegmentedButton(
+                                    selected = prefix == devicePrefix,
+                                    onClick = { viewModel.onPrefixSelected(prefix) },
+                                    shape = SegmentedButtonDefaults.itemShape(
+                                        index = index,
+                                        count = prefixes.size
+                                    )
+                                ) {
+                                    Text(prefix)
+                                }
                             }
                         }
+
+                        Text(
+                            text = "Selected: $devicePrefix",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
-
-                    Text(
-                        text = "Selected: $devicePrefix",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
                 }
-            }
 
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                ),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    ),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        text = "Device mode",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = "How this device participates in the device-to-device link. " +
-                            "The Server hosts the link and watches the paired device; the Client " +
-                            "runs the full operator app and connects to its Server. The home " +
-                            "screen changes to match the selected mode.",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = "Device mode",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "How this device participates in the device-to-device link. " +
+                                "The Server hosts the link and watches the paired device; the Client " +
+                                "runs the full operator app and connects to its Server. The home " +
+                                "screen changes to match the selected mode.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
 
-                    val modes = listOf(PeerRole.SERVER to "Server", PeerRole.CLIENT to "Client")
-                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                        modes.forEachIndexed { index, (role, label) ->
-                            SegmentedButton(
-                                selected = role == deviceMode,
-                                onClick = { viewModel.onModeSelected(role) },
-                                shape = SegmentedButtonDefaults.itemShape(
-                                    index = index,
-                                    count = modes.size
-                                )
-                            ) {
-                                Text(label)
+                        val modes = listOf(PeerRole.SERVER to "Server", PeerRole.CLIENT to "Client")
+                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                            modes.forEachIndexed { index, (role, label) ->
+                                SegmentedButton(
+                                    selected = role == deviceMode,
+                                    onClick = { viewModel.onModeSelected(role) },
+                                    shape = SegmentedButtonDefaults.itemShape(
+                                        index = index,
+                                        count = modes.size
+                                    )
+                                ) {
+                                    Text(label)
+                                }
                             }
                         }
                     }
