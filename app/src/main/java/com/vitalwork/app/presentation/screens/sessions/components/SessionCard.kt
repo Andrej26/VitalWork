@@ -32,6 +32,9 @@ import com.vitalwork.app.util.formatDuration
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.vitalwork.app.ui.theme.SuccessGreenDeep
+import com.vitalwork.app.ui.theme.SuccessGreen
+import com.vitalwork.app.presentation.components.OutlineCard
 
 @Composable
 internal fun SessionCard(
@@ -43,12 +46,9 @@ internal fun SessionCard(
     val dateFormat = SimpleDateFormat("MMM dd, yyyy hh:mm a", Locale.getDefault())
         .apply { timeZone = TimeFormats.UTC }
 
-    Card(
+    OutlineCard(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
+        modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
@@ -151,8 +151,8 @@ internal fun SessionStatusBadge(status: SessionStatus) {
             "Completed"
         )
         SessionStatus.UPLOADED -> Triple(
-            MaterialTheme.colorScheme.tertiaryContainer,
-            MaterialTheme.colorScheme.onTertiaryContainer,
+            SuccessGreen.copy(alpha = 0.18f),
+            SuccessGreenDeep,
             "Uploaded"
         )
     }

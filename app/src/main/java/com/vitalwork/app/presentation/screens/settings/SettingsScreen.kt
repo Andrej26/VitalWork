@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.vitalwork.app.data.link.PeerRole
 import com.vitalwork.app.presentation.components.WatermarkedBackground
+import com.vitalwork.app.presentation.components.OutlineCard
 
 /**
  * Per-device settings. The device prefix (A/B/C/D) tags every participant code (`A-001`) and session
@@ -72,10 +73,7 @@ fun SettingsScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    ),
+                OutlineCard(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
@@ -124,10 +122,7 @@ fun SettingsScreen(
                     }
                 }
 
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    ),
+                OutlineCard(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(

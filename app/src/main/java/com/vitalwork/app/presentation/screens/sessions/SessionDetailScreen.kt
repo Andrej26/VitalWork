@@ -56,6 +56,9 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import com.vitalwork.app.presentation.components.WatermarkedBackground
+import com.vitalwork.app.presentation.components.OutlineCard
+import com.vitalwork.app.ui.theme.SuccessGreen
+import com.vitalwork.app.ui.theme.SuccessGreenDeep
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -230,11 +233,8 @@ fun SessionDetailScreen(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
+                OutlineCard(
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
                         modifier = Modifier.padding(16.dp),
@@ -267,11 +267,8 @@ fun SessionDetailScreen(
                     }
                 }
 
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
+                OutlineCard(
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
                         modifier = Modifier.padding(16.dp),
@@ -369,8 +366,8 @@ private fun StatusBadge(status: SessionStatus) {
             "Completed"
         )
         SessionStatus.UPLOADED -> Triple(
-            MaterialTheme.colorScheme.tertiaryContainer,
-            MaterialTheme.colorScheme.onTertiaryContainer,
+            SuccessGreen.copy(alpha = 0.18f),
+            SuccessGreenDeep,
             "Uploaded"
         )
     }
