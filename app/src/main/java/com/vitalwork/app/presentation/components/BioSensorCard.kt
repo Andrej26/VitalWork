@@ -23,10 +23,7 @@ fun BioSensorCard(
     showStreamData: Boolean = false,
     onToggleStreamDisplay: () -> Unit = {}
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
-    ) {
+    OutlineCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -35,8 +32,7 @@ fun BioSensorCard(
             ) {
                 Text(
                     text = sensorName,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                    style = MaterialTheme.typography.titleMedium
                 )
                 // Small badge for state
                 Surface(
@@ -60,20 +56,19 @@ fun BioSensorCard(
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
                     text = String.format("%.1f", displayRate),
-                    style = MaterialTheme.typography.displayLarge,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                    style = MaterialTheme.typography.displayLarge
                 )
                 Text(
                     text = " $unit",
                     modifier = Modifier.padding(bottom = 6.dp),
-                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.weight(1f))
                 Text(
                     text = displayStats,
                     style = MaterialTheme.typography.bodySmall,
                     fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.6f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                 )
             }
 
@@ -82,17 +77,13 @@ fun BioSensorCard(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     onClick = onToggle,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                        contentColor = MaterialTheme.colorScheme.tertiaryContainer
-                    )
+                    modifier = Modifier.weight(1f)
                 ) {
                     Text(if (state == DeviceState.Disconnected) "CONNECT" else "DISCONNECT")
                 }
 
                 if (state == DeviceState.Streaming) {
-                    Button(onClick = onToggleStreamDisplay, modifier = Modifier.weight(1f)) {
+                    OutlinedButton(onClick = onToggleStreamDisplay, modifier = Modifier.weight(1f)) {
                         Text(if (showStreamData) "HIDE DATA" else "SHOW DATA")
                     }
                 }
