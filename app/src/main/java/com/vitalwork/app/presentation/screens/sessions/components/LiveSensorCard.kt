@@ -27,10 +27,9 @@ import androidx.compose.material.icons.filled.Battery4Bar
 import androidx.compose.material.icons.filled.Battery5Bar
 import androidx.compose.material.icons.filled.Battery6Bar
 import androidx.compose.material.icons.filled.BatteryFull
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -94,16 +93,15 @@ fun LiveSensorCard(
     )
 
     Box(modifier = modifier) {
-        Card(
+        Surface(
             modifier = Modifier
                 .fillMaxWidth()
                 .then(
                     if (isClickable) Modifier.clickable { onClick?.invoke() }
                     else Modifier
                 ),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
-            ),
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.surface,
             border = BorderStroke(2.dp, borderColor)
         ) {
             Column(
