@@ -62,6 +62,7 @@ import com.vitalwork.app.presentation.components.WatermarkedBackground
 import androidx.compose.material.icons.outlined.Warning
 import com.vitalwork.app.presentation.components.AlertSeverity
 import com.vitalwork.app.presentation.components.AlertCard
+import com.vitalwork.app.presentation.components.OutlineCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -226,7 +227,7 @@ private fun ScreenMonitorCard(
     onStop: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(modifier = modifier.fillMaxWidth()) {
+    OutlineCard(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 text = "Screen monitor",
@@ -301,7 +302,7 @@ private fun SharingCard(onStop: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+            containerColor = MaterialTheme.colorScheme.primaryContainer
         )
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -309,13 +310,13 @@ private fun SharingCard(onStop: () -> Unit) {
                 text = "Sharing your screen",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onTertiaryContainer
+                color = MaterialTheme.colorScheme.onPrimaryContainer
             )
             Text(
                 text = "The screen stays on (dimmed) while sharing, so the operator keeps seeing it " +
                     "even when it looks off.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onTertiaryContainer
+                color = MaterialTheme.colorScheme.onPrimaryContainer
             )
             // Dimming the backlight to near-black needs the "Modify system settings" special access.
             // Without it the screen still stays on, just at normal brightness.
@@ -325,7 +326,7 @@ private fun SharingCard(onStop: () -> Unit) {
                     text = "To dim this screen to near-black while sharing, allow \"Modify system " +
                         "settings\".",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
                 OutlinedButton(
                     onClick = { ScreenDimController.openWriteSettings(context) },
@@ -390,12 +391,7 @@ private fun StatusCard(
     connectionState: ConnectionState,
     peerLabel: String?
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
+    OutlineCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             // Gray (disconnected) / green (connected) dot — same indicator the sensors use.
             ConnectionStatusBadge(state = connectionState)
@@ -418,7 +414,7 @@ private fun DiscoveredDevicesCard(
     devices: List<PeerDevice>,
     onSelect: (PeerDevice) -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    OutlineCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 text = "Discovered peers",
