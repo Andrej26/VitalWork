@@ -320,7 +320,6 @@ com.vitalwork.app/
 │       │       ├── DeviceSensorGroup.kt
 │       │       ├── EndSessionWatchDialog.kt # end-session watch wake/transfer state machine UI
 │       │       ├── LiveSensorCard.kt
-│       │       ├── SensorSummaryCard.kt
 │       │       ├── SessionCard.kt
 │       │       └── UploadProgressDialog.kt
 │       ├── settings/                       # Device prefix (A/B/C/D) + device mode (Server/Client)
