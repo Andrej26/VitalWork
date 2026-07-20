@@ -112,7 +112,7 @@ fun AppNavigation(
             TutorialScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToSessions = {
-                    navController.navigate(Route.Sessions.route) {
+                    navController.navigate(Route.ParticipantEntry.route) {
                         popUpTo(Route.Home.route)
                     }
                 }
