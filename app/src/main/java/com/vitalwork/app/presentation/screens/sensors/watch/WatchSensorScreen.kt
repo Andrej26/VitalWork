@@ -16,7 +16,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -37,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.vitalwork.app.data.model.ConnectionState
 import com.vitalwork.app.presentation.components.BluetoothDisabledCard
+import com.vitalwork.app.presentation.components.OutlineCard
 import com.vitalwork.app.presentation.components.WatermarkedBackground
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -93,7 +93,7 @@ fun WatchSensorScreen(
                 }
 
                 // Connection status
-                Card(modifier = Modifier.fillMaxWidth()) {
+                OutlineCard(modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp)) {
                         Text("Channel", style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -120,7 +120,7 @@ fun WatchSensorScreen(
                 }
 
                 // Available trackers (what this watch can give us)
-                Card(modifier = Modifier.fillMaxWidth()) {
+                OutlineCard(modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp)) {
                         Text("Supported trackers", style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -141,7 +141,7 @@ fun WatchSensorScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
                     readings.toSortedMap().forEach { (type, r) ->
-                        Card(modifier = Modifier.fillMaxWidth()) {
+                        OutlineCard(modifier = Modifier.fillMaxWidth()) {
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(16.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,

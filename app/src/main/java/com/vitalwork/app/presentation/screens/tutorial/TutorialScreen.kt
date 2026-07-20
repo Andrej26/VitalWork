@@ -116,6 +116,7 @@ import com.vitalwork.app.ui.theme.WarningAmber
 import androidx.compose.material.icons.filled.Security
 import com.vitalwork.app.presentation.components.AlertSeverity
 import com.vitalwork.app.presentation.components.AlertCard
+import com.vitalwork.app.presentation.components.OutlineCard
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Slide data model
@@ -1257,12 +1258,7 @@ private fun WatchStatusCard(
         label = "watch_dot_color"
     )
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
+    OutlineCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1411,12 +1407,7 @@ private fun DeviceStatusCard(
         label = "dot_color"
     )
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
+    OutlineCard(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
