@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>04 — Data Flow Pipeline</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: #F5F6F7; color: #2C2C2C;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 40px 24px 56px;
+  }
+  h1 { font-size: 17px; font-weight: 700; color: #1A3A6B; letter-spacing: 0.02em; margin-bottom: 5px; text-align: center; }
+  .subtitle { font-size: 12px; color: #6B7280; margin-bottom: 36px; text-align: center; }
+
+  .col { display: flex; flex-direction: column; align-items: center; width: 480px; gap: 0; }
+
+  /* ── Sensor group ── */
+  .sensors {
+    background: #EEF6EE; border: 1.5px solid #4A8C5C; border-radius: 11px;
+    padding: 14px 20px; width: 100%;
+  }
+  .sensors-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #4A8C5C; margin-bottom: 10px; text-align: center; }
+  .sensor-row { display: flex; gap: 10px; justify-content: center; }
+  .sc {
+    background: #D6EAD6; border: 1.5px solid #4A8C5C; border-radius: 9px;
+    padding: 9px 12px; text-align: center; flex: 1;
+  }
+  .sc .name { font-size: 12px; font-weight: 700; color: #1E4A2E; display: block; }
+  .sc .conn { font-size: 10px; color: #4A8C5C; display: block; margin-top: 2px; }
+  .sc .rate { font-size: 10px; color: #6B7280; display: block; }
+
+  /* ── Pipeline nodes ── */
+  .pn {
+    border-radius: 9px; padding: 13px 20px; text-align: center; width: 100%;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  }
+  .pn .name { font-size: 13px; font-weight: 700; display: block; }
+  .pn .sub  { font-size: 11px; color: #6B7280; display: block; margin-top: 4px; line-height: 1.5; }
+  .pn-mod   { background: #D6E4F5; border: 1.5px solid #3A6FAD; color: #1A3A6B; }
+  .pn-db    { background: #E8DCEF; border: 1.5px solid #7050A0; color: #3A1A60; }
+  .pn-ext   { background: #F5E8CC; border: 1.5px solid #B07820; color: #5A3A00; }
+
+  /* ── Vertical arrows ── */
+  .down {
+    width: 2px; height: 28px; background: #9CA3AF;
+    position: relative; display: flex; justify-content: center;
+  }
+  .down::after {
+    content: ''; position: absolute; bottom: -5px; left: -4px;
+    border: 5px solid transparent; border-top-color: #9CA3AF;
+  }
+  .down-lbl {
+    position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+    font-size: 10px; color: #9CA3AF; white-space: nowrap;
+  }
+
+  .down-upload { background: #B07820; }
+  .down-upload::after { border-top-color: #B07820; }
+
+  /* step badge */
+  .step {
+    display: inline-block; font-size: 9px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.07em;
+    color: #9CA3AF; margin-bottom: 5px; align-self: flex-start;
+  }
+
+  /* ── Branch after the database ── */
+  .branch { display: flex; width: 100%; gap: 22px; align-items: flex-start; }
+  .branch-col { display: flex; flex-direction: column; align-items: center; flex: 1; gap: 0; }
+  .branch-lbl { font-size: 10px; color: #6B7280; margin-bottom: 6px; text-align: center; }
+  .branch .pn { width: 100%; }
+  .down-sm { width: 2px; height: 20px; background: #9CA3AF; position: relative; }
+  .down-sm::after { content:''; position:absolute; bottom:-5px; left:-4px; border:5px solid transparent; border-top-color:#9CA3AF; }
+  .down-sm-upload { background:#B07820; }
+  .down-sm-upload::after { border-top-color:#B07820; }
+</style>
+</head>
+<body>
+
+<h1>Data Flow Pipeline</h1>
+<p class="subtitle">How physiological data travels from sensors on the body to the VitalWork server</p>
+
+<div class="col">
+
+  <!-- ① Sensors -->
+  <span class="step">① Sensor sources</span>
+  <div class="sensors">
+    <div class="sensors-lbl">Physiological signals captured during each biofeedback scenario</div>
+    <div class="sensor-row">
+      <div class="sc">
+        <span class="name">eSense Pulse</span>
+        <span class="conn">BLE</span>
+        <span class="rate">~4.5 Hz · HR / R-R</span>
+      </div>
+      <div class="sc">
+        <span class="name">eSense Respiration</span>
+        <span class="conn">Audio jack</span>
+        <span class="rate">5 Hz · resp. rate</span>
+      </div>
+      <div class="sc">
+        <span class="name">Galaxy Watch 8</span>
+        <span class="conn">Wearable Data Layer</span>
+        <span class="rate">1 Hz · HR / IBI / EDA</span>
+        <span class="rate" style="color:#B07820;">buffered on the watch —<br>merged at session end (diagram 05)</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="down"></div>
+
+  <!-- ② Capture -->
+  <span class="step">② Capture</span>
+  <div class="pn pn-mod">
+    <span class="name">Recording Engine</span>
+    <span class="sub">Each sample is tagged with sensor type, NTP-corrected timestamp, and elapsed time within the scenario</span>
+  </div>
+
+  <div class="down"></div>
+
+  <!-- ③ Buffer -->
+  <span class="step">③ Buffer</span>
+  <div class="pn pn-mod">
+    <span class="name">Batch Buffer</span>
+    <span class="sub">eSense samples are grouped in memory and written to the database every 50 samples or every 1 second — whichever comes first<br>(watch data skips this buffer — it arrives in one batch at session end)</span>
+  </div>
+
+  <div class="down"></div>
+
+  <!-- ④ Store -->
+  <span class="step">④ Store</span>
+  <div class="pn pn-db">
+    <span class="name">Room Database</span>
+    <span class="sub">All samples saved locally on the device in a SQLite database (sensor_samples table)</span>
+  </div>
+
+  <div class="down"></div>
+
+  <div class="branch-lbl">At session end, two independent paths read from the same database</div>
+
+  <!-- ⑤ Branch: export vs upload -->
+  <div class="branch">
+    <div class="branch-col">
+      <span class="step">⑤a Local export — manual, optional</span>
+      <div class="pn pn-mod">
+        <span class="name">Export Mapper</span>
+        <span class="sub">Reads all rows for the session, flags any gaps in the signal</span>
+      </div>
+      <div class="down-sm"></div>
+      <div class="pn pn-mod">
+        <span class="name">JSON + CSV</span>
+        <span class="sub">Saved to the device's Documents folder as an offline local copy</span>
+      </div>
+    </div>
+    <div class="branch-col">
+      <span class="step">⑤b Server upload — automatic</span>
+      <div class="pn pn-mod">
+        <span class="name">Upload Mapper</span>
+        <span class="sub">Reads participant, session and scenarios; builds the HTTP payload expected by the server API</span>
+      </div>
+      <div class="down-sm down-sm-upload"></div>
+      <div class="pn pn-ext" style="position:relative;">
+        <span class="name">VitalWork Server</span>
+        <span class="sub">POST /api/sessions/upload · bearer auth · 600 s timeout<br>Re-sending the same session is safe — identified by sessionCode</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

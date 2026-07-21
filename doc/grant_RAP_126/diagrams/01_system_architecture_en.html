@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>01 — System Architecture</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: #F5F6F7; color: #2C2C2C;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 40px 24px 48px;
+  }
+  h1 { font-size: 17px; font-weight: 700; color: #1A3A6B; letter-spacing: 0.02em; margin-bottom: 5px; text-align: center; }
+  .subtitle { font-size: 12px; color: #6B7280; margin-bottom: 22px; text-align: center; }
+  .legend { display: flex; gap: 20px; margin-bottom: 22px; flex-wrap: wrap; justify-content: center; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #6B7280; }
+  .ld { width: 13px; height: 13px; border-radius: 3px; flex-shrink: 0; }
+  svg { display: block; }
+</style>
+</head>
+<body>
+
+<h1>VitalWork System Architecture</h1>
+<p class="subtitle">How physiological sensors, the monitored device's app, and the operator's viewer device work together to capture and deliver research data</p>
+
+<div class="legend">
+  <div class="legend-item"><div class="ld" style="background:#D6EAD6;border:1.5px solid #4A8C5C;"></div>Physiological sensors</div>
+  <div class="legend-item"><div class="ld" style="background:#D6E4F5;border:1.5px solid #3A6FAD;"></div>Mobile app modules</div>
+  <div class="legend-item"><div class="ld" style="background:#E8DCEF;border:1.5px solid #7050A0;"></div>Local database</div>
+  <div class="legend-item"><div class="ld" style="background:#F5E8CC;border:1.5px solid #B07820;"></div>Peer device / Server</div>
+</div>
+
+<!--
+  Canvas: 1060 × 600
+
+  Left column:
+    Peer device (standalone)      x=136, y=44,  w=164, h=116  (bottom: 160)
+    Sensors zone                  x=136, y=176, w=172, h=276  (bottom: 452)
+      eSense Pulse                  x=146, y=206, w=152, h=66
+      eSense Resp                   x=146, y=292, w=152, h=66
+      Galaxy Watch                  x=146, y=378, w=152, h=66  (bottom: 444)
+
+  Mobile app zone                 x=442, y=32,  w=220, h=526  (bottom: 558)
+    Peer Link + Screen Mirror       x=466, y=76,  w=172, h=96  (bottom: 172)
+
+  Pairing arrows (①–④ run in this order, top to bottom):
+    ① mDNS advertise    viewer → app  y=84
+    ② WebSocket connect app → viewer  y=106
+    ③ WebRTC signaling  both ways     y=128
+    ④ screen video      app → viewer  y=150
+    Recording Engine                x=466, y=196, w=172, h=68  (bottom: 264)
+    Room DB                         x=466, y=306, w=172, h=80  (bottom: 386)
+    Export + Upload                 x=466, y=426, w=172, h=88  (bottom: 514)
+
+  Server                          x=752, y=426, w=180, h=88   (aligned with Export+Upload)
+-->
+<svg width="1060" height="600" viewBox="0 0 1060 600" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <marker id="ag" markerWidth="7" markerHeight="5" refX="5" refY="2.5" orient="auto">
+    <path d="M0,0 L7,2.5 L0,5 z" fill="#4A8C5C"/>
+  </marker>
+  <marker id="ab" markerWidth="7" markerHeight="5" refX="5" refY="2.5" orient="auto">
+    <path d="M0,0 L7,2.5 L0,5 z" fill="#3A6FAD"/>
+  </marker>
+  <marker id="aa" markerWidth="7" markerHeight="5" refX="5" refY="2.5" orient="auto">
+    <path d="M0,0 L7,2.5 L0,5 z" fill="#B07820"/>
+  </marker>
+  <marker id="ap" markerWidth="7" markerHeight="5" refX="5" refY="2.5" orient="auto">
+    <path d="M0,0 L7,2.5 L0,5 z" fill="#7050A0"/>
+  </marker>
+  <marker id="abr" markerWidth="7" markerHeight="5" refX="5" refY="2.5" orient="auto-start-reverse">
+    <path d="M0,0 L7,2.5 L0,5 z" fill="#3A6FAD"/>
+  </marker>
+  <style>
+    text { font-family: 'Segoe UI', Helvetica, Arial, sans-serif; }
+    .zt { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; }
+    .nh { font-size: 13px; font-weight: 700; }
+    .ns { font-size: 11px; fill: #6B7280; }
+    .al { font-size: 10.5px; fill: #6B7280; }
+  </style>
+</defs>
+
+<!-- ── Operator's viewer device (standalone, aligned with Peer Link) ── -->
+<rect x="136" y="44" width="164" height="116" rx="8" fill="#F5E8CC" stroke="#B07820" stroke-width="1.5"/>
+<text x="218" y="68" text-anchor="middle" class="nh" fill="#5A3A00">Viewer Device</text>
+<text x="218" y="86" text-anchor="middle" class="ns">operator's second tablet</text>
+<text x="218" y="102" text-anchor="middle" class="ns">server role</text>
+<text x="218" y="122" text-anchor="middle" class="ns">watches the monitored</text>
+<text x="218" y="138" text-anchor="middle" class="ns">device's screen live</text>
+
+<!-- ── Sensors zone ── -->
+<rect x="136" y="176" width="172" height="276" rx="11" fill="#EEF6EE" stroke="#4A8C5C" stroke-width="1.5"/>
+<text x="222" y="196" text-anchor="middle" class="zt" fill="#4A8C5C">Sensors</text>
+
+<!-- eSense Pulse -->
+<rect x="146" y="206" width="152" height="66" rx="8" fill="#D6EAD6" stroke="#4A8C5C" stroke-width="1.5"/>
+<text x="222" y="228" text-anchor="middle" class="nh" fill="#1E4A2E">eSense Pulse</text>
+<text x="222" y="246" text-anchor="middle" class="ns">BLE · HR + R-R intervals</text>
+<text x="222" y="262" text-anchor="middle" class="ns">~4.5 Hz</text>
+
+<!-- eSense Respiration -->
+<rect x="146" y="292" width="152" height="66" rx="8" fill="#D6EAD6" stroke="#4A8C5C" stroke-width="1.5"/>
+<text x="222" y="314" text-anchor="middle" class="nh" fill="#1E4A2E">eSense Respiration</text>
+<text x="222" y="332" text-anchor="middle" class="ns">Audio jack · breathing rate</text>
+<text x="222" y="348" text-anchor="middle" class="ns">5 Hz</text>
+
+<!-- Galaxy Watch -->
+<rect x="146" y="378" width="152" height="66" rx="8" fill="#D6EAD6" stroke="#4A8C5C" stroke-width="1.5"/>
+<text x="222" y="400" text-anchor="middle" class="nh" fill="#1E4A2E">Galaxy Watch 8</text>
+<text x="222" y="418" text-anchor="middle" class="ns">Wearable Data Layer</text>
+<text x="222" y="434" text-anchor="middle" class="ns">HR · IBI · EDA · 1 Hz</text>
+
+<!-- ── Mobile app zone ── -->
+<rect x="442" y="32" width="220" height="526" rx="11" fill="#EDF3FB" stroke="#3A6FAD" stroke-width="1.5"/>
+<text x="552" y="50" text-anchor="middle" class="zt" fill="#3A6FAD">Monitored Device App</text>
+<text x="552" y="66" text-anchor="middle" class="zt" fill="#3A6FAD">(VitalWork · client)</text>
+
+<!-- Peer Link + Screen Mirror -->
+<rect x="466" y="76" width="172" height="96" rx="8" fill="#D6E4F5" stroke="#3A6FAD" stroke-width="1.5"/>
+<text x="552" y="100" text-anchor="middle" class="nh" fill="#1A3A6B">Peer Link</text>
+<text x="552" y="118" text-anchor="middle" class="ns">client role</text>
+<text x="552" y="136" text-anchor="middle" class="ns">connects to the viewer,</text>
+<text x="552" y="152" text-anchor="middle" class="ns">shares this device's screen</text>
+
+<!-- Recording Engine -->
+<rect x="466" y="196" width="172" height="68" rx="8" fill="#D6E4F5" stroke="#3A6FAD" stroke-width="1.5"/>
+<text x="552" y="220" text-anchor="middle" class="nh" fill="#1A3A6B">Recording Engine</text>
+<text x="552" y="238" text-anchor="middle" class="ns">per-scenario sensor capture</text>
+<text x="552" y="254" text-anchor="middle" class="ns">writes to local database</text>
+
+<!-- Room DB -->
+<rect x="466" y="306" width="172" height="80" rx="8" fill="#E8DCEF" stroke="#7050A0" stroke-width="1.5"/>
+<text x="552" y="328" text-anchor="middle" class="nh" fill="#3A1A60">Room Database (local)</text>
+<text x="552" y="346" text-anchor="middle" class="ns">4 tables: Participant, Session,</text>
+<text x="552" y="364" text-anchor="middle" class="ns">Scenario, sensor samples</text>
+
+<!-- Export + Upload -->
+<rect x="466" y="426" width="172" height="88" rx="8" fill="#D6E4F5" stroke="#3A6FAD" stroke-width="1.5"/>
+<text x="552" y="450" text-anchor="middle" class="nh" fill="#1A3A6B">Export + Upload</text>
+<text x="552" y="468" text-anchor="middle" class="ns">JSON / CSV saved locally;</text>
+<text x="552" y="484" text-anchor="middle" class="ns">upload to VitalWork server</text>
+<text x="552" y="500" text-anchor="middle" class="ns">at session end</text>
+
+<!-- ── Server node (standalone, aligned with Export + Upload) ── -->
+<rect x="752" y="426" width="180" height="88" rx="8" fill="#F5E8CC" stroke="#B07820" stroke-width="1.5"/>
+<text x="842" y="450" text-anchor="middle" class="nh" fill="#5A3A00">VitalWork Server</text>
+<text x="842" y="468" text-anchor="middle" class="ns">POST /api/sessions/upload</text>
+<text x="842" y="486" text-anchor="middle" class="ns">idempotent · Wi-Fi / LAN</text>
+
+<!-- ── Arrows ── -->
+
+<!-- ① viewer (server) advertises itself over mDNS → app discovers it (dashed amber, viewer → app) -->
+<line x1="300" y1="84" x2="460" y2="84" stroke="#B07820" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#aa)"/>
+<text x="380" y="78" text-anchor="middle" class="al" fill="#B07820">① advertises itself (mDNS)</text>
+
+<!-- ② app (client) connects to the viewer's WebSocket (solid blue, app → viewer) -->
+<line x1="460" y1="106" x2="300" y2="106" stroke="#3A6FAD" stroke-width="2" marker-end="url(#ab)"/>
+<text x="380" y="100" text-anchor="middle" class="al" fill="#3A6FAD">② connects · WebSocket :9090</text>
+
+<!-- ③ WebRTC signaling over the same socket (dashed blue, both directions) -->
+<line x1="302" y1="128" x2="458" y2="128" stroke="#3A6FAD" stroke-width="1.5" stroke-dasharray="5 4" marker-start="url(#abr)" marker-end="url(#ab)"/>
+<text x="380" y="122" text-anchor="middle" class="al" fill="#3A6FAD">③ call setup (offer / answer / ICE)</text>
+
+<!-- ④ app streams its live screen to the viewer via WebRTC (solid blue, app → viewer) -->
+<line x1="460" y1="150" x2="300" y2="150" stroke="#3A6FAD" stroke-width="2.5" marker-end="url(#ab)"/>
+<text x="380" y="144" text-anchor="middle" class="al" fill="#3A6FAD">④ live screen video (WebRTC, P2P)</text>
+
+<!-- Pulse → Recording Engine (green, no label) -->
+<line x1="298" y1="239" x2="460" y2="236" stroke="#4A8C5C" stroke-width="1.5" marker-end="url(#ag)"/>
+
+<!-- Respiration → Recording Engine (green, no label) -->
+<line x1="298" y1="325" x2="460" y2="248" stroke="#4A8C5C" stroke-width="1.5" marker-end="url(#ag)"/>
+
+<!-- Watch → Recording Engine (green, no label) -->
+<line x1="298" y1="411" x2="460" y2="258" stroke="#4A8C5C" stroke-width="1.5" marker-end="url(#ag)"/>
+
+<!-- Recording Engine → Room DB (straight down) -->
+<line x1="552" y1="264" x2="552" y2="300" stroke="#7050A0" stroke-width="1.5" marker-end="url(#ap)"/>
+
+<!-- Room DB → Export + Upload (straight down) -->
+<line x1="552" y1="386" x2="552" y2="420" stroke="#7050A0" stroke-width="1.5" marker-end="url(#ap)"/>
+
+<!-- Export → Server (amber, horizontal) -->
+<line x1="638" y1="470" x2="746" y2="470" stroke="#B07820" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#aa)"/>
+<text x="692" y="463" text-anchor="middle" class="al" fill="#B07820">upload to server</text>
+
+</svg>
+
+</body>
+</html>

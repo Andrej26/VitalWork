@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>05 — Galaxy Watch Store-and-Forward</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: #F5F6F7; color: #2C2C2C;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 40px 24px 56px;
+  }
+  h1 { font-size: 17px; font-weight: 700; color: #1A3A6B; letter-spacing: 0.02em; margin-bottom: 5px; text-align: center; }
+  .subtitle { font-size: 12px; color: #6B7280; margin-bottom: 28px; text-align: center; }
+
+  /* ── Phase block wraps its steps ── */
+  .phase-block {
+    width: 660px; border-radius: 10px; margin-bottom: 14px;
+    border: 1.5px solid;
+    overflow: hidden;
+  }
+  .phase-block.blue  { border-color: #3A6FAD; }
+  .phase-block.grey  { border-color: #9CA3AF; }
+  .phase-block.green { border-color: #4A8C5C; }
+
+  .phase-header {
+    padding: 8px 16px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-align: center;
+  }
+  .blue  .phase-header { background: #D6E4F5; color: #1A3A6B; }
+  .grey  .phase-header { background: #E8E8E8; color: #4A4A4A; }
+  .green .phase-header { background: #D6EAD6; color: #1E4A2E; }
+
+  .phase-body { background: #fff; padding: 10px 14px 6px; }
+  .grey .phase-body { background: #F7F7F7; }
+
+  /* ── Single step ── */
+  .step { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 10px; }
+  .step:last-child { margin-bottom: 4px; }
+
+  /* vertical connector between steps inside a phase */
+  .step-connector {
+    width: 2px; height: 8px; background: #D1D5DB;
+    margin-left: 12px; margin-bottom: 0;
+  }
+
+  /* number badge */
+  .num {
+    flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700; color: #fff; margin-top: 1px;
+  }
+  .num-blue   { background: #3A6FAD; }
+  .num-grey   { background: #9CA3AF; }
+  .num-green  { background: #4A8C5C; }
+  .num-purple { background: #7050A0; }
+  .num-amber  { background: #B07820; }
+
+  /* right side of a step: chips + description stacked */
+  .step-content { display: flex; flex-direction: column; gap: 5px; flex: 1; }
+
+  /* actor chips row */
+  .chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+  .chip {
+    border-radius: 6px; padding: 4px 10px;
+    font-size: 11px; font-weight: 700; white-space: nowrap;
+    display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  }
+  .chip sub {
+    font-size: 9.5px; font-weight: 400; opacity: 0.75; white-space: nowrap;
+  }
+  .chip-watch  { background: #D6E4F5; border: 1.5px solid #3A6FAD; color: #1A3A6B; }
+  .chip-store  { background: #E8DCEF; border: 1.5px solid #7050A0; color: #3A1A60; }
+  .chip-phone  { background: #D6EAD6; border: 1.5px solid #4A8C5C; color: #1E4A2E; }
+  .chip-db     { background: #FEF3C7; border: 1.5px solid #B07820; color: #5A3A00; }
+  .arrow { font-size: 13px; color: #9CA3AF; }
+
+  /* description under chips */
+  .desc {
+    font-size: 11.5px; color: #2C2C2C; line-height: 1.5;
+    padding-left: 2px;
+  }
+  .note {
+    font-size: 10.5px; color: #6B7280; line-height: 1.5;
+    display: block; margin-top: 1px; padding-left: 2px;
+  }
+
+  /* status badges */
+  .status {
+    display: inline-block; border-radius: 4px; padding: 1px 7px;
+    font-size: 10px; font-weight: 700; vertical-align: middle; margin-left: 3px;
+  }
+  .status-live { background: #D6EAD6; border: 1px solid #4A8C5C; color: #1E4A2E; }
+  .status-doze { background: #E8E8E8; border: 1px solid #9CA3AF; color: #4A4A4A; }
+
+  /* ── Guarantee box ── */
+  .guarantee {
+    width: 660px; margin-top: 4px; border-radius: 10px;
+    background: #D6EAD6; border: 2px solid #4A8C5C;
+    padding: 12px 20px; text-align: center;
+  }
+  .guarantee .title { font-size: 13px; font-weight: 700; color: #1E4A2E; margin-bottom: 4px; }
+  .guarantee .body  { font-size: 11px; color: #4A8C5C; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<h1>Galaxy Watch Store-and-Forward</h1>
+<p class="subtitle">How sensor data from the watch reaches the phone reliably — even when the watch screen is off</p>
+
+<!-- ═══════════════ PHASE 1: LIVE ═══════════════ -->
+<div class="phase-block blue">
+  <div class="phase-header">Phase 1 — Session active &nbsp;·&nbsp; watch screen on &nbsp;·&nbsp; 1 Hz sampling</div>
+  <div class="phase-body">
+
+    <div class="step">
+      <div class="num num-blue">1</div>
+      <div class="step-content">
+        <div class="chips">
+          <div class="chip chip-watch">Galaxy Watch<sub>sensors</sub></div>
+          <span class="arrow">→</span>
+          <div class="chip chip-store">Galaxy Watch<sub>local file (WatchSampleStore)</sub></div>
+        </div>
+        <div class="desc">Persist every reading to a durable file on the watch</div>
+        <span class="note">HR · IBI · EDA written as JSON lines, one row per sample — append-only</span>
+      </div>
+    </div>
+
+    <div class="step-connector"></div>
+
+    <div class="step">
+      <div class="num num-blue">2</div>
+      <div class="step-content">
+        <div class="chips">
+          <div class="chip chip-watch">Galaxy Watch<sub>sensors</sub></div>
+          <span class="arrow">→</span>
+          <div class="chip chip-phone">Phone<sub>live display</sub></div>
+        </div>
+        <div class="desc">Stream live reading over MessageClient (best-effort)</div>
+        <span class="note">Phone shows real-time values <span class="status status-live">LIVE</span></span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════ PHASE 2: DOZE ═══════════════ -->
+<div class="phase-block grey">
+  <div class="phase-header">Phase 2 — Screen off / Doze &nbsp;·&nbsp; live stream pauses</div>
+  <div class="phase-body">
+
+    <div class="step">
+      <div class="num num-grey">3</div>
+      <div class="step-content">
+        <div class="chips">
+          <div class="chip chip-watch">Galaxy Watch<sub>sensors</sub></div>
+          <span class="arrow">→</span>
+          <div class="chip chip-store">Galaxy Watch<sub>local file (WatchSampleStore)</sub></div>
+        </div>
+        <div class="desc">Sampling continues at 1 Hz — every reading still persisted</div>
+        <span class="note">The durable file accumulates rows; no data is lost during Doze</span>
+      </div>
+    </div>
+
+    <div class="step-connector"></div>
+
+    <div class="step">
+      <div class="num num-grey">4</div>
+      <div class="step-content">
+        <div class="chips">
+          <div class="chip chip-watch">Galaxy Watch<sub>sensors</sub></div>
+          <span class="arrow">→</span>
+          <div class="chip chip-phone">Phone<sub>live display</sub></div>
+        </div>
+        <div class="desc">Low-rate HEARTBEAT sent every 30 s (at each Doze wake window)</div>
+        <span class="note">Phone shows <span class="status status-doze">DOZING</span> — "Watch dozing — buffering" instead of "Disconnected"</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════ PHASE 3: FLUSH ═══════════════ -->
+<div class="phase-block green">
+  <div class="phase-header">Phase 3 — Session end &nbsp;·&nbsp; remote flush &amp; handover</div>
+  <div class="phase-body">
+
+    <div class="step">
+      <div class="num num-green">5</div>
+      <div class="step-content">
+        <div class="chips">
+          <div class="chip chip-phone">Phone<sub>operator app</sub></div>
+          <span class="arrow">→</span>
+          <div class="chip chip-watch">Galaxy Watch<sub>command listener</sub></div>
+        </div>
+        <div class="desc">Send FLUSH command</div>
+        <span class="note">Watch wakes to handle it even if the app is not in the foreground</span>
+      </div>
+    </div>
+
+    <div class="step-connector"></div>
+
+    <div class="step">
+      <div class="num num-green">6</div>
+      <div class="step-content">
+        <div class="chips">
+          <div class="chip chip-watch">Galaxy Watch<sub>sensors (SDK buffer)</sub></div>
+          <span class="arrow">→</span>
+          <div class="chip chip-store">Galaxy Watch<sub>local file (WatchSampleStore)</sub></div>
+        </div>
+        <div class="desc">Drain any screen-off samples still buffered in the SDK into the file</div>
+        <span class="note">Must happen before reading the store — otherwise data sitting in the SDK buffer would be missed</span>
+      </div>
+    </div>
+
+    <div class="step-connector"></div>
+
+    <div class="step">
+      <div class="num num-purple">7</div>
+      <div class="step-content">
+        <div class="chips">
+          <div class="chip chip-store">Galaxy Watch<sub>local file (WatchSampleStore)</sub></div>
+          <span class="arrow">→</span>
+          <div class="chip chip-phone">Phone<sub>operator app</sub></div>
+        </div>
+        <div class="desc">Ship all stored rows as chunked DataItems</div>
+        <span class="note">DataClient guarantees delivery even if the link drops mid-transfer — unlike the best-effort live stream</span>
+      </div>
+    </div>
+
+    <div class="step-connector"></div>
+
+    <div class="step">
+      <div class="num num-purple">8</div>
+      <div class="step-content">
+        <div class="chips">
+          <div class="chip chip-watch">Galaxy Watch<sub>command listener</sub></div>
+          <span class="arrow">→</span>
+          <div class="chip chip-phone">Phone<sub>operator app</sub></div>
+        </div>
+        <div class="desc">Send FLUSH_COMPLETE (chunk count + row count)</div>
+        <span class="note">Phone waits for this signal before it knows the full transfer has arrived</span>
+      </div>
+    </div>
+
+    <div class="step-connector"></div>
+
+    <div class="step">
+      <div class="num num-green">9</div>
+      <div class="step-content">
+        <div class="chips">
+          <div class="chip chip-phone">Phone<sub>operator app (WatchSessionDrainer)</sub></div>
+        </div>
+        <div class="desc">Match each row to a scenario by timestamp window</div>
+        <span class="note">
+          Every flushed reading carries the exact moment it was taken on the watch.<br>
+          A reading falls into the scenario whose recording window <em>[startedAt → endedAt]</em> contains that timestamp.<br>
+          Readings that fall between scenarios or after the last scenario ended are <strong>discarded</strong> — no scenario was active at that moment.<br>
+          Readings already written during live streaming are <strong>skipped</strong> (de-duplicated per scenario, per sensor type).
+        </span>
+      </div>
+    </div>
+
+    <div class="step-connector"></div>
+
+    <div class="step">
+      <div class="num num-amber">10</div>
+      <div class="step-content">
+        <div class="chips">
+          <div class="chip chip-db">Phone<sub>Room database</sub></div>
+        </div>
+        <div class="desc">Save matched rows into the database &nbsp;(WATCH_HR · WATCH_IBI · WATCH_EDA)</div>
+        <span class="note">Only rows that matched a scenario window and were not already present are inserted</span>
+      </div>
+    </div>
+
+    <div class="step-connector"></div>
+
+    <div class="step">
+      <div class="num num-green">11</div>
+      <div class="step-content">
+        <div class="chips">
+          <div class="chip chip-phone">Phone<sub>operator app</sub></div>
+          <span class="arrow">→</span>
+          <div class="chip chip-watch">Galaxy Watch<sub>command listener</sub></div>
+        </div>
+        <div class="desc">Send FLUSH_ACK:&lt;maxTimestamp&gt; — confirms what was stored</div>
+        <span class="note">Watch truncates rows up to and including this timestamp</span>
+      </div>
+    </div>
+
+    <div class="step-connector"></div>
+
+    <div class="step">
+      <div class="num num-purple">12</div>
+      <div class="step-content">
+        <div class="chips">
+          <div class="chip chip-store">Galaxy Watch<sub>local file (WatchSampleStore)</sub></div>
+        </div>
+        <div class="desc">Truncate acked rows — keep any un-acked tail</div>
+        <span class="note">If the transfer was interrupted, the remaining rows are re-sent on the next flush</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════ GUARANTEE ═══════════════ -->
+<div class="guarantee">
+  <div class="title">No reading is ever lost</div>
+  <div class="body">
+    The durable file on the watch accumulates every sample regardless of link state.<br>
+    Doze gaps are transparent to the recording — the store survives them intact.<br>
+    A partial or interrupted flush simply re-sends the un-acked tail next time.
+  </div>
+</div>
+
+</body>
+</html>

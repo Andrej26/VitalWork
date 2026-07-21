@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>02 — Process Map</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: #F5F6F7; color: #2C2C2C;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 40px 24px 56px;
+  }
+  h1 { font-size: 17px; font-weight: 700; color: #1A3A6B; letter-spacing: 0.02em; margin-bottom: 5px; text-align: center; }
+  .subtitle { font-size: 12px; color: #6B7280; margin-bottom: 32px; text-align: center; }
+
+  .flow { display: flex; flex-direction: column; align-items: center; gap: 0; width: 720px; }
+
+  .term {
+    background: #D6EAD6; border: 2px solid #4A8C5C; border-radius: 24px;
+    padding: 10px 32px; font-size: 13px; font-weight: 700; color: #1E4A2E;
+    text-align: center;
+  }
+  .term-end {
+    background: #D6E4F5; border: 2px solid #3A6FAD; border-radius: 24px;
+    padding: 10px 32px; font-size: 13px; font-weight: 700; color: #1A3A6B;
+    text-align: center;
+  }
+
+  .step {
+    border-radius: 9px; padding: 10px 16px; font-size: 13px; text-align: center; width: 100%;
+    position: relative;
+  }
+  .step .title { font-weight: 700; display: block; }
+  .step .sub { font-size: 11px; color: #6B7280; margin-top: 2px; display: block; }
+  .who { font-size: 19px; line-height: 1; position: absolute; top: -8px; right: -12px; filter: drop-shadow(0 1px 1px rgba(0,0,0,0.25)); }
+
+  .s-blue   { background: #D6E4F5; border: 1.5px solid #3A6FAD; color: #1A3A6B; }
+  .s-green  { background: #D6EAD6; border: 1.5px solid #4A8C5C; color: #1E4A2E; }
+  .s-purple { background: #E8DCEF; border: 1.5px solid #7050A0; color: #3A1A60; }
+  .s-amber  { background: #F5E8CC; border: 1.5px solid #B07820; color: #5A3A00; }
+
+  .phase {
+    border-radius: 11px; padding: 16px 18px; width: 100%;
+    display: flex; flex-direction: column; align-items: center; gap: 0;
+  }
+  .phase-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; width: 100%; text-align: left; padding-left: 2px; }
+  .ph-setup  { background: #EDF3FB; border: 1px solid #3A6FAD; }
+  .ph-setup  .phase-label { color: #3A6FAD; }
+  .ph-run    { background: #EEF6EE; border: 1px solid #4A8C5C; }
+  .ph-run    .phase-label { color: #4A8C5C; }
+  .ph-end    { background: #FBF3E4; border: 1px solid #B07820; }
+  .ph-end    .phase-label { color: #B07820; }
+  .ph-fin    { background: #F4EEFA; border: 1px solid #7050A0; }
+  .ph-fin    .phase-label { color: #7050A0; }
+
+  .conn { width: 2px; height: 20px; margin: 0 auto; position: relative; }
+  .conn::after { content:''; position:absolute; bottom:-6px; left:-4px; border:5px solid transparent; }
+  .c-grey   { background:#9CA3AF; } .c-grey::after   { border-top-color:#9CA3AF; }
+  .c-blue   { background:#3A6FAD; } .c-blue::after   { border-top-color:#3A6FAD; }
+  .c-green  { background:#4A8C5C; } .c-green::after  { border-top-color:#4A8C5C; }
+  .c-amber  { background:#B07820; } .c-amber::after  { border-top-color:#B07820; }
+  .c-purple { background:#7050A0; } .c-purple::after { border-top-color:#7050A0; }
+
+  .step-row { display: flex; align-items: stretch; gap: 0; width: 100%; }
+  .step-row .step { flex: 1; }
+  .h-arr { flex-shrink: 0; width: 26px; height: 2px; align-self: center; position: relative; }
+  .h-arr::after { content:''; position:absolute; right:-6px; top:-4px; border:5px solid transparent; }
+  .ha-blue   { background:#3A6FAD; } .ha-blue::after   { border-left-color:#3A6FAD; }
+  .ha-green  { background:#4A8C5C; } .ha-green::after  { border-left-color:#4A8C5C; }
+  .ha-amber  { background:#B07820; } .ha-amber::after  { border-left-color:#B07820; }
+  .ha-purple { background:#7050A0; } .ha-purple::after { border-left-color:#7050A0; }
+
+  .legend {
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 22px;
+    width: 720px; margin-bottom: 28px; padding: 12px 18px;
+    background: #FFFFFF; border: 1px solid #D7DBE0; border-radius: 8px;
+  }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #3F4650; }
+  .legend-swatch { flex-shrink: 0; }
+  .lg-term   { width: 22px; height: 14px; border-radius: 8px; background: #D6EAD6; border: 2px solid #4A8C5C; }
+  .lg-step-blue   { width: 18px; height: 14px; border-radius: 3px; background: #D6E4F5; border: 1.5px solid #3A6FAD; }
+  .lg-step-green  { width: 18px; height: 14px; border-radius: 3px; background: #D6EAD6; border: 1.5px solid #4A8C5C; }
+  .lg-step-amber  { width: 18px; height: 14px; border-radius: 3px; background: #F5E8CC; border: 1.5px solid #B07820; }
+  .lg-step-purple { width: 18px; height: 14px; border-radius: 3px; background: #E8DCEF; border: 1.5px solid #7050A0; }
+</style>
+</head>
+<body>
+
+<h1>Session Workflow (Step-by-Step Process)</h1>
+<p class="subtitle">What the operator does and what the app does automatically, from setup to upload on the VitalWork server</p>
+
+<div class="legend">
+  <div class="legend-item"><span class="legend-swatch lg-term"></span>Start / end of the process</div>
+  <div class="legend-item"><span class="legend-swatch lg-step-blue"></span>Setup step</div>
+  <div class="legend-item"><span class="legend-swatch lg-step-green"></span>Recording-loop step</div>
+  <div class="legend-item"><span class="legend-swatch lg-step-amber"></span>Watch data-transfer step</div>
+  <div class="legend-item"><span class="legend-swatch lg-step-purple"></span>Finalise / export step</div>
+  <div class="legend-item">👤 operator action &nbsp; 📱 app does this automatically</div>
+</div>
+
+<div class="flow">
+
+  <div class="term">Start — device already in Client mode</div>
+  <div class="conn c-blue"></div>
+
+  <!-- Phase 1: Setup -->
+  <div class="phase ph-setup">
+    <div class="phase-label">Phase 1 — Setup</div>
+    <div class="step-row" style="align-items:center;">
+      <div class="step s-blue">
+        <span class="title">Ready?</span><span class="who">📱</span>
+        <span class="sub">permissions · Bluetooth · battery</span>
+      </div>
+      <div class="h-arr ha-blue"></div>
+      <div class="step s-blue">
+        <span class="title">Create Participant</span><span class="who">👤</span>
+        <span class="sub">auto anonymous code · starts session (ACTIVE)</span>
+      </div>
+      <div class="h-arr ha-blue"></div>
+      <div class="step s-blue">
+        <span class="title">Sensor Setup Gate</span><span class="who">👤</span>
+        <span class="sub">connect &amp; confirm Pulse · Respiration · Watch · tap Proceed</span>
+      </div>
+    </div>
+    <div style="font-size:10.5px;color:#A03030;margin-top:10px;">↺ Not ready → fix prerequisites, then retry</div>
+  </div>
+  <div class="conn c-blue"></div>
+
+  <div style="font-size:11.5px;color:#4A8C5C;font-weight:700;margin:6px 0;text-align:center;">Scenario Hub — operator picks scenario A–E, or ends the session</div>
+  <div class="conn c-green"></div>
+
+  <!-- Phase 2: Recording loop -->
+  <div class="phase ph-run">
+    <div class="phase-label">Phase 2 — Per-scenario recording loop (repeats for A–E)</div>
+    <div class="step-row">
+      <div class="step s-green">
+        <span class="title">Pick Scenario A–E</span><span class="who">👤</span>
+        <span class="sub">from the scenario hub</span>
+      </div>
+      <div class="h-arr ha-green"></div>
+      <div class="step s-green">
+        <span class="title">Countdown → Recording starts</span><span class="who">📱</span>
+        <span class="sub">auto-start · NTP timestamp</span>
+      </div>
+      <div class="h-arr ha-green"></div>
+      <div class="step s-green">
+        <span class="title">Capture sensor samples</span><span class="who">📱</span>
+        <span class="sub">HR · R-R · Respiration · Watch HR/IBI/EDA</span>
+      </div>
+      <div class="h-arr ha-green"></div>
+      <div class="step s-green">
+        <span class="title">Return to Scenario Hub</span><span class="who">📱</span>
+        <span class="sub">scenario closed · pick next, or end</span>
+      </div>
+    </div>
+  </div>
+  <div class="conn c-amber"></div>
+
+  <!-- End session step -->
+  <div class="step s-blue" style="width:360px;">
+    <span class="title">End Session</span><span class="who">👤</span>
+    <span class="sub">from the scenario hub, once all scenarios are done</span>
+  </div>
+  <div class="conn c-amber"></div>
+
+  <!-- Phase 3: Watch data transfer -->
+  <div class="phase ph-end">
+    <div class="phase-label">Phase 3 — Galaxy Watch data transfer (store-and-forward)</div>
+    <div class="step-row">
+      <div class="step s-amber">
+        <span class="title">Wake the watch</span><span class="who">📱</span>
+        <span class="sub">remote command · manual tap if it misses</span>
+      </div>
+      <div class="h-arr ha-amber"></div>
+      <div class="step s-amber">
+        <span class="title">Transfer stored data</span><span class="who">📱</span>
+        <span class="sub">watch ships buffered HR/IBI/EDA rows</span>
+      </div>
+      <div class="h-arr ha-amber"></div>
+      <div class="step s-amber">
+        <span class="title">Acknowledge &amp; finalize</span><span class="who">📱</span>
+        <span class="sub">watch store truncated only after ack</span>
+      </div>
+    </div>
+    <div style="font-size:10.5px;color:#A03030;margin-top:10px;">↺ Timeout / abort → session still ends; watch keeps its data for next time</div>
+  </div>
+  <div class="conn c-purple"></div>
+
+  <!-- Phase 4: Finalise -->
+  <div class="phase ph-fin">
+    <div class="phase-label">Phase 4 — Finalise &amp; Export</div>
+    <div class="step-row">
+      <div class="step s-purple">
+        <span class="title">Count collected samples</span><span class="who">📱</span>
+        <span class="sub">per sensor type · session status → COMPLETED</span>
+      </div>
+      <div class="h-arr ha-purple"></div>
+      <div class="step s-purple">
+        <span class="title">Upload to server</span><span class="who">📱</span>
+        <span class="sub">automatic · status → UPLOADED</span>
+      </div>
+      <div class="h-arr ha-purple"></div>
+      <div class="step s-purple">
+        <span class="title">Retry if it failed</span><span class="who">👤</span>
+        <span class="sub">manual button on the Review screen</span>
+      </div>
+    </div>
+  </div>
+  <div class="conn c-purple"></div>
+
+  <div class="term-end">Status → UPLOADED</div>
+
+  <div class="conn c-grey"></div>
+  <div class="step s-purple" style="width:360px;border-style:dashed;">
+    <span class="title">Export JSON + CSV (optional)</span><span class="who">👤</span>
+    <span class="sub">manual, to Documents folder — not required for upload</span>
+  </div>
+
+</div>
+</body>
+</html>
