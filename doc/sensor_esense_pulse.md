@@ -116,8 +116,8 @@ R-R samples are emitted through `rrIntervalSampleFlow` (SharedFlow, buffer 256),
 eSense Pulse (BLE)
   └─► BleManagerImpl (GATT callback)
         └─► _heartRate (StateFlow<Int?>) ──────────────────► UI display
-        └─► heartRateSampleFlow (SharedFlow<Float>) ────────► SensorRecordingRepository
-        └─► rrIntervalSampleFlow (SharedFlow<Float>) ────────► SensorRecordingRepository
+        └─► heartRateSampleFlow (SharedFlow<Float>) ────────► ScenarioRecordingRepository
+        └─► rrIntervalSampleFlow (SharedFlow<Float>) ────────► ScenarioRecordingRepository
               (both flows blocked during 5-second warmup)
 ```
 
@@ -136,16 +136,16 @@ Both are cleared on disconnect and when HR notifications are disabled. `RrInterv
 
 eSense Pulse data is **recording-scoped** — it is collected while a scenario is recording (start → stop), alongside eSense Respiration.
 
-When a recording starts, `SensorRecordingRepositoryImpl` checks if the eSense Pulse is connected (`ConnectionState.CONNECTED`). If so:
+When a recording starts, `ScenarioRecordingRepositoryImpl` checks if the eSense Pulse is connected (`ConnectionState.CONNECTED`). If so:
 1. `enableHeartRateNotifications()` is called explicitly to ensure HR notifications are active before collecting begins.
 2. Two collector coroutines are launched:
-   - `heartRateSampleFlow` → `SensorType.HEART_RATE` samples in `sensor_samples` table
+   - `heartRateSampleFlow` → `SensorType.ESENSE_HEART_RATE` samples in `sensor_samples` table
    - `rrIntervalSampleFlow` → `SensorType.ESENSE_RR_INTERVAL` samples in `sensor_samples` table (same BLE characteristic, zero extra cost)
-3. Sample counts are tracked in `RecordingEntity` (`heartRateSampleCount`, `esenseRrIntervalSampleCount`).
+3. Sample counts are tracked in the `ScenarioRecordingSession` metadata (`heartRateSampleCount`, `esenseRrIntervalSampleCount`).
 
 When recording stops, collectors are cancelled but HR notifications remain active. The user can continue viewing live heart rate and R-R data after recording ends.
 
-**Chart display:** `HEART_RATE` samples are shown on the test review timeline chart. `ESENSE_RR_INTERVAL` samples are recorded to the database and included in CSV export, but are not plotted on the timeline.
+**Chart display:** `ESENSE_HEART_RATE` samples are shown on the test review timeline chart. `ESENSE_RR_INTERVAL` samples are recorded to the database and included in CSV export, but are not plotted on the timeline.
 
 ### Database Schema
 
@@ -153,11 +153,11 @@ eSense Pulse data uses the existing `sensor_samples` table with two dedicated se
 
 ```sql
 -- SensorType enum values used by eSense Pulse:
--- HEART_RATE           — BPM value (one sample per HR notification, as Float)
+-- ESENSE_HEART_RATE    — BPM value (one sample per HR notification, as Float)
 -- ESENSE_RR_INTERVAL   — R-R interval in ms (one row per inter-beat interval, as Float)
 
--- Recording entity fields:
--- heartRateEnabled: Boolean              — whether eSense Pulse was connected at recording start
+-- ScenarioMetadata (in-memory recording metadata, ScenarioRecordingSession) fields:
+-- heartRateRecording: Boolean            — whether eSense Pulse was connected at recording start
 -- heartRateSampleCount: Int              — running count of HR samples
 -- esenseRrIntervalSampleCount: Int       — running count of R-R interval samples
 ```

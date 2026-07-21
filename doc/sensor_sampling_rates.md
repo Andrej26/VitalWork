@@ -39,10 +39,10 @@ See [sensor_esense_respiration.md](sensor_esense_respiration.md) for protocol de
 
 ## Data Collection
 
-`SensorRecordingRepositoryImpl` collects samples from all connected sensors concurrently.
+`ScenarioRecordingRepositoryImpl` collects samples from all connected sensors concurrently.
 
 ```
-eSense Pulse ──(~4.5 Hz)──► heartRateSampleFlow ────────► HEART_RATE
+eSense Pulse ──(~4.5 Hz)──► heartRateSampleFlow ────────► ESENSE_HEART_RATE
                           ► rrIntervalSampleFlow ───────► ESENSE_RR_INTERVAL
 eSense Respiration ──(5 Hz)──► sampleFlow ─────────────► RESPIRATION
 ```

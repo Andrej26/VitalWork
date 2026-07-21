@@ -495,7 +495,7 @@ permissions on the tablet — it only receives messages and DataItems.
 |------|------|
 | [wear/.../WatchSensorService.kt](../wear/src/main/java/com/vitalwork/wear/WatchSensorService.kt) | Foreground `health` service; owns the Samsung SDK, registers trackers, runs the `flush()` loop, sends `STOP` |
 | [wear/.../WatchDataSender.kt](../wear/src/main/java/com/vitalwork/wear/WatchDataSender.kt) | `MessageClient` sender; resolves & caches the `vitalwork_phone` node |
-| [wear/.../WatchMessage.kt](../wear/src/main/java/com/vitalwork/wear/WatchMessage.kt) | Builds the JSON lines (`reading`, `capabilities`, `batch`, `stop`) |
+| [wear/.../WatchMessage.kt](../wear/src/main/java/com/vitalwork/wear/WatchMessage.kt) | Builds the JSON lines (`reading`, `capabilities`, `batch`, `stop`, `heartbeat`, `flushComplete`) |
 | [wear/.../MainActivity.kt](../wear/src/main/java/com/vitalwork/wear/MainActivity.kt) | Minimal Start/Stop watch UI; requests runtime permissions |
 | [app/.../data/sensor/watch/WatchListenerService.kt](../app/src/main/java/com/vitalwork/app/data/sensor/watch/WatchListenerService.kt) | `WearableListenerService`; parses messages → receiver |
 | [app/.../data/sensor/watch/WatchSensorReceiver.kt](../app/src/main/java/com/vitalwork/app/data/sensor/watch/WatchSensorReceiver.kt) | Hilt singleton sink; exposes flows; inferred connection state + watchdog |
@@ -529,10 +529,11 @@ Watch readings are recorded to the DB and export. Each `SensorType` maps to **ex
 sensor** so HR from the watch and the eSense Pulse (recorded simultaneously) never merge — wire types
 `WATCH_HR`/`WATCH_IBI`/`WATCH_EDA` map to **`SensorType.WATCH_HR`**, **`SensorType.WATCH_IBI`** (a
 distinct value so watch HRV is attributable vs. eSense RR), and **`SensorType.WATCH_EDA`**; the eSense
-Pulse uses **`SensorType.ESENSE_HEART_RATE`**. The DB is at version 3 (v3 split per-device HR/EDA;
-`accuracy` is intentionally dropped at ingest — not a DB column); enums store as strings under
-`fallbackToDestructiveMigration`, so the rename needed no hand-written `Migration` (the destructive
-fallback wipes old local rows, which are already exported/uploaded). Export maps each type to a
+Pulse uses **`SensorType.ESENSE_HEART_RATE`**. The per-device split landed in DB v3 (v3 split
+per-device HR/EDA; `accuracy` is intentionally dropped at ingest — not a DB column); the DB is now at
+**version 6** (v4 added watch sample counters, v5 the biofeedback pivot, v6 the scenario-code rename).
+Enums store as strings under `fallbackToDestructiveMigration`, so the rename needed no hand-written
+`Migration` (the destructive fallback wipes old local rows, which are already exported/uploaded). Export maps each type to a
 distinct lowercase string (`watch_hr`/`watch_ibi`/`watch_eda`/`esense_heart_rate`) in both JSON
 (`SessionExportMapper`) and CSV (`SessionExportService`). The
 session-long buffer + `WatchSessionDrainer` (per-(scenario,type) timestamp-window attribution, with

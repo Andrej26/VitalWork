@@ -114,7 +114,7 @@ eSense Respiration (audio jack)
         └─► sdkObserver.valueHasChanged(SensorData)
               └─► _dataRate (StateFlow<Float>) ──────────────────► UI (raw RA)
               └─► _detailedStats (StateFlow<String>) ──────────────► UI (br/min)
-              └─► sampleFlow (SharedFlow<Float>) ─────────────────► SensorRecordingRepository
+              └─► sampleFlow (SharedFlow<Float>) ─────────────────► ScenarioRecordingRepository
               └─► lowSignalWarning (StateFlow) ──────────────────► UI warning
 ```
 

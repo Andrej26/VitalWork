@@ -99,9 +99,8 @@ The app has three main responsibilities:
 
 ## Git Workflow
 
-- `main` — Production branch
-- `dev` — Development/integration branch (default for PRs)
-- Feature branches: `feature/<name>` or `<author>/<name>`
+- `main` — Production branch; the base for PRs
+- Feature branches: `feature/<name>` or `<author>/<name>` (current work is on `Restructualization-and-Revizualization`)
 
 ## Supported Sensors
 
