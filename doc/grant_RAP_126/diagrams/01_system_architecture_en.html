@@ -8,183 +8,184 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
-    background: #F5F6F7; color: #2C2C2C;
+    background: #FFFFFF; color: #40484C;
     display: flex; flex-direction: column; align-items: center;
-    padding: 40px 24px 48px;
+    padding: 24px 22px 10px;
   }
-  h1 { font-size: 17px; font-weight: 700; color: #1A3A6B; letter-spacing: 0.02em; margin-bottom: 5px; text-align: center; }
-  .subtitle { font-size: 12px; color: #6B7280; margin-bottom: 22px; text-align: center; }
-  .legend { display: flex; gap: 20px; margin-bottom: 22px; flex-wrap: wrap; justify-content: center; }
-  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #6B7280; }
-  .ld { width: 13px; height: 13px; border-radius: 3px; flex-shrink: 0; }
+
+  /* Header — centered, compact */
+  .head { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 4px; }
+  .head-text { text-align: center; }
+  .eyebrow {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.14em;
+    text-transform: uppercase; color: #0E5871;
+  }
+  h1 { font-size: 19px; font-weight: 700; color: #083E50; letter-spacing: 0.01em; }
+  .subtitle { font-size: 12px; color: #4C626B; margin: 6px 0 12px; max-width: 760px; text-align: center; }
+
+  /* Legend */
+  .legend { display: flex; gap: 8px 10px; margin-bottom: 12px; flex-wrap: wrap; justify-content: center; }
+  .lchip {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 11.5px; color: #40484C;
+    border: 1px solid #DCE4E9; border-radius: 999px; padding: 4px 12px 4px 6px;
+    background: #F6F8F9;
+  }
+  .ld { width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0; }
+
   svg { display: block; }
 </style>
 </head>
 <body>
 
-<h1>VitalWork System Architecture</h1>
+<div class="head">
+  <div class="head-text">
+    <div class="eyebrow">VitalWork · Technical Documentation</div>
+    <h1>System Architecture</h1>
+  </div>
+</div>
 <p class="subtitle">How physiological sensors, the monitored device's app, and the operator's viewer device work together to capture and deliver research data</p>
 
 <div class="legend">
-  <div class="legend-item"><div class="ld" style="background:#D6EAD6;border:1.5px solid #4A8C5C;"></div>Physiological sensors</div>
-  <div class="legend-item"><div class="ld" style="background:#D6E4F5;border:1.5px solid #3A6FAD;"></div>Mobile app modules</div>
-  <div class="legend-item"><div class="ld" style="background:#E8DCEF;border:1.5px solid #7050A0;"></div>Local database</div>
-  <div class="legend-item"><div class="ld" style="background:#F5E8CC;border:1.5px solid #B07820;"></div>Peer device / Server</div>
+  <div class="lchip"><div class="ld" style="background:#E3F1E4;border:1.5px solid #2E7D32;"></div>Physiological sensors</div>
+  <div class="lchip"><div class="ld" style="background:#CFE6F2;border:1.5px solid #0E5871;"></div>Mobile app modules</div>
+  <div class="lchip"><div class="ld" style="background:#083E50;border:1.5px solid #083E50;"></div>Local database</div>
+  <div class="lchip"><div class="ld" style="background:#FFF4DE;border:1.5px solid #B26A00;"></div>Peer device / Server</div>
 </div>
 
 <!--
-  Canvas: 1060 × 600
-
-  Left column:
-    Peer device (standalone)      x=136, y=44,  w=164, h=116  (bottom: 160)
-    Sensors zone                  x=136, y=176, w=172, h=276  (bottom: 452)
-      eSense Pulse                  x=146, y=206, w=152, h=66
-      eSense Resp                   x=146, y=292, w=152, h=66
-      Galaxy Watch                  x=146, y=378, w=152, h=66  (bottom: 444)
-
-  Mobile app zone                 x=442, y=32,  w=220, h=526  (bottom: 558)
-    Peer Link + Screen Mirror       x=466, y=76,  w=172, h=96  (bottom: 172)
-
-  Pairing arrows (①–④ run in this order, top to bottom):
-    ① mDNS advertise    viewer → app  y=84
-    ② WebSocket connect app → viewer  y=106
-    ③ WebRTC signaling  both ways     y=128
-    ④ screen video      app → viewer  y=150
-    Recording Engine                x=466, y=196, w=172, h=68  (bottom: 264)
-    Room DB                         x=466, y=306, w=172, h=80  (bottom: 386)
-    Export + Upload                 x=466, y=426, w=172, h=88  (bottom: 514)
-
-  Server                          x=752, y=426, w=180, h=88   (aligned with Export+Upload)
+  Canvas: 892 × 574 (cropped from a 1076 × 600 layout — same node geometry as before, viewBox offset by x=76,y=18)
 -->
-<svg width="1060" height="600" viewBox="0 0 1060 600" xmlns="http://www.w3.org/2000/svg">
+<svg width="892" height="574" viewBox="76 18 892 574" xmlns="http://www.w3.org/2000/svg">
 <defs>
   <marker id="ag" markerWidth="7" markerHeight="5" refX="5" refY="2.5" orient="auto">
-    <path d="M0,0 L7,2.5 L0,5 z" fill="#4A8C5C"/>
+    <path d="M0,0 L7,2.5 L0,5 z" fill="#2E7D32"/>
   </marker>
-  <marker id="ab" markerWidth="7" markerHeight="5" refX="5" refY="2.5" orient="auto">
-    <path d="M0,0 L7,2.5 L0,5 z" fill="#3A6FAD"/>
+  <marker id="at" markerWidth="7" markerHeight="5" refX="5" refY="2.5" orient="auto">
+    <path d="M0,0 L7,2.5 L0,5 z" fill="#0E5871"/>
+  </marker>
+  <marker id="atr" markerWidth="7" markerHeight="5" refX="5" refY="2.5" orient="auto-start-reverse">
+    <path d="M0,0 L7,2.5 L0,5 z" fill="#0E5871"/>
   </marker>
   <marker id="aa" markerWidth="7" markerHeight="5" refX="5" refY="2.5" orient="auto">
-    <path d="M0,0 L7,2.5 L0,5 z" fill="#B07820"/>
+    <path d="M0,0 L7,2.5 L0,5 z" fill="#B26A00"/>
   </marker>
-  <marker id="ap" markerWidth="7" markerHeight="5" refX="5" refY="2.5" orient="auto">
-    <path d="M0,0 L7,2.5 L0,5 z" fill="#7050A0"/>
-  </marker>
-  <marker id="abr" markerWidth="7" markerHeight="5" refX="5" refY="2.5" orient="auto-start-reverse">
-    <path d="M0,0 L7,2.5 L0,5 z" fill="#3A6FAD"/>
+  <marker id="adb" markerWidth="7" markerHeight="5" refX="5" refY="2.5" orient="auto">
+    <path d="M0,0 L7,2.5 L0,5 z" fill="#083E50"/>
   </marker>
   <style>
     text { font-family: 'Segoe UI', Helvetica, Arial, sans-serif; }
-    .zt { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; }
-    .nh { font-size: 13px; font-weight: 700; }
-    .ns { font-size: 11px; fill: #6B7280; }
-    .al { font-size: 10.5px; fill: #6B7280; }
+    .zt  { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; }
+    .nh  { font-size: 13px; font-weight: 700; }
+    .ns  { font-size: 11px; fill: #4C626B; }
+    .nsl { font-size: 11px; fill: #BEE9FF; }
+    .al  { font-size: 10.5px; }
+    .mono { font-family: Consolas, 'Courier New', monospace; font-size: 10.5px; }
+    .wm  { font-size: 130px; font-weight: 700; letter-spacing: 0.02em; }
   </style>
 </defs>
 
-<!-- ── Operator's viewer device (standalone, aligned with Peer Link) ── -->
-<rect x="136" y="44" width="164" height="116" rx="8" fill="#F5E8CC" stroke="#B07820" stroke-width="1.5"/>
-<text x="218" y="68" text-anchor="middle" class="nh" fill="#5A3A00">Viewer Device</text>
-<text x="218" y="86" text-anchor="middle" class="ns">operator's second tablet</text>
-<text x="218" y="102" text-anchor="middle" class="ns">server role</text>
-<text x="218" y="122" text-anchor="middle" class="ns">watches the monitored</text>
-<text x="218" y="138" text-anchor="middle" class="ns">device's screen live</text>
+<!-- ── Watermark layer (behind everything) ── -->
+<g opacity="0.045" fill="#083E50">
+  <text x="538" y="345" text-anchor="middle" class="wm" transform="rotate(-11 538 320)">VitalWork</text>
+</g>
+<g opacity="0.07">
+  <polyline points="86,560 330,560 370,560 390,522 414,586 438,536 456,560 958,560"
+            fill="none" stroke="#0E5871" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+
+<!-- ── Operator's viewer device ── -->
+<rect x="96" y="44" width="164" height="116" rx="10" fill="#FFF4DE" stroke="#B26A00" stroke-width="1.5"/>
+<text x="178" y="68" text-anchor="middle" class="nh" fill="#6E4400">Viewer Device</text>
+<text x="178" y="86" text-anchor="middle" class="ns">operator's second tablet</text>
+<text x="178" y="102" text-anchor="middle" class="ns">server role</text>
+<text x="178" y="122" text-anchor="middle" class="ns">watches the monitored</text>
+<text x="178" y="138" text-anchor="middle" class="ns">device's screen live</text>
 
 <!-- ── Sensors zone ── -->
-<rect x="136" y="176" width="172" height="276" rx="11" fill="#EEF6EE" stroke="#4A8C5C" stroke-width="1.5"/>
-<text x="222" y="196" text-anchor="middle" class="zt" fill="#4A8C5C">Sensors</text>
+<rect x="96" y="176" width="172" height="276" rx="12" fill="#F2F8F2" stroke="#2E7D32" stroke-width="1.5"/>
+<text x="182" y="196" text-anchor="middle" class="zt" fill="#2E7D32">Sensors</text>
 
 <!-- eSense Pulse -->
-<rect x="146" y="206" width="152" height="66" rx="8" fill="#D6EAD6" stroke="#4A8C5C" stroke-width="1.5"/>
-<text x="222" y="228" text-anchor="middle" class="nh" fill="#1E4A2E">eSense Pulse</text>
-<text x="222" y="246" text-anchor="middle" class="ns">BLE · HR + R-R intervals</text>
-<text x="222" y="262" text-anchor="middle" class="ns">~4.5 Hz</text>
+<rect x="106" y="206" width="152" height="66" rx="9" fill="#E3F1E4" stroke="#2E7D32" stroke-width="1.5"/>
+<text x="182" y="228" text-anchor="middle" class="nh" fill="#1B5E20">eSense Pulse</text>
+<text x="182" y="246" text-anchor="middle" class="ns">BLE · HR + R-R intervals</text>
+<text x="182" y="262" text-anchor="middle" class="mono" fill="#4C626B">~4.5 Hz</text>
 
 <!-- eSense Respiration -->
-<rect x="146" y="292" width="152" height="66" rx="8" fill="#D6EAD6" stroke="#4A8C5C" stroke-width="1.5"/>
-<text x="222" y="314" text-anchor="middle" class="nh" fill="#1E4A2E">eSense Respiration</text>
-<text x="222" y="332" text-anchor="middle" class="ns">Audio jack · breathing rate</text>
-<text x="222" y="348" text-anchor="middle" class="ns">5 Hz</text>
+<rect x="106" y="292" width="152" height="66" rx="9" fill="#E3F1E4" stroke="#2E7D32" stroke-width="1.5"/>
+<text x="182" y="314" text-anchor="middle" class="nh" fill="#1B5E20">eSense Respiration</text>
+<text x="182" y="332" text-anchor="middle" class="ns">Audio jack · breathing rate</text>
+<text x="182" y="348" text-anchor="middle" class="mono" fill="#4C626B">5 Hz</text>
 
 <!-- Galaxy Watch -->
-<rect x="146" y="378" width="152" height="66" rx="8" fill="#D6EAD6" stroke="#4A8C5C" stroke-width="1.5"/>
-<text x="222" y="400" text-anchor="middle" class="nh" fill="#1E4A2E">Galaxy Watch 8</text>
-<text x="222" y="418" text-anchor="middle" class="ns">Wearable Data Layer</text>
-<text x="222" y="434" text-anchor="middle" class="ns">HR · IBI · EDA · 1 Hz</text>
+<rect x="106" y="378" width="152" height="66" rx="9" fill="#E3F1E4" stroke="#2E7D32" stroke-width="1.5"/>
+<text x="182" y="400" text-anchor="middle" class="nh" fill="#1B5E20">Galaxy Watch 8</text>
+<text x="182" y="418" text-anchor="middle" class="ns">Wearable Data Layer</text>
+<text x="182" y="434" text-anchor="middle" class="mono" fill="#4C626B">HR · IBI · EDA · 1 Hz</text>
 
 <!-- ── Mobile app zone ── -->
-<rect x="442" y="32" width="220" height="526" rx="11" fill="#EDF3FB" stroke="#3A6FAD" stroke-width="1.5"/>
-<text x="552" y="50" text-anchor="middle" class="zt" fill="#3A6FAD">Monitored Device App</text>
-<text x="552" y="66" text-anchor="middle" class="zt" fill="#3A6FAD">(VitalWork · client)</text>
+<rect x="442" y="32" width="220" height="526" rx="12" fill="#F3F9FC" stroke="#0E5871" stroke-width="1.5"/>
+<text x="552" y="50" text-anchor="middle" class="zt" fill="#0E5871">Monitored Device App</text>
+<text x="552" y="66" text-anchor="middle" class="zt" fill="#0E5871">(VitalWork · client)</text>
 
-<!-- Peer Link + Screen Mirror -->
-<rect x="466" y="76" width="172" height="96" rx="8" fill="#D6E4F5" stroke="#3A6FAD" stroke-width="1.5"/>
-<text x="552" y="100" text-anchor="middle" class="nh" fill="#1A3A6B">Peer Link</text>
+<!-- Peer Link -->
+<rect x="466" y="76" width="172" height="96" rx="9" fill="#CFE6F2" stroke="#0E5871" stroke-width="1.5"/>
+<text x="552" y="100" text-anchor="middle" class="nh" fill="#083E50">Peer Link</text>
 <text x="552" y="118" text-anchor="middle" class="ns">client role</text>
 <text x="552" y="136" text-anchor="middle" class="ns">connects to the viewer,</text>
 <text x="552" y="152" text-anchor="middle" class="ns">shares this device's screen</text>
 
 <!-- Recording Engine -->
-<rect x="466" y="196" width="172" height="68" rx="8" fill="#D6E4F5" stroke="#3A6FAD" stroke-width="1.5"/>
-<text x="552" y="220" text-anchor="middle" class="nh" fill="#1A3A6B">Recording Engine</text>
+<rect x="466" y="196" width="172" height="68" rx="9" fill="#CFE6F2" stroke="#0E5871" stroke-width="1.5"/>
+<text x="552" y="220" text-anchor="middle" class="nh" fill="#083E50">Recording Engine</text>
 <text x="552" y="238" text-anchor="middle" class="ns">per-scenario sensor capture</text>
 <text x="552" y="254" text-anchor="middle" class="ns">writes to local database</text>
 
-<!-- Room DB -->
-<rect x="466" y="306" width="172" height="80" rx="8" fill="#E8DCEF" stroke="#7050A0" stroke-width="1.5"/>
-<text x="552" y="328" text-anchor="middle" class="nh" fill="#3A1A60">Room Database (local)</text>
-<text x="552" y="346" text-anchor="middle" class="ns">4 tables: Participant, Session,</text>
-<text x="552" y="364" text-anchor="middle" class="ns">Scenario, sensor samples</text>
+<!-- Room DB — the brand anchor: solid deep petrol teal -->
+<rect x="466" y="306" width="172" height="80" rx="9" fill="#083E50"/>
+<text x="552" y="330" text-anchor="middle" class="nh" fill="#FFFFFF">Room Database</text>
+<text x="552" y="348" text-anchor="middle" class="nsl">local · 4 tables: Participant,</text>
+<text x="552" y="364" text-anchor="middle" class="nsl">Session, Scenario, samples</text>
 
 <!-- Export + Upload -->
-<rect x="466" y="426" width="172" height="88" rx="8" fill="#D6E4F5" stroke="#3A6FAD" stroke-width="1.5"/>
-<text x="552" y="450" text-anchor="middle" class="nh" fill="#1A3A6B">Export + Upload</text>
+<rect x="466" y="426" width="172" height="88" rx="9" fill="#CFE6F2" stroke="#0E5871" stroke-width="1.5"/>
+<text x="552" y="450" text-anchor="middle" class="nh" fill="#083E50">Export + Upload</text>
 <text x="552" y="468" text-anchor="middle" class="ns">JSON / CSV saved locally;</text>
 <text x="552" y="484" text-anchor="middle" class="ns">upload to VitalWork server</text>
 <text x="552" y="500" text-anchor="middle" class="ns">at session end</text>
 
-<!-- ── Server node (standalone, aligned with Export + Upload) ── -->
-<rect x="752" y="426" width="180" height="88" rx="8" fill="#F5E8CC" stroke="#B07820" stroke-width="1.5"/>
-<text x="842" y="450" text-anchor="middle" class="nh" fill="#5A3A00">VitalWork Server</text>
-<text x="842" y="468" text-anchor="middle" class="ns">POST /api/sessions/upload</text>
-<text x="842" y="486" text-anchor="middle" class="ns">idempotent · Wi-Fi / LAN</text>
+<!-- ── Server node ── -->
+<rect x="752" y="426" width="196" height="88" rx="10" fill="#FFF4DE" stroke="#B26A00" stroke-width="1.5"/>
+<text x="850" y="450" text-anchor="middle" class="nh" fill="#6E4400">VitalWork Server</text>
+<text x="850" y="470" text-anchor="middle" class="mono" fill="#6E4400">POST /api/sessions/upload</text>
+<text x="850" y="488" text-anchor="middle" class="ns">idempotent · Wi-Fi / LAN</text>
 
-<!-- ── Arrows ── -->
+<!-- ── Pairing arrows ①–④ ── -->
+<line x1="260" y1="84" x2="460" y2="84" stroke="#B26A00" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#aa)"/>
+<text x="360" y="78" text-anchor="middle" class="al" fill="#B26A00">① advertises itself (mDNS)</text>
 
-<!-- ① viewer (server) advertises itself over mDNS → app discovers it (dashed amber, viewer → app) -->
-<line x1="300" y1="84" x2="460" y2="84" stroke="#B07820" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#aa)"/>
-<text x="380" y="78" text-anchor="middle" class="al" fill="#B07820">① advertises itself (mDNS)</text>
+<line x1="460" y1="106" x2="260" y2="106" stroke="#0E5871" stroke-width="2" marker-end="url(#at)"/>
+<text x="360" y="100" text-anchor="middle" class="al" fill="#0E5871">② connects · WebSocket :9090</text>
 
-<!-- ② app (client) connects to the viewer's WebSocket (solid blue, app → viewer) -->
-<line x1="460" y1="106" x2="300" y2="106" stroke="#3A6FAD" stroke-width="2" marker-end="url(#ab)"/>
-<text x="380" y="100" text-anchor="middle" class="al" fill="#3A6FAD">② connects · WebSocket :9090</text>
+<line x1="262" y1="128" x2="458" y2="128" stroke="#0E5871" stroke-width="1.5" stroke-dasharray="5 4" marker-start="url(#atr)" marker-end="url(#at)"/>
+<text x="360" y="122" text-anchor="middle" class="al" fill="#0E5871">③ call setup (offer / answer / ICE)</text>
 
-<!-- ③ WebRTC signaling over the same socket (dashed blue, both directions) -->
-<line x1="302" y1="128" x2="458" y2="128" stroke="#3A6FAD" stroke-width="1.5" stroke-dasharray="5 4" marker-start="url(#abr)" marker-end="url(#ab)"/>
-<text x="380" y="122" text-anchor="middle" class="al" fill="#3A6FAD">③ call setup (offer / answer / ICE)</text>
+<line x1="460" y1="150" x2="260" y2="150" stroke="#0E5871" stroke-width="2.5" marker-end="url(#at)"/>
+<text x="360" y="144" text-anchor="middle" class="al" fill="#0E5871">④ live screen video (WebRTC, P2P)</text>
 
-<!-- ④ app streams its live screen to the viewer via WebRTC (solid blue, app → viewer) -->
-<line x1="460" y1="150" x2="300" y2="150" stroke="#3A6FAD" stroke-width="2.5" marker-end="url(#ab)"/>
-<text x="380" y="144" text-anchor="middle" class="al" fill="#3A6FAD">④ live screen video (WebRTC, P2P)</text>
+<!-- Sensor feeds → Recording Engine -->
+<line x1="258" y1="239" x2="460" y2="236" stroke="#2E7D32" stroke-width="1.5" marker-end="url(#ag)"/>
+<line x1="258" y1="325" x2="460" y2="248" stroke="#2E7D32" stroke-width="1.5" marker-end="url(#ag)"/>
+<line x1="258" y1="411" x2="460" y2="258" stroke="#2E7D32" stroke-width="1.5" marker-end="url(#ag)"/>
 
-<!-- Pulse → Recording Engine (green, no label) -->
-<line x1="298" y1="239" x2="460" y2="236" stroke="#4A8C5C" stroke-width="1.5" marker-end="url(#ag)"/>
+<!-- Recording Engine → Room DB → Export -->
+<line x1="552" y1="264" x2="552" y2="300" stroke="#083E50" stroke-width="1.5" marker-end="url(#adb)"/>
+<line x1="552" y1="386" x2="552" y2="420" stroke="#083E50" stroke-width="1.5" marker-end="url(#adb)"/>
 
-<!-- Respiration → Recording Engine (green, no label) -->
-<line x1="298" y1="325" x2="460" y2="248" stroke="#4A8C5C" stroke-width="1.5" marker-end="url(#ag)"/>
-
-<!-- Watch → Recording Engine (green, no label) -->
-<line x1="298" y1="411" x2="460" y2="258" stroke="#4A8C5C" stroke-width="1.5" marker-end="url(#ag)"/>
-
-<!-- Recording Engine → Room DB (straight down) -->
-<line x1="552" y1="264" x2="552" y2="300" stroke="#7050A0" stroke-width="1.5" marker-end="url(#ap)"/>
-
-<!-- Room DB → Export + Upload (straight down) -->
-<line x1="552" y1="386" x2="552" y2="420" stroke="#7050A0" stroke-width="1.5" marker-end="url(#ap)"/>
-
-<!-- Export → Server (amber, horizontal) -->
-<line x1="638" y1="470" x2="746" y2="470" stroke="#B07820" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#aa)"/>
-<text x="692" y="463" text-anchor="middle" class="al" fill="#B07820">upload to server</text>
+<!-- Export → Server -->
+<line x1="638" y1="470" x2="746" y2="470" stroke="#B26A00" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#aa)"/>
+<text x="692" y="463" text-anchor="middle" class="al" fill="#B26A00">upload to server</text>
 
 </svg>
 

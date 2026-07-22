@@ -8,28 +8,59 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
-    background: #F5F6F7; color: #2C2C2C;
+    background: #FFFFFF; color: #40484C;
     display: flex; flex-direction: column; align-items: center;
-    padding: 40px 24px 56px;
+    padding: 24px 26px 20px;
+    position: relative; overflow: hidden;
   }
-  h1 { font-size: 18px; font-weight: 700; color: #1A3A6B; letter-spacing: 0.02em; margin-bottom: 6px; text-align: center; }
-  .subtitle { font-size: 12.5px; color: #6B7280; margin-bottom: 28px; text-align: center; width: 680px; line-height: 1.6; }
+  body > * { position: relative; z-index: 1; }
 
-  .cols { display: flex; gap: 34px; align-items: flex-start; }
+  /* Watermark */
+  .wm {
+    position: absolute; z-index: 0; left: 61%; top: 62%;
+    transform: translate(-50%, -50%) rotate(-24deg);
+    font-size: 115px; font-weight: 700; letter-spacing: 0.02em;
+    color: #083E50; opacity: 0.035; white-space: nowrap; pointer-events: none;
+  }
+  .ecg { position: absolute; z-index: 0; left: 0; bottom: 6px; width: 100%; opacity: 0.07; pointer-events: none; }
+
+  /* Header — centered, compact */
+  .head-text { text-align: center; margin-bottom: 4px; }
+  .eyebrow {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.14em;
+    text-transform: uppercase; color: #0E5871;
+  }
+  h1 { font-size: 19px; font-weight: 700; color: #083E50; letter-spacing: 0.01em; }
+  .subtitle { font-size: 12px; color: #4C626B; margin: 6px 0 12px; max-width: 700px; text-align: center; line-height: 1.6; }
+  .subnote { font-size: 11px; color: #70787D; font-style: italic; margin-bottom: 14px; text-align: center; }
+
+  /* Legend — pill chips, aligned with the data-model entity colors (diagram 03) */
+  .legend { display: flex; gap: 8px 10px; margin-bottom: 6px; flex-wrap: wrap; justify-content: center; }
+  .lchip {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 11px; color: #40484C;
+    border: 1px solid #DCE4E9; border-radius: 999px; padding: 4px 12px 4px 6px;
+    background: #F6F8F9;
+  }
+  .ld { width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0; }
+
+  .cols { display: flex; gap: 30px; align-items: flex-start; }
   .panel { width: 400px; }
   .panel.json { width: 460px; }
   .panel-title {
-    font-size: 13px; font-weight: 700; color: #1A3A6B; text-align: center;
-    margin-bottom: 4px; letter-spacing: 0.02em;
+    font-size: 13px; font-weight: 700; color: #083E50; text-align: center;
+    margin-bottom: 3px; letter-spacing: 0.02em;
   }
   .panel-sub {
-    font-size: 11px; color: #6B7280; text-align: center; margin-bottom: 16px;
+    font-size: 11px; color: #4C626B; text-align: center; margin-bottom: 14px;
+    font-family: Consolas, 'Courier New', monospace;
   }
 
   /* JSON tree cards */
   .card {
     border-radius: 9px; overflow: hidden; position: relative;
-    box-shadow: 0 1px 5px rgba(0,0,0,0.09); margin-bottom: 0;
+    box-shadow: 0 1px 5px rgba(8,62,80,0.09); margin-bottom: 0;
+    background: #fff;
   }
   .card-head {
     padding: 8px 14px; font-size: 12.5px; font-weight: 700;
@@ -40,90 +71,101 @@
     display: flex; align-items: baseline; gap: 8px;
     padding: 4.5px 14px; font-size: 11.5px; line-height: 1.4;
   }
-  .fname { font-weight: 600; color: #2C2C2C; flex: 0 0 112px; }
-  .fdesc { color: #7B8494; font-size: 10.5px; flex: 1 1 auto; min-width: 0; }
+  .fname { font-weight: 600; color: #191C1E; flex: 0 0 112px; font-family: Consolas, 'Courier New', monospace; font-size: 11px; }
+  .fdesc { color: #4C626B; font-size: 10.5px; flex: 1 1 auto; min-width: 0; }
   .fex-wrap { flex: 0 0 148px; text-align: right; }
   .fex {
     font-family: Consolas, 'Courier New', monospace; font-size: 10px;
-    color: #B07820; background: #FBF3E3; border-radius: 4px;
+    color: #083E50; background: #E1F2FB; border: 1px solid #9DC8DC;
+    border-radius: 4px;
     padding: 1px 6px; white-space: nowrap; display: inline-block;
   }
-  .nest { padding-left: 14px; border-left: 2px solid #E0E5EE; margin: 2px 0 6px 14px; }
+  .nest { padding-left: 14px; border-left: 2px solid #DCE4E9; margin: 2px 0 6px 14px; }
 
-  .root { background: #D6E4F5; color: #1A3A6B; border: 1.5px solid #3A6FAD; }
-  .obj  { background: #D6EAD6; color: #1E4A2E; border: 1.5px solid #4A8C5C; }
-  .arr  { background: #E8DCEF; color: #3A1A60; border: 1.5px solid #7050A0; }
+  /* Card categories — same entity colors as diagram 03 */
+  .hd-session     { background: #CFE6F2; color: #083E50; border-bottom: 1.5px solid #0E5871; }
+  .hd-participant { background: #E3F1E4; color: #1B5E20; border-bottom: 1.5px solid #2E7D32; }
+  .hd-scenario    { background: #FFF4DE; color: #6E4400; border-bottom: 1.5px solid #B26A00; }
+  .hd-samples     { background: #B5D4E0; color: #083E50; border-bottom: 1.5px solid #083E50; }
+  .bd-session     { border: 1.5px solid #0E5871; }
+  .bd-participant { border: 1.5px solid #2E7D32; }
+  .bd-scenario    { border: 1.5px solid #B26A00; }
+  .bd-samples     { border: 1.5px solid #083E50; }
 
-  .down { width: 2px; height: 16px; background: #9CA3AF; margin: 0 auto; }
-
-  .legend { display: flex; gap: 18px; margin-bottom: 24px; flex-wrap: wrap; justify-content: center; }
-  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #6B7280; }
-  .ld { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+  .down { width: 2px; height: 15px; background: #0E5871; margin: 0 auto; }
 
   .bridge {
-    width: 100%; text-align: center; font-size: 10.5px; color: #6B7280;
-    margin: 14px 0 10px; font-style: italic;
+    width: 100%; text-align: center; font-size: 10.5px; color: #4C626B;
+    margin: 13px 0 9px; font-style: italic;
   }
 
   /* Excel-style preview */
   .xl-label {
-    font-size: 10.5px; color: #6B7280; text-align: center; margin: 4px 0 8px;
+    font-size: 10.5px; color: #4C626B; text-align: center; margin: 4px 0 8px;
   }
   .xlbox {
-    border-radius: 9px; overflow: hidden; box-shadow: 0 1px 5px rgba(0,0,0,0.1);
-    border: 1px solid #D8DCE2;
+    border-radius: 9px; overflow: hidden; box-shadow: 0 1px 5px rgba(8,62,80,0.1);
+    border: 1px solid #DCE4E9; background: #fff;
   }
   .xl-toolbar {
-    background: #21823A; color: #fff; font-size: 11px; font-weight: 700;
+    background: #217346; color: #fff; font-size: 11px; font-weight: 700;
     padding: 6px 10px;
   }
   .xl-meta {
-    background: #F4F6F4; font-size: 10px; color: #6B7280;
+    background: #F6F8F9; font-size: 10px; color: #4C626B;
     font-family: Consolas, 'Courier New', monospace;
-    padding: 3px 10px; border-bottom: 1px solid #E4E7EA;
+    padding: 3px 10px; border-bottom: 1px solid #DCE4E9;
   }
   table.xl { width: 100%; border-collapse: collapse; font-size: 11px; background: #fff; }
   table.xl th {
-    background: #EDF1F5; color: #3A4656; font-weight: 700; text-align: left;
-    padding: 5px 10px; border: 1px solid #D8DCE2;
+    background: #EAEEF0; color: #40484C; font-weight: 700; text-align: left;
+    padding: 5px 10px; border: 1px solid #DCE4E9;
   }
   table.xl td {
-    padding: 5px 10px; border: 1px solid #E4E7EA; color: #2C2C2C;
+    padding: 5px 10px; border: 1px solid #E4E9EB; color: #191C1E;
     font-family: Consolas, 'Courier New', monospace; font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
   }
-  table.xl tr:nth-child(even) td { background: #F7F9FB; }
+  table.xl tr:nth-child(even) td { background: #F6F8F9; }
   table.xl td.rownum, table.xl th.rownum {
-    background: #EDF1F5; color: #8A93A0; text-align: center; font-family: inherit;
+    background: #EAEEF0; color: #70787D; text-align: center; font-family: inherit;
     width: 22px;
   }
 
   .foot {
-    margin-top: 28px; font-size: 11px; color: #6B7280; text-align: center; width: 720px; line-height: 1.6;
+    margin-top: 20px; font-size: 11px; color: #4C626B; text-align: center; max-width: 760px; line-height: 1.6;
   }
 </style>
 </head>
 <body>
 
-<h1>Session Export Schema — JSON &amp; CSV</h1>
-<p class="subtitle">When a session ends, the app automatically uploads it to the VitalWork server. Saving <b>JSON</b>/<b>CSV</b> files locally on the device is a separate, optional step the operator can trigger for a spreadsheet-friendly copy or an offline backup — same data, same shape shown below either way.</p>
+<div class="wm">VitalWork</div>
+<svg class="ecg" viewBox="0 0 950 70" height="70" preserveAspectRatio="none"><polyline points="0,40 304,40 342,40 370,12 399,66 427,26 446,40 950,40" fill="none" stroke="#0E5871" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+
+<div class="head-text">
+  <div class="eyebrow">VitalWork · Technical Documentation</div>
+  <h1>Session Export Schema — JSON &amp; CSV</h1>
+</div>
+<p class="subtitle">When a session ends, the app automatically uploads it to the VitalWork server. Saving <b>JSON</b>/<b>CSV</b> files locally on the device <br> is a separate, optional step the operator can trigger for a spreadsheet-friendly copy or an offline backup <br> — same data, same shape shown below either way.</p>
 
 <div class="legend">
-  <div class="legend-item"><span class="ld" style="background:#D6E4F5;border:1px solid #3A6FAD;"></span>whole session</div>
-  <div class="legend-item"><span class="ld" style="background:#D6EAD6;border:1px solid #4A8C5C;"></span>one scenario</div>
-  <div class="legend-item"><span class="ld" style="background:#E8DCEF;border:1px solid #7050A0;"></span>list of items</div>
-  <div class="legend-item"><span class="fex" style="margin-left:0;">example value</span></div>
+  <div class="lchip"><span class="ld" style="background:#CFE6F2;border:1.5px solid #0E5871;"></span>session data</div>
+  <div class="lchip"><span class="ld" style="background:#E3F1E4;border:1.5px solid #2E7D32;"></span>participant data</div>
+  <div class="lchip"><span class="ld" style="background:#FFF4DE;border:1.5px solid #B26A00;"></span>scenario data</div>
+  <div class="lchip"><span class="ld" style="background:#B5D4E0;border:1.5px solid #083E50;"></span>sample lists</div>
+  <div class="lchip"><span class="fex">example value</span></div>
 </div>
-<p class="subtitle" style="margin-top:-16px; font-style: italic; font-size: 11px;">Example values below are illustrative (session codes, timestamps and counts are not from a real recording).</p>
+<p class="subnote">Example values below are illustrative (session codes, timestamps and counts are not from a real recording).</p>
 
 <div class="cols">
 
   <!-- ============ JSON ============ -->
   <div class="panel json">
     <div class="panel-title">JSON — the full session</div>
-    <div class="panel-sub">{sessionCode}_export.json &nbsp;·&nbsp; used for upload</div>
+    <div class="panel-sub">{sessionCode}_export.json · used for upload</div>
 
-    <div class="card">
-      <div class="card-head root">Session export</div>
+    <div class="card bd-session">
+      <div class="card-head hd-session">Session export</div>
       <div class="card-body">
         <div class="fld"><span class="fname">version</span><span class="fdesc">export schema version</span><span class="fex-wrap"><span class="fex">"2.1.0"</span></span></div>
         <div class="fld"><span class="fname">exportedAt</span><span class="fdesc">when this file was created (UTC)</span><span class="fex-wrap"><span class="fex">2026-06-24T08:20:00Z</span></span></div>
@@ -135,8 +177,8 @@
 
     <div class="down"></div>
 
-    <div class="card">
-      <div class="card-head obj">Participant</div>
+    <div class="card bd-participant">
+      <div class="card-head hd-participant">Participant</div>
       <div class="card-body">
         <div class="fld"><span class="fname">participantCode</span><span class="fdesc">anonymous ID</span><span class="fex-wrap"><span class="fex">A-007-260624-063337</span></span></div>
         <div class="fld"><span class="fname">age</span><span class="fdesc">self-reported, optional</span><span class="fex-wrap"><span class="fex">32</span></span></div>
@@ -146,8 +188,8 @@
 
     <div class="down"></div>
 
-    <div class="card">
-      <div class="card-head obj">Session</div>
+    <div class="card bd-session">
+      <div class="card-head hd-session">Session</div>
       <div class="card-body">
         <div class="fld"><span class="fname">sessionCode</span><span class="fdesc">session ID</span><span class="fex-wrap"><span class="fex">VW-A-260624-063346</span></span></div>
         <div class="fld"><span class="fname">startedAt</span><span class="fdesc">session start (UTC)</span><span class="fex-wrap"><span class="fex">2026-06-24T06:33:46Z</span></span></div>
@@ -168,8 +210,8 @@
 
     <div class="down"></div>
 
-    <div class="card">
-      <div class="card-head arr">Each scenario (one of many, in "scenarios")</div>
+    <div class="card bd-scenario">
+      <div class="card-head hd-scenario">Each scenario (one of many, in "scenarios")</div>
       <div class="card-body">
         <div class="fld"><span class="fname">scenarioCode</span><span class="fdesc">which of the five scenarios A–E this run was</span><span class="fex-wrap"><span class="fex">"COGNITIVE_LOAD" (= B)</span></span></div>
         <div class="fld"><span class="fname">startedAt</span><span class="fdesc">recording start (UTC)</span><span class="fex-wrap"><span class="fex">2026-06-24T06:50:38Z</span></span></div>
@@ -181,8 +223,8 @@
 
     <div class="down"></div>
 
-    <div class="card">
-      <div class="card-head arr">Each sample (one of many, in "samples")</div>
+    <div class="card bd-samples">
+      <div class="card-head hd-samples">Each sample (one of many, in "samples")</div>
       <div class="card-body">
         <div class="fld"><span class="fname">timestampMs</span><span class="fdesc">exact moment measured (NTP-corrected)</span><span class="fex-wrap"><span class="fex">1782283839046</span></span></div>
         <div class="fld"><span class="fname">elapsedMs</span><span class="fdesc">ms since the scenario began</span><span class="fex-wrap"><span class="fex">279</span></span></div>
@@ -195,10 +237,10 @@
   <!-- ============ CSV ============ -->
   <div class="panel">
     <div class="panel-title">CSV — one scenario recording at a time</div>
-    <div class="panel-sub">{sessionCode}_{NN}_{scenarioCode}.csv &nbsp;·&nbsp; opens in Excel</div>
+    <div class="panel-sub">{sessionCode}_{NN}_{scenarioCode}.csv · opens in Excel</div>
 
-    <div class="card">
-      <div class="card-head obj">Top of the file — comment lines</div>
+    <div class="card bd-scenario">
+      <div class="card-head hd-scenario">Top of the file — comment lines</div>
       <div class="card-body">
         <div class="fld"><span class="fname"># session_code</span><span class="fdesc">same facts as JSON, above</span></div>
         <div class="fld"><span class="fname"># scenario_code</span><span class="fdesc">e.g. COGNITIVE_LOAD</span></div>
@@ -210,8 +252,8 @@
 
     <div class="down"></div>
 
-    <div class="card">
-      <div class="card-head arr">Rest of the file — one row per sample</div>
+    <div class="card bd-samples">
+      <div class="card-head hd-samples">Rest of the file — one row per sample</div>
       <div class="card-body">
         <div class="fld"><span class="fname">columns</span><span class="fdesc">timestamp_ms, elapsed_ms, sensor_type, value</span><span class="fex-wrap"><span class="fex">4 columns</span></span></div>
       </div>
@@ -228,7 +270,7 @@
         <tr><td class="rownum">1</td><td>…283839046</td><td>279</td><td>watch_hr</td><td>82.0</td></tr>
         <tr><td class="rownum">2</td><td>…283839237</td><td>470</td><td>watch_eda</td><td>21.434</td></tr>
         <tr><td class="rownum">3</td><td>…283840047</td><td>1280</td><td>esense_heart_rate</td><td>78.0</td></tr>
-        <tr><td class="rownum">⋮</td><td colspan="4" style="text-align:center;color:#8A93A0;font-style:italic;">⋮ &nbsp;more sample rows continue below&nbsp; ⋮</td></tr>
+        <tr><td class="rownum">⋮</td><td colspan="4" style="text-align:center;color:#70787D;font-style:italic;">⋮ &nbsp;more sample rows continue below&nbsp; ⋮</td></tr>
       </table>
     </div>
   </div>
