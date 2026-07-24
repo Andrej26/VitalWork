@@ -158,6 +158,14 @@ breaths per minute).
 ## 5. Creating a participant and starting a session
 
 1. On the Home screen, tap **Start New Session**.
+
+   > **If the button is grayed out** with the note *"Fix the warnings above to start"*, the tablet is
+   > missing a setting the session cannot safely run without — the **battery-optimization exemption**
+   > or the **notification permission** (without them, the system can silently kill the recording
+   > while the screen is off and the whole session would be lost). Use the **Fix** buttons in the
+   > warning card at the top of the Home screen; the button unlocks as soon as both are granted.
+   > Resuming an already-running session is never blocked.
+
 2. The **New Participant** form appears:
    - **Participant code** — automatically generated (e.g. `A-004-260722-115828`). Read-only — do not
      try to edit it.
@@ -170,7 +178,10 @@ breaths per minute).
 
 4. The app opens the **sensor-setup screen** — a one-time check to confirm sensors before recording
    starts (see §4 and the screenshot above). Tap **Proceed to scenarios** once the sensors you need are
-   connected.
+   connected. The button stays disabled (with the hint *"Connect at least one sensor to continue."*)
+   until **at least one sensor is connected** — this prevents starting a scenario that would record no
+   data. Disconnected sensors show a dashed border with a **Tap to connect** pill; tapping anywhere on
+   such a card starts its connection flow.
 
 > A foreground service keeps the sensors and (if enabled) the device link alive even while the tablet
 > screen is off, so the operator does not have to hold the tablet continuously.
@@ -242,6 +253,10 @@ After the sensor-setup screen, the **scenario hub** is shown — one card per sc
 > If a sensor disconnects mid-scenario, a banner appears ("… disconnected — Recording continues —
 > reconnect to resume data capture"). The scenario keeps its timer running; reconnect the sensor as
 > soon as possible to minimize the gap in that scenario's data.
+
+> If a scenario is opened with **no sensor connected at all** (for example, a sensor dropped between
+> setup and the scenario), a **"No sensor connected"** banner appears and neither the recording nor
+> the countdown starts. Nothing is lost — connect a sensor and the scenario begins normally.
 
 ---
 

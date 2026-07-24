@@ -163,6 +163,14 @@ dýchania, nie počet nádychov za minútu).
 ## 5. Zadanie účastníka a spustenie sedenia
 
 1. Na domovskej obrazovke ťuknite na **Start New Session**.
+
+   > **Ak je tlačidlo neaktívne (sivé)** s poznámkou *„Fix the warnings above to start"*, tabletu
+   > chýba nastavenie, bez ktorého sedenie nemôže bezpečne bežať — **výnimka z optimalizácie
+   > batérie** alebo **povolenie notifikácií** (bez nich môže systém pri vypnutej obrazovke potichu
+   > ukončiť nahrávanie a celé sedenie by sa stratilo). Použite tlačidlá **Fix** vo varovnej karte
+   > v hornej časti domovskej obrazovky; tlačidlo sa odomkne hneď po udelení oboch povolení.
+   > Obnovenie už bežiaceho sedenia nie je nikdy blokované.
+
 2. Zobrazí sa formulár **New Participant**:
    - **Participant code** — automaticky generovaný (napr. `A-004-260722-115828`). Iba na čítanie —
      nepokúšajte sa ho upraviť.
@@ -175,7 +183,10 @@ dýchania, nie počet nádychov za minútu).
 
 4. Aplikácia otvorí **obrazovku nastavenia senzorov** — jednorazovú kontrolu pred začiatkom nahrávania
    (pozri §4 a snímku vyššie). Ťuknite na **Proceed to scenarios**, akonáhle sú potrebné senzory
-   pripojené.
+   pripojené. Tlačidlo zostáva neaktívne (s poznámkou *„Connect at least one sensor to continue."*),
+   kým nie je pripojený **aspoň jeden senzor** — bráni to spusteniu scenára, ktorý by nezaznamenal
+   žiadne dáta. Odpojené senzory majú prerušovaný (čiarkovaný) okraj so štítkom **Tap to connect**;
+   ťuknutie kdekoľvek na takúto kartu spustí jej pripájanie.
 
 > Foreground služba udržiava senzory a (ak je zapnuté) aj spojenie medzi zariadeniami aktívne aj pri
 > vypnutej obrazovke tabletu, takže operátor nemusí tablet držať nepretržite v ruke.
@@ -250,6 +261,10 @@ tlačidlo **End Session & Save** na konci.
 > Ak sa senzor počas scenára odpojí, zobrazí sa banner („… odpojený — nahrávanie pokračuje —
 > pripojte ho znova, aby sa obnovilo zaznamenávanie dát"). Časovač scenára beží ďalej; senzor
 > pripojte čo najskôr, aby bola medzera v dátach daného scenára čo najmenšia.
+
+> Ak sa scenár otvorí **bez jediného pripojeného senzora** (napríklad senzor vypadol medzi
+> nastavením a scenárom), zobrazí sa banner **„No sensor connected"** a nespustí sa ani nahrávanie,
+> ani odpočet. O nič neprichádzate — pripojte senzor a scenár sa začne normálne.
 
 ---
 

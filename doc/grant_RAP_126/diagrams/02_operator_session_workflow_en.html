@@ -15,14 +15,15 @@
   }
   body > * { position: relative; z-index: 1; }
 
-  /* Watermark */
+  /* Watermark — fixed to the viewport (not body) so it can't sit below the actual content when the
+     window is taller than the rendered flow, which would otherwise defeat png autocrop. */
   .wm {
-    position: absolute; z-index: 0; left: 50%; top: 55%;
+    position: fixed; z-index: 0; left: 50%; top: 55%;
     transform: translate(-50%, -50%) rotate(-10deg);
     font-size: 150px; font-weight: 700; letter-spacing: 0.02em;
     color: #083E50; opacity: 0.035; white-space: nowrap; pointer-events: none;
   }
-  .ecg { position: absolute; z-index: 0; left: 0; bottom: 6px; width: 100%; opacity: 0.07; pointer-events: none; }
+  .ecg { position: fixed; z-index: 0; left: 0; bottom: 6px; width: 100%; opacity: 0.07; pointer-events: none; }
 
   /* Header — centered, compact */
   .head-text { text-align: center; margin-bottom: 4px; }
@@ -140,7 +141,7 @@
     <div class="step-row" style="align-items:center;">
       <div class="step s-teal">
         <span class="title">Ready?</span><span class="who">📱</span>
-        <span class="sub">permissions · Bluetooth · battery</span>
+        <span class="sub">battery + notifications must be granted · BLE/mic checked at connect</span>
       </div>
       <div class="h-arr ha-teal"></div>
       <div class="step s-teal">
@@ -150,10 +151,10 @@
       <div class="h-arr ha-teal"></div>
       <div class="step s-teal">
         <span class="title">Sensor Setup Gate</span><span class="who">👤</span>
-        <span class="sub">connect &amp; confirm Pulse · Respiration · Watch · tap Proceed</span>
+        <span class="sub">connect Pulse · Respiration · Watch · Proceed unlocks with ≥ 1 sensor</span>
       </div>
     </div>
-    <div class="loop-note">↺ Not ready → fix prerequisites, then retry</div>
+    <div class="loop-note">↺ Prerequisites missing → “Start New Session” stays disabled until fixed via the warning card</div>
   </div>
   <div class="conn c-teal"></div>
 
@@ -184,6 +185,7 @@
         <span class="sub">scenario closed · pick next, or end</span>
       </div>
     </div>
+    <div class="loop-note">↺ No sensor connected → “No sensor connected” banner; countdown &amp; recording wait until one connects</div>
   </div>
   <div class="conn c-amber"></div>
 
