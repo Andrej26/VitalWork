@@ -509,6 +509,16 @@ fun SessionControlScreen(
                     WatchLinkLostBanner()
                 }
 
+                // No-sensor warning during a scenario run: startManualRecording() self-guards on a
+                // connected sensor, so entering a scenario with none leaves the countdown idle and nothing
+                // recording. Tell the operator why (mirrors the setup-screen gate) instead of leaving a
+                // frozen countdown unexplained. Only in a real scenario run (not setup, which has its own
+                // gate), and only while nothing is recording — a mid-recording drop is covered by
+                // SensorLostDuringRecordingBanner above.
+                if (!setupMode && !anySensorConnected && !recordingUiState.isRecording) {
+                    NoSensorConnectedBanner()
+                }
+
                 // Hero auto-return countdown: a scenario run's whole purpose is to hand back to the
                 // scenario-selection hub after the scenario's full duration (A/E 10 min, B/C 20 min,
                 // D 30 min), so it's the focal point at the top. When the countdown ends we stop+finalize
@@ -1181,6 +1191,22 @@ private fun SensorLostDuringRecordingBanner(sensorNames: List<String>) {
         icon = Icons.Outlined.Warning,
         severity = AlertSeverity.BLOCKING,
         pulse = true
+    )
+}
+
+/**
+ * Shown on a scenario run when no sensor is connected: the recording + auto-return countdown are
+ * both gated on a connected sensor ([SessionControlViewModel.startManualRecording]), so without one
+ * nothing starts. Explains the otherwise-silent idle state so the operator knows to connect a sensor.
+ */
+@Composable
+private fun NoSensorConnectedBanner() {
+    AlertCard(
+        title = "No sensor connected",
+        description = "Recording and the countdown won't start until at least one sensor is " +
+            "connected. Connect one above to begin this scenario.",
+        icon = Icons.Default.Sensors,
+        severity = AlertSeverity.BLOCKING
     )
 }
 
