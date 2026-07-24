@@ -42,6 +42,27 @@ interface SystemReadinessChecker {
 
     companion object {
         /**
+         * Prerequisites that must be satisfied *before* an operator can start a new session — the
+         * blocking set. Their absence silently loses an entire locked-screen session (an aggressive
+         * OEM kills the recording foreground service, or the FGS can't post its required
+         * notification on Android 13+), so we stop the operator at the point of no session yet
+         * created (Home "Start New Session", the tutorial's finish button) rather than let them
+         * mint a session that can't record and then get stuck.
+         *
+         * BLUETOOTH and MICROPHONE stay *soft* warnings (banner only): their absence fails loudly
+         * and locally the moment the operator tries to connect that specific sensor, and not every
+         * session uses every sensor.
+         */
+        val BLOCKING_PREREQUISITES: Set<SessionPrerequisite> = setOf(
+            SessionPrerequisite.BATTERY_OPTIMIZATION,
+            SessionPrerequisite.NOTIFICATIONS
+        )
+
+        /** Whether starting a new session is currently allowed given the [missing] set. */
+        fun canStartSession(missing: Set<SessionPrerequisite>): Boolean =
+            missing.none { it in BLOCKING_PREREQUISITES }
+
+        /**
          * The BLE permissions required at runtime. Kept identical to the array built in
          * SessionControlScreen so readiness and the existing BLE flow never disagree.
          */

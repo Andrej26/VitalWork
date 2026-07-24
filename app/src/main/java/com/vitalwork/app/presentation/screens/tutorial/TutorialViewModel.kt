@@ -16,8 +16,12 @@ import com.vitalwork.app.data.sensor.ble.BleManager
 import com.vitalwork.app.data.sensor.ble.model.BleDevice
 import com.vitalwork.app.data.sensor.watch.WatchLinkStatus
 import com.vitalwork.app.data.sensor.watch.WatchSensorReceiver
+import com.vitalwork.app.data.system.SessionPrerequisite
+import com.vitalwork.app.data.system.SystemReadinessChecker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -40,8 +44,19 @@ data class TutorialUiState(
     val audioPermissionGranted: Boolean = false,
     // Galaxy Watch (passive — the watch companion app pushes data; the tablet only receives)
     val watchLinkStatus: WatchLinkStatus = WatchLinkStatus.DISCONNECTED,
-    val watchBatteryLevel: Int? = null
-)
+    val watchBatteryLevel: Int? = null,
+    // Session prerequisites still missing (drives the finish-step readiness card). Empty == all good.
+    val missingPrerequisites: Set<SessionPrerequisite> = emptySet()
+) {
+    /**
+     * Whether the tutorial's finish button ("Go to Sessions") may proceed. Same blocking rule as
+     * Home: a missing battery-optimization exemption or notification permission would let the
+     * operator create a session that can't record reliably, so we stop them here — the last screen
+     * before they'd start one — while BLE/mic stay soft warnings caught at connect time.
+     */
+    val canStartSession: Boolean
+        get() = SystemReadinessChecker.canStartSession(missingPrerequisites)
+}
 
 @HiltViewModel
 class TutorialViewModel @Inject constructor(
@@ -49,6 +64,7 @@ class TutorialViewModel @Inject constructor(
     @Named("respiration") private val respirationSensor: SensorDevice,
     private val watchSensorReceiver: WatchSensorReceiver,
     private val tutorialPreferences: TutorialPreferencesRepository,
+    private val readinessChecker: SystemReadinessChecker,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -192,6 +208,27 @@ class TutorialViewModel @Inject constructor(
 
     fun recheckLocationEnabled() {
         _uiState.update { it.copy(locationEnabled = isLocationEnabled()) }
+    }
+
+    // ── Readiness (finish-step blocking prerequisites) ─────────────────────────
+
+    private var readinessRefreshJob: Job? = null
+
+    /**
+     * Re-derive readiness from live OS state, then re-check a couple of times over the next second.
+     * Some systems (notably MIUI's battery-optimization flow) report the new value with a short lag
+     * after the operator confirms and returns, which would otherwise leave the finish step blocked
+     * until another interaction. Mirrors the Home/session-control refresh pattern.
+     */
+    fun refreshReadiness() {
+        _uiState.update { it.copy(missingPrerequisites = readinessChecker.missingPrerequisites()) }
+        readinessRefreshJob?.cancel()
+        readinessRefreshJob = viewModelScope.launch {
+            for (delayMs in longArrayOf(350L, 800L)) {
+                delay(delayMs)
+                _uiState.update { it.copy(missingPrerequisites = readinessChecker.missingPrerequisites()) }
+            }
+        }
     }
 
     // ── Prefs ─────────────────────────────────────────────────────────────────

@@ -81,6 +81,7 @@ fun HomeScreen(
     val isStarting by viewModel.isStarting.collectAsState()
     val shouldAutoShowTutorial by viewModel.shouldAutoShowTutorial.collectAsState()
     val missingPrerequisites by viewModel.missingPrerequisites.collectAsState()
+    val canStartSession by viewModel.canStartSession.collectAsState()
     val watchBatteryAlert by viewModel.watchBatteryAlert.collectAsState()
     val watchBatteryLevel by viewModel.watchBatteryLevel.collectAsState()
     val linkConnectionState by viewModel.linkConnectionState.collectAsState()
@@ -226,9 +227,13 @@ fun HomeScreen(
                             } else {
                                 RadialCenterButton(
                                     title = if (currentActive != null) "Resume Active Session" else "Start New Session",
-                                    subtitle = elapsedLabel,
+                                    subtitle = when {
+                                        currentActive != null -> elapsedLabel
+                                        !canStartSession -> "Fix the warnings above to start"
+                                        else -> elapsedLabel
+                                    },
                                     icon = painterResource(R.drawable.ic_ecg),
-                                    enabled = !isStarting,
+                                    enabled = !isStarting && canStartSession,
                                     containerColor = if (currentActive != null) ActiveSessionOrange
                                         else MaterialTheme.colorScheme.primary,
                                     contentColor = if (currentActive != null) Color.White

@@ -116,6 +116,22 @@ class HomeViewModel @Inject constructor(
     val activeSession: StateFlow<SessionEntity?> = sessionRepository.activeSession
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    /**
+     * Whether the "Start New Session" button is enabled. A missing blocking prerequisite (see
+     * [SystemReadinessChecker.BLOCKING_PREREQUISITES]) stops a *new* session being created here,
+     * before any participant/session exists — that's the safe point to block, since a session
+     * created without these can't record reliably yet can't be ended from the setup gate.
+     *
+     * An already-active session is exempt: the button then just resumes it, and resuming must
+     * never be blocked or the operator would be stuck with a session they can't reach to end.
+     */
+    val canStartSession: StateFlow<Boolean> = combine(
+        _missingPrerequisites,
+        activeSession
+    ) { missing, active ->
+        active != null || SystemReadinessChecker.canStartSession(missing)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
     private val _isStarting = MutableStateFlow(false)
     val isStarting: StateFlow<Boolean> = _isStarting.asStateFlow()
 
