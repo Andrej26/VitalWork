@@ -7,7 +7,9 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +29,7 @@ import androidx.compose.material.icons.filled.Battery4Bar
 import androidx.compose.material.icons.filled.Battery5Bar
 import androidx.compose.material.icons.filled.Battery6Bar
 import androidx.compose.material.icons.filled.BatteryFull
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -35,10 +38,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.vitalwork.app.presentation.components.ConnectionStatusBadge
@@ -92,6 +104,10 @@ fun LiveSensorCard(
         label = "icon_scale"
     )
 
+    // A disconnected, tappable card gets a dashed primary border (the familiar "empty slot to fill"
+    // affordance) so the whole card reads as tappable — the tap target is the whole card, not just the
+    // small hint text. Connected/connecting/error states keep the solid status-colored border.
+    val cardShape = MaterialTheme.shapes.medium
     Box(modifier = modifier) {
         Surface(
             modifier = Modifier
@@ -99,10 +115,20 @@ fun LiveSensorCard(
                 .then(
                     if (isClickable) Modifier.clickable { onClick?.invoke() }
                     else Modifier
+                )
+                .then(
+                    if (isClickable) Modifier.dashedBorder(
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = cardShape,
+                        strokeWidth = 2.dp,
+                        dashLength = 6.dp,
+                        gapLength = 4.dp
+                    ) else Modifier
                 ),
-            shape = MaterialTheme.shapes.medium,
+            shape = cardShape,
             color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(2.dp, borderColor)
+            // The solid border is suppressed while clickable so the dashed overlay above stands alone.
+            border = if (isClickable) null else BorderStroke(2.dp, borderColor)
         ) {
             Column(
                 modifier = Modifier
@@ -158,11 +184,7 @@ fun LiveSensorCard(
 
                 if (isClickable) {
                     Spacer(modifier = Modifier.height(gap))
-                    Text(
-                        text = "Tap to connect",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
-                    )
+                    TapActionPill(text = "Tap to connect", compact = compact)
                 }
 
                 if (sampleCount > 0) {
@@ -202,6 +224,69 @@ fun LiveSensorCard(
                 }
             }
         }
+    }
+}
+
+/**
+ * The tap affordance for a disconnected, clickable sensor card/group: a small pill with a touch icon in
+ * full primary color, so it reads as an action rather than the old faint hint text. The whole card/group
+ * is the tap target — this pill just names the action ([text], e.g. "Tap to connect"). Shared by
+ * [LiveSensorCard] and [DeviceSensorGroup] so the "tap here" language is identical across the screen.
+ */
+@Composable
+fun TapActionPill(text: String, compact: Boolean) {
+    val vPad = if (compact) 3.dp else 4.dp
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f))
+            .padding(horizontal = 10.dp, vertical = vPad),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Filled.TouchApp,
+            contentDescription = null,
+            modifier = Modifier.size(14.dp),
+            tint = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+        )
+    }
+}
+
+/**
+ * Draws a dashed [color] border along the [shape]'s outline. Used to mark a disconnected sensor
+ * card/group as tappable (the "empty slot to fill" affordance) without changing its fill, so it stays
+ * distinct from the solid status-colored borders of connected/connecting/error states. Shared by
+ * [LiveSensorCard] and [DeviceSensorGroup].
+ */
+fun Modifier.dashedBorder(
+    color: Color,
+    shape: Shape,
+    strokeWidth: Dp,
+    dashLength: Dp,
+    gapLength: Dp
+): Modifier = this.drawWithContent {
+    drawContent()
+    val stroke = Stroke(
+        width = strokeWidth.toPx(),
+        pathEffect = PathEffect.dashPathEffect(
+            floatArrayOf(dashLength.toPx(), gapLength.toPx()), 0f
+        )
+    )
+    val inset = strokeWidth.toPx() / 2f
+    val outline = shape.createOutline(
+        size = Size(size.width - strokeWidth.toPx(), size.height - strokeWidth.toPx()),
+        layoutDirection = layoutDirection,
+        density = this
+    )
+    translate(left = inset, top = inset) {
+        drawOutline(outline = outline, color = color, style = stroke)
     }
 }
 

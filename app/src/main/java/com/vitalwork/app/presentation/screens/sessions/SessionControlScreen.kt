@@ -600,9 +600,10 @@ fun SessionControlScreen(
                         } else {
                             scope.launch {
                                 snackbarHostState.showSnackbar(
-                                    message = "Bluetooth is on. Make sure the watch's Wave app is " +
-                                        "running and tracking.",
-                                    duration = SnackbarDuration.Short
+                                    message = "Bluetooth is on — nothing more to do on this device. " +
+                                        "Open the Wave app on the watch and tap Start; it connects here " +
+                                        "automatically.",
+                                    duration = SnackbarDuration.Long
                                 )
                             }
                         }
