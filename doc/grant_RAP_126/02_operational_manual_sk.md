@@ -80,7 +80,7 @@ uchová — pri ďalšom spustení aplikácia prejde priamo na domovskú obrazov
 ### 3.2 Domovská obrazovka (režim Client)
 
 *Snímka obrazovky: Domovská obrazovka, režim Client*
-![Domov — Client](screenshots/VW_01_home_client.jpg)
+![Domov — Client](screenshots/VW_01_home_client.jpg){width=2.3in}
 
 | Prvok | Účel |
 |-------|------|
@@ -98,7 +98,7 @@ uchová — pri ďalšom spustení aplikácia prejde priamo na domovskú obrazov
 ### 3.3 Domovská obrazovka (režim Server)
 
 *Snímka obrazovky: Domovská obrazovka, režim Server*
-![Domov — Server](screenshots/VW_09_home_server.jpg)
+![Domov — Server](screenshots/VW_09_home_server.jpg){width=2.3in}
 
 Zariadenie v režime Server zobrazuje iba **Connect as Server** a **Settings** — hostenie spojenia a
 sledovanie obrazovky spárovaného zariadenia je jeho jedinou úlohou; samotné sedenia ani senzory
@@ -107,7 +107,7 @@ nespúšťa.
 ### 3.4 Jednorazové nastavenie — prefix a režim zariadenia
 
 *Snímka obrazovky: Settings — prefix zariadenia a režim zariadenia*
-![Settings](screenshots/VW_02_settings.jpg)
+![Settings](screenshots/VW_02_settings.jpg){width=2.3in}
 
 Pred prvým sedením otvorte **Settings** a zvoľte prefix tohto zariadenia: **A**, **B**, **C** alebo
 **D**. Prefix sa pridáva ku každému kódu účastníka (napr. `A-001`) a kódu sedenia
@@ -156,7 +156,7 @@ dýchania, nie počet nádychov za minútu).
 
 *Snímka obrazovky: obrazovka nastavenia senzorov — Mindfield eSense (pripája sa) a Galaxy Watch 8
 (odpojený)*
-![Nastavenie senzorov](screenshots/VW_04_sensor_setup.jpg)
+![Nastavenie senzorov](screenshots/VW_04_sensor_setup.jpg){width=2.3in}
 
 ---
 
@@ -179,7 +179,7 @@ dýchania, nie počet nádychov za minútu).
 3. Ťuknite na **Start session**.
 
 *Snímka obrazovky: formulár New Participant*
-![Nový účastník](screenshots/VW_03_new_participant.jpg)
+![Nový účastník](screenshots/VW_03_new_participant.jpg){width=2.3in}
 
 4. Aplikácia otvorí **obrazovku nastavenia senzorov** — jednorazovú kontrolu pred začiatkom nahrávania
    (pozri §4 a snímku vyššie). Ťuknite na **Proceed to scenarios**, akonáhle sú potrebné senzory
@@ -204,12 +204,12 @@ dýchania, nie počet nádychov za minútu).
    *Waiting for monitored device*.
 
    *Snímka obrazovky: Link — Server, pred pripojením*
-   ![Link — Server](screenshots/VW_10_link_server.jpg)
+   ![Link — Server](screenshots/VW_10_link_server.jpg){width=2.3in}
 
 2. Na zariadení **Client** ťuknite na **Connect as Client**. Aplikácia vyhľadá Server cez mDNS.
 
    *Snímka obrazovky: Link — Client, vyhľadávanie*
-   ![Link — Client](screenshots/VW_08_link_client.jpg)
+   ![Link — Client](screenshots/VW_08_link_client.jpg){width=2.3in}
 
 3. Na zariadení Client ťuknite na nájdené zariadenie v zozname **Discovered peers** a potom na
    **Connect**. Po nadviazaní WebSocket spojenia sa na oboch obrazovkách zobrazí zelený stav
@@ -236,7 +236,7 @@ Po obrazovke nastavenia senzorov sa zobrazí **rozcestník scenárov** — jedna
 tlačidlo **End Session & Save** na konci.
 
 *Snímka obrazovky: rozcestník scenárov*
-![Rozcestník scenárov](screenshots/VW_05_scenario_hub.jpg)
+![Rozcestník scenárov](screenshots/VW_05_scenario_hub.jpg){width=2.3in}
 
 | Scenár | Trvanie | Účel |
 |--------|---------|------|
@@ -280,7 +280,7 @@ tlačidlo **End Session & Save** na konci.
    obrazovku prehľadu sedenia.
 
    *Snímka obrazovky: potvrdenie ukončenia sedenia*
-   ![Watch data saved](screenshots/VW_06_watch_data_saved.jpg)
+   ![Watch data saved](screenshots/VW_06_watch_data_saved.jpg){width=2.3in}
 
    > Ak hodinky nereagujú, je k dispozícii voľba **End without watch data** — hodinky si svoje
    > uložené dáta bezpečne ponechajú a možno ich získať pri neskoršom sedení; žiadne dáta sa
@@ -291,7 +291,7 @@ tlačidlo **End Session & Save** na konci.
 Aplikácia automaticky otvorí obrazovku **prehľadu sedenia**.
 
 *Snímka obrazovky: prehľad sedenia*
-![Prehľad sedenia](screenshots/VW_07_session_review.jpg)
+![Prehľad sedenia](screenshots/VW_07_session_review.jpg){width=2.3in}
 
 | Akcia | Účinok |
 |-------|--------|

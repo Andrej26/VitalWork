@@ -79,7 +79,7 @@ straight to Home. It can be changed any time in **Settings**.
 ### 3.2 Home screen (Client mode)
 
 *Screenshot: Home screen, Client mode*
-![Home — Client](screenshots/VW_01_home_client.jpg)
+![Home — Client](screenshots/VW_01_home_client.jpg){width=2.3in}
 
 | Element | Purpose |
 |---------|---------|
@@ -97,7 +97,7 @@ straight to Home. It can be changed any time in **Settings**.
 ### 3.3 Home screen (Server mode)
 
 *Screenshot: Home screen, Server mode*
-![Home — Server](screenshots/VW_09_home_server.jpg)
+![Home — Server](screenshots/VW_09_home_server.jpg){width=2.3in}
 
 A device in Server mode shows only **Connect as Server** and **Settings** — hosting the link and
 watching the paired device's screen is its only job; it does not run sessions or sensors itself.
@@ -105,7 +105,7 @@ watching the paired device's screen is its only job; it does not run sessions or
 ### 3.4 One-time setup — device prefix and mode
 
 *Screenshot: Settings — device prefix and device mode*
-![Settings](screenshots/VW_02_settings.jpg)
+![Settings](screenshots/VW_02_settings.jpg){width=2.3in}
 
 Before the first session, open **Settings** and pick this device's prefix: **A**, **B**, **C** or
 **D**. The prefix is added to every participant code (e.g. `A-001`) and session code
@@ -151,7 +151,7 @@ breaths per minute).
 > companion app is running.
 
 *Screenshot: Sensor-setup screen — Mindfield eSense (connecting) and Galaxy Watch 8 (disconnected)*
-![Sensor setup](screenshots/VW_04_sensor_setup.jpg)
+![Sensor setup](screenshots/VW_04_sensor_setup.jpg){width=2.3in}
 
 ---
 
@@ -174,7 +174,7 @@ breaths per minute).
 3. Tap **Start session**.
 
 *Screenshot: New Participant form*
-![New participant](screenshots/VW_03_new_participant.jpg)
+![New participant](screenshots/VW_03_new_participant.jpg){width=2.3in}
 
 4. The app opens the **sensor-setup screen** — a one-time check to confirm sensors before recording
    starts (see §4 and the screenshot above). Tap **Proceed to scenarios** once the sensors you need are
@@ -199,12 +199,12 @@ breaths per minute).
    *Waiting for monitored device*.
 
    *Screenshot: Link — Server, before connecting*
-   ![Link — Server](screenshots/VW_10_link_server.jpg)
+   ![Link — Server](screenshots/VW_10_link_server.jpg){width=2.3in}
 
 2. On the **Client** device, tap **Connect as Client**. It scans for the Server over mDNS.
 
    *Screenshot: Link — Client, scanning*
-   ![Link — Client](screenshots/VW_08_link_client.jpg)
+   ![Link — Client](screenshots/VW_08_link_client.jpg){width=2.3in}
 
 3. On the Client, tap the discovered device in **Discovered peers**, then tap **Connect**. Both
    screens turn to a green **Connected** status once the WebSocket link is up.
@@ -228,7 +228,7 @@ After the sensor-setup screen, the **scenario hub** is shown — one card per sc
 **End Session & Save** at the bottom.
 
 *Screenshot: Scenario hub*
-![Scenario hub](screenshots/VW_05_scenario_hub.jpg)
+![Scenario hub](screenshots/VW_05_scenario_hub.jpg){width=2.3in}
 
 | Scenario | Duration | Purpose |
 |----------|----------|---------|
@@ -271,7 +271,7 @@ After the sensor-setup screen, the **scenario hub** is shown — one card per sc
    automatically to the session review screen.
 
    *Screenshot: End-session confirmation*
-   ![Watch data saved](screenshots/VW_06_watch_data_saved.jpg)
+   ![Watch data saved](screenshots/VW_06_watch_data_saved.jpg){width=2.3in}
 
    > If the watch does not respond, **End without watch data** is available — the watch keeps its
    > stored data safely and it can be recovered on a later session; no data is lost, only delayed.
@@ -281,7 +281,7 @@ After the sensor-setup screen, the **scenario hub** is shown — one card per sc
 The app opens the **session review** screen automatically.
 
 *Screenshot: Session review*
-![Session review](screenshots/VW_07_session_review.jpg)
+![Session review](screenshots/VW_07_session_review.jpg){width=2.3in}
 
 | Action | Effect |
 |--------|--------|
