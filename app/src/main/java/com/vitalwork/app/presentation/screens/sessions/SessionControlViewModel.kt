@@ -409,6 +409,24 @@ class SessionControlViewModel @Inject constructor(
     }
 
     /**
+     * Reactive mirror of [anySensorConnected] for the setup-screen gate: true when at least one sensor
+     * (eSense Pulse / eSense Respiration / Galaxy Watch) is connected. Drives the "Proceed to scenarios"
+     * button's enabled state so the operator can't advance into a scenario that would silently record
+     * nothing (a scenario run's [startManualRecording] self-guards on the same condition anyway, but
+     * gating here surfaces the reason instead of leaving a countdown running with no data).
+     */
+    val anySensorConnected: StateFlow<Boolean> = combine(
+        connectionRepository.bleConnectionState,
+        connectionRepository.respirationState,
+        connectionRepository.watchConnectionState,
+    ) { bleState, respState, watchState ->
+        val bleConnected = bleState == ConnectionState.CONNECTED
+        val respConnected = respState == DeviceState.Streaming || respState == DeviceState.Connected
+        val watchConnected = watchState == ConnectionState.CONNECTED
+        bleConnected || respConnected || watchConnected
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    /**
      * Start a scenario + sensor recording from the phone. Creates a scenario row for a fixed
      * scenario code and begins capture. Gated on an ACTIVE session with at least one sensor connected.
      */

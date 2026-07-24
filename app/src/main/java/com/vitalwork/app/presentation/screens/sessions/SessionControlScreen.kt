@@ -155,6 +155,10 @@ fun SessionControlScreen(
     // Recording state
     val recordingUiState by viewModel.recordingUiState.collectAsState()
 
+    // Setup-mode gate: at least one sensor must be connected before advancing to the scenario hub,
+    // otherwise a scenario run would start a countdown but silently record nothing.
+    val anySensorConnected by viewModel.anySensorConnected.collectAsState()
+
     // Session state
     val session by viewModel.session.collectAsState()
     val endSessionResult by viewModel.endSessionResult.collectAsState()
@@ -657,6 +661,7 @@ fun SessionControlScreen(
                 if (setupMode) {
                     Button(
                         onClick = onProceed,
+                        enabled = anySensorConnected,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Proceed to scenarios")
@@ -665,6 +670,17 @@ fun SessionControlScreen(
                             imageVector = Icons.Default.SkipNext,
                             contentDescription = null,
                             modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    if (!anySensorConnected) {
+                        Text(
+                            text = "Connect at least one sensor to continue.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 6.dp)
                         )
                     }
                 }
