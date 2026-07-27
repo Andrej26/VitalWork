@@ -31,7 +31,7 @@ class SessionExportMapperTest {
         fakeScenarioDao = FakeScenarioDao()
         fakeSensorSampleDao = FakeSensorSampleDao()
         scenarioRepository = ScenarioRepository(fakeScenarioDao, fakeSensorSampleDao, TimeProvider.system())
-        mapper = SessionExportMapper(scenarioRepository, TimeProvider.system())
+        mapper = SessionExportMapper(ScenarioSampleCollector(scenarioRepository), TimeProvider.system())
     }
 
     @Test

@@ -18,7 +18,6 @@ import com.vitalwork.app.data.recording.GapEvent
 import com.vitalwork.app.data.recording.detectEsenseRrIntervalGaps
 import com.vitalwork.app.data.recording.detectHeartRateGaps
 import com.vitalwork.app.data.recording.detectRespirationGaps
-import com.vitalwork.app.data.repository.ScenarioRepository
 import com.vitalwork.app.data.time.TimeProvider
 import com.vitalwork.app.util.TimeFormats
 import javax.inject.Inject
@@ -26,7 +25,7 @@ import javax.inject.Singleton
 
 @Singleton
 class SessionExportMapper @Inject constructor(
-    private val scenarioRepository: ScenarioRepository,
+    private val sampleCollector: ScenarioSampleCollector,
     private val timeProvider: TimeProvider
 ) {
     suspend fun buildExportData(
@@ -39,15 +38,12 @@ class SessionExportMapper @Inject constructor(
         // reading SessionEntity's stored counters) keeps the JSON summary in lockstep with the
         // file's contents — including scenarios that ended abnormally with a null `endedAt`, which
         // the stored counters exclude (they only sum scenarios with endedAt != null).
-        val scenarioSamples = scenarios.map { scenario ->
-            scenario to scenarioRepository.getSamplesForScenario(scenario.id)
-        }
+        val scenarioSamples = sampleCollector.collect(scenarios)
         val scenarioExports = scenarioSamples.map { (scenario, samples) ->
             buildScenarioExport(scenario, samples)
         }
 
-        val allSamples = scenarioSamples.flatMap { it.second }
-        fun countOf(type: SensorType) = allSamples.count { it.sensorType == type }
+        val counts = sampleCollector.countSamples(scenarioSamples)
 
         return SessionExport(
             exportedAt = TimeFormats.iso(timeProvider.nowMs()),
@@ -63,12 +59,12 @@ class SessionExportMapper @Inject constructor(
                 status = session.status.name,
                 statistics = SessionStatistics(
                     scenarioCount = scenarios.size,
-                    hrSampleCount = countOf(SensorType.ESENSE_HEART_RATE),
-                    respirationSampleCount = countOf(SensorType.RESPIRATION),
-                    rrIntervalSampleCount = countOf(SensorType.ESENSE_RR_INTERVAL),
-                    edaSampleCount = countOf(SensorType.WATCH_EDA),
-                    watchHrSampleCount = countOf(SensorType.WATCH_HR),
-                    watchIbiSampleCount = countOf(SensorType.WATCH_IBI)
+                    hrSampleCount = counts.hrSampleCount,
+                    respirationSampleCount = counts.respirationSampleCount,
+                    rrIntervalSampleCount = counts.rrIntervalSampleCount,
+                    edaSampleCount = counts.edaSampleCount,
+                    watchHrSampleCount = counts.watchHrSampleCount,
+                    watchIbiSampleCount = counts.watchIbiSampleCount
                 )
             ),
             scenarios = scenarioExports

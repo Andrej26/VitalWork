@@ -3,9 +3,8 @@ package com.vitalwork.app.data.export.upload
 import com.vitalwork.app.data.db.ParticipantEntity
 import com.vitalwork.app.data.db.ScenarioEntity
 import com.vitalwork.app.data.db.SensorSampleEntity
-import com.vitalwork.app.data.db.SensorType
 import com.vitalwork.app.data.db.SessionEntity
-import com.vitalwork.app.data.repository.ScenarioRepository
+import com.vitalwork.app.data.export.ScenarioSampleCollector
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -21,7 +20,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class SessionUploadMapper @Inject constructor(
-    private val scenarioRepository: ScenarioRepository
+    private val sampleCollector: ScenarioSampleCollector
 ) {
 
     suspend fun buildUploadRequest(
@@ -29,15 +28,12 @@ class SessionUploadMapper @Inject constructor(
         session: SessionEntity,
         scenarios: List<ScenarioEntity>
     ): SessionUploadRequest {
-        val scenarioSamples = scenarios.map { scenario ->
-            scenario to scenarioRepository.getSamplesForScenario(scenario.id)
-        }
+        val scenarioSamples = sampleCollector.collect(scenarios)
         val scenarioUploads = scenarioSamples.map { (scenario, samples) ->
             buildScenarioUpload(scenario, samples)
         }
 
-        val allSamples = scenarioSamples.flatMap { it.second }
-        fun countOf(type: SensorType) = allSamples.count { it.sensorType == type }
+        val counts = sampleCollector.countSamples(scenarioSamples)
 
         return SessionUploadRequest(
             participant = ParticipantUpload(
@@ -52,12 +48,12 @@ class SessionUploadMapper @Inject constructor(
                 status = session.status.name,
                 statistics = SessionStatisticsUpload(
                     scenarioCount = scenarios.size,
-                    hrSampleCount = countOf(SensorType.ESENSE_HEART_RATE),
-                    respirationSampleCount = countOf(SensorType.RESPIRATION),
-                    rrIntervalSampleCount = countOf(SensorType.ESENSE_RR_INTERVAL),
-                    edaSampleCount = countOf(SensorType.WATCH_EDA),
-                    watchHrSampleCount = countOf(SensorType.WATCH_HR),
-                    watchIbiSampleCount = countOf(SensorType.WATCH_IBI)
+                    hrSampleCount = counts.hrSampleCount,
+                    respirationSampleCount = counts.respirationSampleCount,
+                    rrIntervalSampleCount = counts.rrIntervalSampleCount,
+                    edaSampleCount = counts.edaSampleCount,
+                    watchHrSampleCount = counts.watchHrSampleCount,
+                    watchIbiSampleCount = counts.watchIbiSampleCount
                 )
             ),
             scenarios = scenarioUploads

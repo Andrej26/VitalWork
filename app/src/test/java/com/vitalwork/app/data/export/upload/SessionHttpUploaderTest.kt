@@ -10,6 +10,7 @@ import com.vitalwork.app.data.db.ScenarioCode
 import com.vitalwork.app.data.db.ScenarioEntity
 import com.vitalwork.app.data.db.SessionEntity
 import com.vitalwork.app.data.db.SessionStatus
+import com.vitalwork.app.data.export.ScenarioSampleCollector
 import com.vitalwork.app.data.prefs.FakeSettingsRepository
 import com.vitalwork.app.data.repository.ParticipantRepository
 import com.vitalwork.app.data.repository.ScenarioRepository
@@ -51,7 +52,7 @@ class SessionHttpUploaderTest {
         sessionRepo = SessionRepository(sessionDao, scenarioDao, sampleDao, FakeSettingsRepository("A"), TimeProvider.system())
         participantRepo = ParticipantRepository(participantDao, FakeSettingsRepository("A"), TimeProvider.system())
         scenarioRepo = ScenarioRepository(scenarioDao, sampleDao, TimeProvider.system())
-        mapper = SessionUploadMapper(scenarioRepo)
+        mapper = SessionUploadMapper(ScenarioSampleCollector(scenarioRepo))
 
         participantDao.participants.add(ParticipantEntity(id = 1L, participantCode = "A-001"))
         sessionDao.sessions.add(
