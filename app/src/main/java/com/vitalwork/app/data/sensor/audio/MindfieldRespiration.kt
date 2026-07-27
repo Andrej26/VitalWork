@@ -43,6 +43,7 @@ object MindfieldRespiration : SensorDevice {
 
     private var controller: HardwareController? = null
     private var watchdogJob: Job? = null
+    private var connectJob: Job? = null
 
     // --- Internals ---
     private var isSampling = false
@@ -95,7 +96,7 @@ object MindfieldRespiration : SensorDevice {
         raBuffer.clear()
         emitLog("Initializing...")
 
-        scope.launch {
+        connectJob = scope.launch {
             try {
                 // 1. Get Instance (MUST be on Main Thread)
                 // This was the cause of the "Flash" crash - it was on a background thread before.
@@ -129,6 +130,10 @@ object MindfieldRespiration : SensorDevice {
                 delay(VERIFY_MS)
                 finishVerification()
 
+            } catch (e: CancellationException) {
+                // Cancelled by disconnect() during the verify window — do NOT resurrect the sensor
+                // via forceDisconnect below; just unwind cleanly.
+                throw e
             } catch (e: Exception) {
                 forceDisconnect("Init Failed: ${e.message}")
             }
@@ -158,6 +163,10 @@ object MindfieldRespiration : SensorDevice {
     }
 
     override fun disconnect() {
+        // Cancel any in-flight connect/verify coroutine first, so a disconnect during the 2.5s
+        // verify window can't let finishVerification() run afterwards and resurrect the sensor.
+        connectJob?.cancel()
+        connectJob = null
         stopWatchdog()
         isVerifying = false
         raBuffer.clear()

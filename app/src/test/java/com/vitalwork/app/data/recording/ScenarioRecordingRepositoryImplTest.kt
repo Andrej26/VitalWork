@@ -15,7 +15,13 @@ import com.vitalwork.app.data.sensor.ble.FakeBleManager
 import com.vitalwork.app.data.sensor.watch.WatchSensorReceiver
 import com.vitalwork.app.data.sensor.watch.model.WatchReading
 import com.vitalwork.app.data.time.TimeProvider
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -26,6 +32,9 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.util.Collections
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.concurrent.thread
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ScenarioRecordingRepositoryImplTest {
@@ -376,6 +385,60 @@ class ScenarioRecordingRepositoryImplTest {
         // The authoritative delete-and-replace must NOT have run, so the provisional live row survives.
         assertTrue(
             fakeSensorSampleDao.samples.any { it.timestampMs == 1_100L && it.sensorType == SensorType.WATCH_HR }
+        )
+    }
+
+    // --- Regression: stopRecording() must not leak ClosedSendChannelException (send-after-close race) ---
+
+    /**
+     * Reproduces the #3 race: a sensor collector resumed mid-flight reaching `writeChannel.send()`
+     * right as `stopRecording()` closes the channel. The existing tests use single-threaded virtual
+     * time (`UnconfinedTestDispatcher` + `backgroundScope`), which cannot expose a genuine cross-thread
+     * race, so this one uses a REAL scope (`Dispatchers.Default`) with a real background emitter thread
+     * and a `CoroutineExceptionHandler` that captures anything escaping the collectors.
+     *
+     * After the `cancelAndJoin` fix the collectors are always fully stopped before the channel closes,
+     * so nothing is captured and the test is deterministic. (Pre-fix it fails probabilistically.)
+     */
+    @Test
+    fun stopRecording_underConcurrentSensorEmissions_neverLeaksClosedChannelException() {
+        val capturedExceptions = Collections.synchronizedList(mutableListOf<Throwable>())
+        val handler = CoroutineExceptionHandler { _, e -> capturedExceptions.add(e) }
+        val realScope = CoroutineScope(SupervisorJob() + Dispatchers.Default + handler)
+        val sut = ScenarioRecordingRepositoryImpl(
+            bleManager = bleManager,
+            respirationDevice = respirationDevice,
+            scenarioRepository = scenarioRepository,
+            watchReceiver = watchReceiver,
+            timeProvider = TimeProvider.system(),
+            scope = realScope
+        )
+        connectEsensePulse()
+        val scenario = seedScenario()
+
+        // Emit to the RR flow: its collector does NOT dedup, so every emit is a real
+        // writeChannel.send() — maximum pressure on the send-vs-close race.
+        val stopEmitting = AtomicBoolean(false)
+        val emitter = thread {
+            while (!stopEmitting.get()) bleManager.rrIntervalSampleFlow.tryEmit(833f)
+        }
+
+        try {
+            runBlocking {
+                repeat(300) {
+                    sut.startRecording(scenario.id, "VW-X-A1")
+                    sut.stopRecording()
+                }
+            }
+        } finally {
+            stopEmitting.set(true)
+            emitter.join()
+            realScope.cancel()
+        }
+
+        assertTrue(
+            "stopRecording() leaked exception(s) from a collector: $capturedExceptions",
+            capturedExceptions.isEmpty()
         )
     }
 }
