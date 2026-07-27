@@ -28,17 +28,17 @@ class SessionExportMapper @Inject constructor(
     private val sampleCollector: ScenarioSampleCollector,
     private val timeProvider: TimeProvider
 ) {
-    suspend fun buildExportData(
+    fun buildExportData(
         participant: ParticipantEntity,
         session: SessionEntity,
-        scenarios: List<ScenarioEntity>
+        scenarioSamples: List<Pair<ScenarioEntity, List<SensorSampleEntity>>>
     ): SessionExport {
-        // Pull each scenario's samples once, then derive both the per-scenario export and the
-        // session statistics from the SAME data. Computing the header counts here (rather than
-        // reading SessionEntity's stored counters) keeps the JSON summary in lockstep with the
-        // file's contents — including scenarios that ended abnormally with a null `endedAt`, which
-        // the stored counters exclude (they only sum scenarios with endedAt != null).
-        val scenarioSamples = sampleCollector.collect(scenarios)
+        // Each scenario's samples are collected once by the caller (shared with the CSV writer),
+        // then this derives both the per-scenario export and the session statistics from the SAME
+        // data. Computing the header counts here (rather than reading SessionEntity's stored
+        // counters) keeps the JSON summary in lockstep with the file's contents — including
+        // scenarios that ended abnormally with a null `endedAt`, which the stored counters exclude
+        // (they only sum scenarios with endedAt != null).
         val scenarioExports = scenarioSamples.map { (scenario, samples) ->
             buildScenarioExport(scenario, samples)
         }
@@ -58,7 +58,7 @@ class SessionExportMapper @Inject constructor(
                 endedAt = session.endedAt?.let { TimeFormats.iso(it) },
                 status = session.status.name,
                 statistics = SessionStatistics(
-                    scenarioCount = scenarios.size,
+                    scenarioCount = scenarioSamples.size,
                     hrSampleCount = counts.hrSampleCount,
                     respirationSampleCount = counts.respirationSampleCount,
                     rrIntervalSampleCount = counts.rrIntervalSampleCount,

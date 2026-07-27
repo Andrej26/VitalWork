@@ -24,6 +24,7 @@ class SessionExportMapperTest {
     private lateinit var fakeScenarioDao: FakeScenarioDao
     private lateinit var fakeSensorSampleDao: FakeSensorSampleDao
     private lateinit var scenarioRepository: ScenarioRepository
+    private lateinit var sampleCollector: ScenarioSampleCollector
     private lateinit var mapper: SessionExportMapper
 
     @Before
@@ -31,8 +32,16 @@ class SessionExportMapperTest {
         fakeScenarioDao = FakeScenarioDao()
         fakeSensorSampleDao = FakeSensorSampleDao()
         scenarioRepository = ScenarioRepository(fakeScenarioDao, fakeSensorSampleDao, TimeProvider.system())
-        mapper = SessionExportMapper(ScenarioSampleCollector(scenarioRepository), TimeProvider.system())
+        sampleCollector = ScenarioSampleCollector(scenarioRepository)
+        mapper = SessionExportMapper(sampleCollector, TimeProvider.system())
     }
+
+    /** Mirrors the production path: collect each scenario's samples once, then build the export. */
+    private suspend fun buildExport(
+        participant: ParticipantEntity,
+        session: SessionEntity,
+        scenarios: List<ScenarioEntity>
+    ) = mapper.buildExportData(participant, session, sampleCollector.collect(scenarios))
 
     @Test
     fun buildScenarioExport_sensorTypesMappedToLowercase() {
@@ -117,7 +126,7 @@ class SessionExportMapperTest {
             sample(scenario.id, SensorType.WATCH_IBI)
         ))
 
-        val result = mapper.buildExportData(participant, session, listOf(scenario))
+        val result = buildExport(participant, session, listOf(scenario))
 
         assertEquals(1, result.session.statistics.scenarioCount)
         assertEquals(2, result.session.statistics.hrSampleCount)
@@ -139,7 +148,7 @@ class SessionExportMapperTest {
             sample(unfinished.id, SensorType.WATCH_HR)
         ))
 
-        val result = mapper.buildExportData(participant, session, listOf(unfinished))
+        val result = buildExport(participant, session, listOf(unfinished))
 
         assertEquals(1, result.session.statistics.scenarioCount)
         assertEquals(1, result.session.statistics.hrSampleCount)
@@ -156,7 +165,7 @@ class SessionExportMapperTest {
             sample(scenario.id, SensorType.ESENSE_HEART_RATE, value = 75f)
         ))
 
-        val result = mapper.buildExportData(participant, session, listOf(scenario))
+        val result = buildExport(participant, session, listOf(scenario))
 
         assertEquals(1, result.scenarios.size)
         assertEquals(2, result.scenarios[0].samples.size)
@@ -168,7 +177,7 @@ class SessionExportMapperTest {
         val participant = participant(code = "P-042", age = 31, gender = "F")
         val session = session()
 
-        val result = mapper.buildExportData(participant, session, emptyList())
+        val result = buildExport(participant, session, emptyList())
 
         assertEquals("P-042", result.participant.participantCode)
         assertEquals(31, result.participant.age)
@@ -183,7 +192,7 @@ class SessionExportMapperTest {
             status = SessionStatus.UPLOADED
         )
 
-        val result = mapper.buildExportData(participant, session, emptyList())
+        val result = buildExport(participant, session, emptyList())
 
         assertEquals("VW-260528-143012", result.session.sessionCode)
         assertEquals("UPLOADED", result.session.status)
@@ -199,7 +208,7 @@ class SessionExportMapperTest {
         val session = session()
         val scenario = scenario(id = 5L)
 
-        val result = mapper.buildExportData(participant, session, listOf(scenario))
+        val result = buildExport(participant, session, listOf(scenario))
 
         assertEquals("1970-01-01T00:16:40Z", result.session.startedAt)
         assertEquals("1970-01-01T00:17:40Z", result.session.endedAt)
