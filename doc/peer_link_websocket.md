@@ -192,6 +192,9 @@ keeps this safe by:
 - Emitting signaling with `tryEmit` (non-suspending) rather than `emit`.
 - Running teardown (`server.stop()` blocks up to 1s) on an IO scope, never on the caller's (possibly
   main) thread.
+- Marking the plain `server`/`serverConn`/`client` handles `@Volatile` — unlike the StateFlows these
+  are ordinary fields, written from the callback threads and read from IO/main, so they need the
+  visibility guarantee explicitly.
 
 ---
 

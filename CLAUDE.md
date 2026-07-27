@@ -185,6 +185,7 @@ com.vitalwork.app/
 │   │   └── SensorSampleDao.kt
 │   ├── export/                             # Local session export (JSON + CSV to Documents)
 │   │   ├── SessionExportService.kt         # implements SessionExporter; MediaStore/legacy writes
+│   │   ├── ScenarioSampleCollector.kt      # shared sample load (once per scenario) + per-type counts
 │   │   ├── SessionExportMapper.kt          # entities → export shape; statistics counted from exported samples
 │   │   ├── SessionUploader.kt              # upload interface (bound to SessionHttpUploader)
 │   │   ├── model/
@@ -476,7 +477,7 @@ Unit tests live under `app/src/test/` and run on the host JVM (no device/emulato
 | File | Target | What it covers |
 |------|--------|----------------|
 | `data/recording/GapDetectorTest.kt` | `GapDetector.kt` | Gap detection edge cases: empty input, startup threshold, boundary conditions, mixed sensor types, unsorted input, per-sensor-type routing |
-| `data/recording/ScenarioRecordingRepositoryImplTest.kt` | `ScenarioRecordingRepositoryImpl.kt` | Start/stop state machine, sensor detection, sample buffering + flushing, scenario-end finalization |
+| `data/recording/ScenarioRecordingRepositoryImplTest.kt` | `ScenarioRecordingRepositoryImpl.kt` | Start/stop state machine, sensor detection, sample buffering + flushing, scenario-end finalization; threaded stop-under-load test asserting no send-after-close leaks from the collectors |
 | `data/recording/WatchSessionDrainerTest.kt` | `WatchSessionDrainer.kt` | Per-(scenario,type) timestamp-window attribution + de-dup for EDA/HR/IBI; gap/boundary/back-to-back rules |
 | `data/recording/WatchReconciliationReportTest.kt` | `WatchReconciliationReport.kt` | ok/mismatch verdict + summary formatting |
 | `data/repository/ParticipantRepositoryTest.kt` | `ParticipantRepository.kt` | Code generation (`A-001`…, per-device-prefix scoped), uniqueness validation, fetch by ID/code |
