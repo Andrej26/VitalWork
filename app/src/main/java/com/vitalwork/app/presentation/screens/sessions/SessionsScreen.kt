@@ -40,7 +40,7 @@ import com.vitalwork.app.presentation.components.WatermarkedBackground
 fun SessionsScreen(
     onNavigateBack: () -> Unit,
     onOpenSession: (sessionId: Long) -> Unit,
-    onOpenactiveSession: (sessionId: Long) -> Unit,
+    onOpenActiveSession: (sessionId: Long) -> Unit,
     viewModel: SessionsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -91,7 +91,7 @@ fun SessionsScreen(
                         duration = uiState.activeSessionDuration,
                         heartRate = uiState.activeSessionHeartRate,
                         isRecording = uiState.isRecording,
-                        onResume = { onOpenactiveSession(activeSession.id) },
+                        onResume = { onOpenActiveSession(activeSession.id) },
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                 }

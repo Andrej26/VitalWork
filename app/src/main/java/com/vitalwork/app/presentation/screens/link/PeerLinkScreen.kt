@@ -17,8 +17,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LinkOff
-import androidx.compose.material.icons.filled.ScreenShare
-import androidx.compose.material.icons.filled.StopScreenShare
+import androidx.compose.material.icons.automirrored.filled.ScreenShare
+import androidx.compose.material.icons.automirrored.filled.StopScreenShare
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -274,7 +274,7 @@ private fun ScreenMonitorCard(
                     ),
                     elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
                 ) {
-                    Icon(Icons.Default.ScreenShare, contentDescription = null)
+                    Icon(Icons.AutoMirrored.Filled.ScreenShare, contentDescription = null)
                     Text(
                         text = "  View screen",
                         style = MaterialTheme.typography.titleMedium,
@@ -289,7 +289,7 @@ private fun ScreenMonitorCard(
                         contentColor = MaterialTheme.colorScheme.error
                     )
                 ) {
-                    Icon(Icons.Default.StopScreenShare, contentDescription = null)
+                    Icon(Icons.AutoMirrored.Filled.StopScreenShare, contentDescription = null)
                     Text("  Stop viewing")
                 }
             }
@@ -342,7 +342,7 @@ private fun SharingCard(onStop: () -> Unit) {
                     contentColor = MaterialTheme.colorScheme.error
                 )
             ) {
-                Icon(Icons.Default.StopScreenShare, contentDescription = null)
+                Icon(Icons.AutoMirrored.Filled.StopScreenShare, contentDescription = null)
                 Text("  Stop sharing")
             }
         }

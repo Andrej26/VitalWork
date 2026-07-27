@@ -24,12 +24,6 @@ class SessionRepository @Inject constructor(
     val allSessions: Flow<List<SessionEntity>> = sessionDao.getAllSessions()
     val activeSession: Flow<SessionEntity?> = sessionDao.getActiveSession()
 
-    fun getSessionsByStatus(status: SessionStatus): Flow<List<SessionEntity>> =
-        sessionDao.getSessionsByStatus(status)
-
-    fun getSessionsForParticipant(participantId: Long): Flow<List<SessionEntity>> =
-        sessionDao.getSessionsForParticipant(participantId)
-
     suspend fun getSessionById(id: Long): SessionEntity? =
         sessionDao.getSessionById(id)
 

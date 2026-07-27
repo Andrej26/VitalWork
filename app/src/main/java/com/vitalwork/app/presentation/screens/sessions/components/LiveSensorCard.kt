@@ -113,7 +113,7 @@ fun LiveSensorCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .then(
-                    if (isClickable) Modifier.clickable { onClick?.invoke() }
+                    if (isClickable) Modifier.clickable { onClick() }
                     else Modifier
                 )
                 .then(
