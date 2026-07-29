@@ -105,7 +105,8 @@ to CCCD `0x2902`. Each notification carries a BPM value (UINT8 or UINT16) and op
 | Interface | Audio jack (3.5 mm) |
 | Signal | Respiration amplitude (RA) — raw waveform of chest expansion and contraction |
 | Sampling rate | 5 Hz (configurable via the SDK) |
-| Derived parameter (UI only) | Breathing rate (breaths/min) from zero-crossing detection over a 30-second window — computed for the live display, not persisted as a sample |
+| Derived parameter (UI only) | Breathing rate (breaths/min) from breath-onset detection (smoothing, baseline detrending, amplitude-scaled hysteresis) over a 60-second window — computed for the live display, not persisted as a sample |
+| Live signal-quality warnings | **Signal lost** (RA below 0.8 — strap slipped off the chest) and **No breathing detected** (healthy RA level but no breathing waveform) — shown as on-screen banners during setup and recording |
 
 **Nyquist rationale:** normal breathing rate is 0.2–0.33 Hz; at 5 Hz it is oversampled more than
 15-fold — an ample margin.
@@ -258,8 +259,12 @@ parser (`BleParsers.kt`) handles both UINT8 and UINT16 formats and extracts the 
 ### 5.3 Audio (eSense Respiration)
 
 The eSense SDK reads the analogue signal from the audio jack (3.5 mm). The app configures a 5 Hz
-sampling rate. The breathing rate is derived from zero-crossing detection over a 30-second sliding
-window.
+sampling rate. The breathing rate shown in the UI is derived by a breath-onset estimator over a
+60-second sliding window: the RA waveform is smoothed, detrended against a moving baseline, and
+breath onsets are detected with an amplitude-scaled hysteresis; the rate is the trimmed median of
+the inter-breath intervals. The estimator was tuned on real chest-strap recordings and also reports
+two quality verdicts used for the live warnings: *signal lost* (RA < 0.8 — strap off the chest) and
+*no breathing* (RA at a normal level but with no breathing modulation).
 
 ### 5.4 Wearable Data Layer (Galaxy Watch 8)
 
@@ -524,14 +529,14 @@ samples.
 | `{sessionCode}_export.json` | One file per **session** (participant + session + all scenarios + all samples) | `VW-A-260722-171532_export.json` |
 | `{sessionCode}_NN_{SCENARIO}.csv` | One file per **scenario** (`NN` = 01, 02, …, ordinal) | `VW-A-260722-171532_02_COGNITIVE_LOAD.csv` |
 
-### 11.2 JSON structure (schema version 2.1.0)
+### 11.2 JSON structure (schema version 2.2.0)
 
 The root object (`SessionExport`) carries `version`, `exportedAt` and three nested blocks —
 `participant`, `session` and `scenarios[]`.
 
 | Path | Type | Notes |
 |------|------|-------|
-| `version` | string | Export schema version, currently `"2.1.0"` |
+| `version` | string | Export schema version, currently `"2.2.0"` (2.2.0 added `scenarios[].respirationIssues`; otherwise identical to 2.1.0) |
 | `exportedAt` | string | ISO-8601 UTC timestamp of the export |
 | `participant.participantCode` | string | Anonymised code (e.g. `A-007-260722-063337`) |
 | `participant.age` | int? | Nullable |
@@ -551,6 +556,7 @@ The root object (`SessionExport`) carries `version`, `exportedAt` and three nest
 | `startedAt` | string | ISO-8601 UTC |
 | `endedAt` | string? | ISO-8601 UTC, nullable |
 | `gaps` | object? | Per-sensor gap report (`heartRate`, `rrInterval`, `respiration`); each = `gapCount`, `gapTotalMs`, `gaps[]{startElapsedMs, endElapsedMs, gapMs}` |
+| `respirationIssues` | object? | Stretches where respiration samples kept arriving but are unusable (a slipped strap produces no gap): `signalLostCount`, `signalLostTotalMs`, `noBreathingCount`, `noBreathingTotalMs`, `events[]{reason, startElapsedMs, endElapsedMs, durationMs}`; `reason` = `SIGNAL_LOST` or `NO_BREATHING`. `null` when there is nothing to report — including when the sensor was simply not connected. Derived at export from the recorded RA waveform. |
 | `samples[]` | array | Time series (see below) |
 
 **Each element of `samples[]`:**
@@ -566,7 +572,7 @@ The root object (`SessionExport`) carries `version`, `exportedAt` and three nest
 
 ```json
 {
-  "version": "2.1.0",
+  "version": "2.2.0",
   "exportedAt": "2026-07-22T08:20:00Z",
   "participant": {
     "participantCode": "A-007-260722-063337",
@@ -594,6 +600,7 @@ The root object (`SessionExport`) carries `version`, `exportedAt` and three nest
       "startedAt": "2026-07-22T06:50:38Z",
       "endedAt": "2026-07-22T07:10:38Z",
       "gaps": null,
+      "respirationIssues": null,
       "samples": [
         { "timestampMs": 1782283839046, "elapsedMs": 279, "sensorType": "watch_hr", "value": 82.0 }
       ]
@@ -612,7 +619,9 @@ gaps).
 **Metadata header (`# key,value`):** `session_code`, `scenario_code`, `start_time`, `end_time`,
 `esense_hr_samples`, `respiration_samples` (always emitted), plus `rr_interval_samples`,
 `watch_hr_samples`, `watch_ibi_samples`, `watch_eda_samples` (only if > 0), and the per-sensor gap
-counters (`*_gaps`, `*_gap_total_ms`, only if any).
+counters (`*_gaps`, `*_gap_total_ms`, only if any). Respiration signal-quality issues, if detected,
+add `respiration_signal_lost` / `respiration_no_breathing` count lines with a `*_total_ms` line and
+one positional line per event (`# respiration_signal_lost_1,<startElapsedMs>,<endElapsedMs>`).
 
 **Data columns:**
 

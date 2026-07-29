@@ -103,7 +103,8 @@ intervaly (UINT16 LE, rozlíšenie 1/1024 s, konvertované na ms). Nulové R-R h
 | Rozhranie | Audio konektor (3,5 mm jack) |
 | Signál | Amplitúda dýchania (RA) — surový priebeh rozťahovania a sťahovania hrudníka |
 | Vzorkovacia frekvencia | 5 Hz (konfigurovateľné cez SDK) |
-| Odvodzovaný parameter (iba UI) | Dychová frekvencia (breaths/min) z detekcie priechodov nulou na 30-sekundovom okne — počíta sa pre živé zobrazenie, neukladá sa ako vzorka |
+| Odvodzovaný parameter (iba UI) | Dychová frekvencia (breaths/min) z detekcie nádychov (vyhladenie, odstránenie driftu základnej línie, hysterézia škálovaná amplitúdou) na 60-sekundovom okne — počíta sa pre živé zobrazenie, neukladá sa ako vzorka |
+| Živé varovania kvality signálu | **Strata signálu** (RA pod 0,8 — remienok skĺzol z hrudníka) a **Nezistené dýchanie** (normálna úroveň RA, ale žiadny dychový priebeh) — zobrazované ako bannery počas nastavenia aj nahrávania |
 
 **Nyquistovo kritérium:** normálna dychová frekvencia je 0,2–0,33 Hz; pri 5 Hz je prevzorkovaná viac
 ako 15-násobne — dostatočná rezerva.
@@ -256,8 +257,12 @@ Pulse podľa názvu alebo Manufacturer ID, pripája sa cez GATT a povolí notifi
 ### 5.3 Audio (eSense Respiration)
 
 eSense SDK číta analógový signál z audio konektora (3,5 mm jack). Aplikácia konfiguruje vzorkovaciu
-frekvenciu 5 Hz. Dychová frekvencia je odvodzovaná z detekcie priechodov nulou na 30-sekundovom
-posuvnom okne.
+frekvenciu 5 Hz. Dychová frekvencia zobrazovaná v UI sa odvodzuje estimátorom nádychov na
+60-sekundovom posuvnom okne: RA priebeh sa vyhladí, zbaví driftu voči pohyblivej základnej línii a
+nádychy sa detegujú hysteréziou škálovanou amplitúdou; frekvencia je orezaný medián intervalov medzi
+nádychmi. Estimátor bol doladený na reálnych záznamoch z hrudného remienka a vydáva aj dva verdikty
+kvality použité pre živé varovania: *strata signálu* (RA < 0,8 — remienok mimo hrudníka) a
+*nezistené dýchanie* (normálna úroveň RA bez dychovej modulácie).
 
 ### 5.4 Wearable Data Layer (Galaxy Watch 8)
 
@@ -528,14 +533,14 @@ vhodný pre tabuľkové procesory.
 | `{sessionCode}_export.json` | Jeden súbor na **sedenie** (účastník + sedenie + všetky scenáre + všetky vzorky) | `VW-A-260722-171532_export.json` |
 | `{sessionCode}_NN_{SCENARIO}.csv` | Jeden súbor na **scenár** (`NN` = 01, 02, …, poradie) | `VW-A-260722-171532_02_COGNITIVE_LOAD.csv` |
 
-### 11.2 Štruktúra JSON (verzia schémy 2.1.0)
+### 11.2 Štruktúra JSON (verzia schémy 2.2.0)
 
 Koreňový objekt (`SessionExport`) nesie `version`, `exportedAt` a tri vnorené bloky — `participant`,
 `session` a `scenarios[]`.
 
 | Cesta | Typ | Poznámka |
 |-------|-----|----------|
-| `version` | string | Verzia schémy exportu, aktuálne `"2.1.0"` |
+| `version` | string | Verzia schémy exportu, aktuálne `"2.2.0"` (2.2.0 pridala `scenarios[].respirationIssues`; inak identická s 2.1.0) |
 | `exportedAt` | string | ISO-8601 UTC časová pečiatka exportu |
 | `participant.participantCode` | string | Anonymizovaný kód (napr. `A-007-260722-063337`) |
 | `participant.age` | int? | Nullable |
@@ -555,6 +560,7 @@ Koreňový objekt (`SessionExport`) nesie `version`, `exportedAt` a tri vnorené
 | `startedAt` | string | ISO-8601 UTC |
 | `endedAt` | string? | ISO-8601 UTC, nullable |
 | `gaps` | object? | Správa o medzerách pre každý senzor (`heartRate`, `rrInterval`, `respiration`); každá = `gapCount`, `gapTotalMs`, `gaps[]{startElapsedMs, endElapsedMs, gapMs}` |
+| `respirationIssues` | object? | Úseky, kde vzorky dýchania prichádzali, ale sú nepoužiteľné (skĺznutý remienok nevytvorí žiadnu medzeru): `signalLostCount`, `signalLostTotalMs`, `noBreathingCount`, `noBreathingTotalMs`, `events[]{reason, startElapsedMs, endElapsedMs, durationMs}`; `reason` = `SIGNAL_LOST` alebo `NO_BREATHING`. `null`, keď nie je čo hlásiť — vrátane prípadu, keď senzor jednoducho nebol pripojený. Odvodzuje sa pri exporte zo zaznamenaného RA priebehu. |
 | `samples[]` | array | Časový rad (pozri nižšie) |
 
 **Každá položka `samples[]`:**
@@ -570,7 +576,7 @@ Koreňový objekt (`SessionExport`) nesie `version`, `exportedAt` a tri vnorené
 
 ```json
 {
-  "version": "2.1.0",
+  "version": "2.2.0",
   "exportedAt": "2026-07-22T08:20:00Z",
   "participant": {
     "participantCode": "A-007-260722-063337",
@@ -598,6 +604,7 @@ Koreňový objekt (`SessionExport`) nesie `version`, `exportedAt` a tri vnorené
       "startedAt": "2026-07-22T06:50:38Z",
       "endedAt": "2026-07-22T07:10:38Z",
       "gaps": null,
+      "respirationIssues": null,
       "samples": [
         { "timestampMs": 1782283839046, "elapsedMs": 279, "sensorType": "watch_hr", "value": 82.0 }
       ]
@@ -616,7 +623,10 @@ medzier).
 **Hlavička metadát (`# kľúč,hodnota`):** `session_code`, `scenario_code`, `start_time`, `end_time`,
 `esense_hr_samples`, `respiration_samples` (zapisujú sa vždy), plus `rr_interval_samples`,
 `watch_hr_samples`, `watch_ibi_samples`, `watch_eda_samples` (iba ak > 0), a počítadlá medzier pre
-každý senzor (`*_gaps`, `*_gap_total_ms`, iba ak existujú).
+každý senzor (`*_gaps`, `*_gap_total_ms`, iba ak existujú). Ak boli zistené problémy kvality
+dychového signálu, pridajú sa riadky s počtami `respiration_signal_lost` /
+`respiration_no_breathing`, riadok `*_total_ms` a jeden pozičný riadok na udalosť
+(`# respiration_signal_lost_1,<startElapsedMs>,<endElapsedMs>`).
 
 **Dátové stĺpce:**
 

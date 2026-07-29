@@ -139,7 +139,15 @@ okamžite zmení podobu domovskej obrazovky po návrate.
 
 Senzor sa aktivuje automaticky po zapojení do jack konektora. Na obrazovke nastavenia senzorov
 skontrolujte, že karta **Respiration** zobrazuje živú hodnotu (jednotka **RA** — surová amplitúda
-dýchania, nie počet nádychov za minútu).
+dýchania, nie počet nádychov za minútu). Odhad dychovej frekvencie (br/min) sa zobrazí približne po
+15 sekundách čistého signálu; dovtedy displej zobrazuje `--`.
+
+Aplikácia priebežne sleduje kvalitu signálu a pri probléme zobrazí varovný banner:
+
+- **Respiration signal lost** (strata signálu) — remienok skĺzol z hrudníka (hodnota RA klesne).
+  Nasaďte hrudný remienok späť.
+- **No breathing detected** (nezistené dýchanie) — remienok je nasadený, ale nesníma dýchanie
+  (napr. je príliš voľný). Dotiahnite a upravte polohu remienka.
 
 ### 4.3 Galaxy Watch 8
 
@@ -310,6 +318,8 @@ Aplikácia automaticky otvorí obrazovku **prehľadu sedenia**.
 |---------|----------------|----------|
 | eSense Pulse sa nenašiel | Vypnutý Bluetooth alebo lokalizačné služby | Zapnite Bluetooth a lokalizačné služby |
 | eSense Respiration nezobrazuje dáta | Nesprávne zapojený kábel | Odpojte a znova zapojte jack konektor |
+| Banner „Respiration signal lost" | Hrudný remienok skĺzol z hrudníka | Nasaďte remienok späť; banner zmizne po návrate signálu |
+| Banner „No breathing detected" | Príliš voľný remienok — nesníma pohyb hrudníka | Dotiahnite a upravte polohu remienka |
 | Galaxy Watch zobrazuje Disconnected | Vypnutý Bluetooth na tablete alebo nebeží sprievodná aplikácia na hodinkách | Zapnite Bluetooth; reštartujte aplikáciu na hodinkách |
 | Galaxy Watch zobrazuje „dozing — buffering" | Obrazovka hodiniek je vypnutá (normálny stav) | Nie je potrebná žiadna akcia — dáta sa ukladajú; záverečný prenos ich pri ukončení sedenia získa späť |
 | Spojenie medzi zariadeniami — Client nenájde Server | Zariadenia nie sú na tej istej Wi-Fi sieti, alebo Server nebol spustený | Overte, že sú obe na rovnakej Wi-Fi; najprv ťuknite na Connect na zariadení Server |

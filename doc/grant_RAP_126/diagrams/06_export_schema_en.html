@@ -167,7 +167,7 @@
     <div class="card bd-session">
       <div class="card-head hd-session">Session export</div>
       <div class="card-body">
-        <div class="fld"><span class="fname">version</span><span class="fdesc">export schema version</span><span class="fex-wrap"><span class="fex">"2.1.0"</span></span></div>
+        <div class="fld"><span class="fname">version</span><span class="fdesc">export schema version</span><span class="fex-wrap"><span class="fex">"2.2.0"</span></span></div>
         <div class="fld"><span class="fname">exportedAt</span><span class="fdesc">when this file was created (UTC)</span><span class="fex-wrap"><span class="fex">2026-06-24T08:20:00Z</span></span></div>
         <div class="fld"><span class="fname">participant</span><span class="fdesc">who took part → below</span><span class="fex-wrap"><span class="fex">A-007-260624-063337</span></span></div>
         <div class="fld"><span class="fname">session</span><span class="fdesc">the session itself → below</span><span class="fex-wrap"><span class="fex">VW-A-260624-063346</span></span></div>
@@ -199,7 +199,7 @@
         <div class="nest">
           <div class="fld"><span class="fname">scenarioCount</span><span class="fdesc">scenarios recorded</span><span class="fex-wrap"><span class="fex">5</span></span></div>
           <div class="fld"><span class="fname">hrSampleCount</span><span class="fdesc">heart rate — eSense Pulse (chest)</span><span class="fex-wrap"><span class="fex">25834</span></span></div>
-          <div class="fld"><span class="fname">respirationSampleCount</span><span class="fdesc">breathing rate — eSense (audio jack)</span><span class="fex-wrap"><span class="fex">27000</span></span></div>
+          <div class="fld"><span class="fname">respirationSampleCount</span><span class="fdesc">respiration amplitude — eSense (audio jack)</span><span class="fex-wrap"><span class="fex">27000</span></span></div>
           <div class="fld"><span class="fname">rrIntervalSampleCount</span><span class="fdesc">R-R intervals — eSense Pulse (chest)</span><span class="fex-wrap"><span class="fex">7475</span></span></div>
           <div class="fld"><span class="fname">edaSampleCount</span><span class="fdesc">skin conductance — Galaxy Watch</span><span class="fex-wrap"><span class="fex">5364</span></span></div>
           <div class="fld"><span class="fname">watchHrSampleCount</span><span class="fdesc">heart rate — Galaxy Watch</span><span class="fex-wrap"><span class="fex">5117</span></span></div>
@@ -217,6 +217,7 @@
         <div class="fld"><span class="fname">startedAt</span><span class="fdesc">recording start (UTC)</span><span class="fex-wrap"><span class="fex">2026-06-24T06:50:38Z</span></span></div>
         <div class="fld"><span class="fname">endedAt</span><span class="fdesc">recording end (UTC)</span><span class="fex-wrap"><span class="fex">2026-06-24T07:10:38Z</span></span></div>
         <div class="fld"><span class="fname">gaps</span><span class="fdesc">signal dropouts in HR / RR / respiration, if any</span><span class="fex-wrap"><span class="fex">null (none this run)</span></span></div>
+        <div class="fld"><span class="fname">respirationIssues</span><span class="fdesc">respiration stretches recorded but unusable — strap slipped (SIGNAL_LOST) or not tracking breathing (NO_BREATHING)</span><span class="fex-wrap"><span class="fex">null (none this run)</span></span></div>
         <div class="fld"><span class="fname">samples</span><span class="fdesc">the sensor readings → below</span><span class="fex-wrap"><span class="fex">345 samples</span></span></div>
       </div>
     </div>
@@ -229,7 +230,7 @@
         <div class="fld"><span class="fname">timestampMs</span><span class="fdesc">exact moment measured (NTP-corrected)</span><span class="fex-wrap"><span class="fex">1782283839046</span></span></div>
         <div class="fld"><span class="fname">elapsedMs</span><span class="fdesc">ms since the scenario began</span><span class="fex-wrap"><span class="fex">279</span></span></div>
         <div class="fld"><span class="fname">sensorType</span><span class="fdesc">which sensor this reading is from (snake_case, same as CSV)</span><span class="fex-wrap"><span class="fex">"watch_hr"</span></span></div>
-        <div class="fld"><span class="fname">value</span><span class="fdesc">the reading itself — unit depends on the sensor (BPM, ms, breaths/min, µS)</span><span class="fex-wrap"><span class="fex">82.0 (BPM)</span></span></div>
+        <div class="fld"><span class="fname">value</span><span class="fdesc">the reading itself — unit depends on the sensor (BPM, ms, RA, µS)</span><span class="fex-wrap"><span class="fex">82.0 (BPM)</span></span></div>
       </div>
     </div>
   </div>
@@ -247,6 +248,7 @@
         <div class="fld"><span class="fname"># start_time / end_time</span><span class="fdesc">ISO timestamps</span></div>
         <div class="fld"><span class="fname"># *_samples</span><span class="fdesc">per-sensor counts (only if &gt; 0)</span></div>
         <div class="fld"><span class="fname"># *_gaps</span><span class="fdesc">gap count + total ms (only if any)</span></div>
+        <div class="fld"><span class="fname"># respiration_signal_lost / _no_breathing</span><span class="fdesc">respiration quality issues: count, total ms + per-event positions (only if any)</span></div>
       </div>
     </div>
 
@@ -279,7 +281,7 @@
 
 <div class="foot">
   The upload sends this same data to the VitalWork server in one piece, matched by session code — re-uploading the same session simply replaces it there.<br>
-  Signal gaps aren't stored anywhere directly — they're calculated automatically whenever the data is uploaded or exported.
+  Signal gaps and respiration quality issues aren't stored anywhere directly — they're calculated automatically whenever the data is exported.
 </div>
 
 </body>

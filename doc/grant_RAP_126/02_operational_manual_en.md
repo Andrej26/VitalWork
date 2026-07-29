@@ -137,7 +137,15 @@ here re-shapes the Home screen immediately on return.
 
 The sensor activates automatically once plugged into the audio jack. Check on the sensor-setup screen
 that the **Respiration** card shows a live value (unit: **RA**, raw respiration amplitude — not
-breaths per minute).
+breaths per minute). A breathing-rate estimate (br/min) appears after roughly 15 seconds of clean
+signal; until then the display shows `--`.
+
+The app watches the signal quality continuously and shows a warning banner when something is wrong:
+
+- **Respiration signal lost** — the strap has slipped off the chest (the RA value collapses).
+  Re-seat the chest strap.
+- **No breathing detected** — the strap is on but is not tracking breathing (e.g. worn too loose).
+  Tighten and reposition the strap.
 
 ### 4.3 Galaxy Watch 8
 
@@ -299,6 +307,8 @@ The app opens the **session review** screen automatically.
 |---------|----------------|----------|
 | eSense Pulse is not found | Bluetooth off, Location Services off | Turn on Bluetooth and Location Services |
 | eSense Respiration shows no data | Cable not plugged in correctly | Unplug and re-plug the audio jack |
+| "Respiration signal lost" banner | Chest strap slipped off the chest | Re-seat the chest strap; the banner clears once the signal returns |
+| "No breathing detected" banner | Strap worn too loose — not tracking chest movement | Tighten and reposition the strap |
 | Galaxy Watch shows Disconnected | Bluetooth on the tablet is off, or the watch's companion app is not running | Turn on Bluetooth; restart the app on the watch |
 | Galaxy Watch shows "dozing — buffering" | The watch screen is off (normal state) | No action needed — data is being stored; the end-session flush retrieves it |
 | Device link — Client can't find the Server | Devices not on the same Wi-Fi network, or Server not started | Confirm both are on the same Wi-Fi; tap Connect on the Server first |
