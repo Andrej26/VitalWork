@@ -16,7 +16,11 @@ import androidx.room.PrimaryKey
 enum class SensorType {
     /** eSense Pulse heart rate (BPM), over BLE. */
     ESENSE_HEART_RATE,
-    /** eSense Respiration breathing rate (breaths/min), over audio jack. */
+    /**
+     * eSense Respiration **raw Respiration Amplitude (RA)**, over audio jack — the dimensionless
+     * chest-expansion waveform at 5 Hz, *not* a breaths-per-minute rate. Breathing rate is derived
+     * from this waveform offline; the app only ever shows a rough live estimate on screen.
+     */
     RESPIRATION,
     /** eSense Pulse RR interval (ms), over BLE. */
     ESENSE_RR_INTERVAL,

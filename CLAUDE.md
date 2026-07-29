@@ -107,7 +107,7 @@ The app has three main responsibilities:
 | Sensor | Vendor | Connection | Data Collected |
 |--------|--------|------------|----------------|
 | eSense Pulse | Mindfield | BLE | Heart rate (BPM), RR intervals |
-| eSense Respiration | Mindfield | Audio jack | Respiration rate |
+| eSense Respiration | Mindfield | Audio jack | Respiration Amplitude (RA) — raw waveform, 5 Hz |
 | Galaxy Watch 8 | Samsung | Wearable Data Layer (via `:wear` companion) | Heart rate (BPM), IBI (ms), EDA (µS), battery |
 
 Per-sensor references live in [doc/](doc/): [sensor_esense_pulse.md](doc/sensor_esense_pulse.md),
@@ -399,6 +399,13 @@ scenarios.
 | `SessionStatus` | `ACTIVE`, `COMPLETED`, `UPLOADED` |
 | `ScenarioCode` | `REFERENCE_STATE`, `COGNITIVE_LOAD`, `DISTRACTING_ENVIRONMENT`, `LONG_TERM_FATIGUE`, `REACTION_TASKS` |
 | `SensorType` | `ESENSE_HEART_RATE`, `RESPIRATION`, `ESENSE_RR_INTERVAL`, `WATCH_HR`, `WATCH_IBI`, `WATCH_EDA` |
+
+**Recorded units.** `ESENSE_HEART_RATE`/`WATCH_HR` are BPM, `ESENSE_RR_INTERVAL`/`WATCH_IBI` are ms,
+`WATCH_EDA` is µS — and **`RESPIRATION` is the raw Respiration Amplitude (RA), a dimensionless
+chest-expansion waveform at 5 Hz, *not* breaths per minute.** The br/min figure on the respiration
+sensor screen is a coarse live indicator only (quantized, unfiltered, 30 s lag) and is never
+persisted; breathing rate is meant to be recomputed from the recorded RA waveform during analysis.
+See [sensor_esense_respiration.md](doc/sensor_esense_respiration.md).
 
 `ScenarioCode` carries a short official code (`A`…`E`) and a display label (e.g. `Scenario A –
 Reference State`) as enum properties — the constant *name* (e.g. `REFERENCE_STATE`) is what's stored

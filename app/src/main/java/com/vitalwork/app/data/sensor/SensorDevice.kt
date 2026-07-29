@@ -15,7 +15,7 @@ interface SensorDevice {
 
     // Reactive Streams (UI listens to these)
     val state: StateFlow<DeviceState>
-    val dataRate: StateFlow<Float>      // Primary metric (br/min for respiration, BPM for heart, etc.)
+    val dataRate: StateFlow<Float>      // Primary metric (raw RA for respiration, BPM for heart, etc.)
     val detailedStats: StateFlow<String> // Debug info (e.g. "RA: 23.0")
     val events: SharedFlow<String>       // One-off logs (e.g. "Connection lost", "Battery low")
     val sampleFlow: SharedFlow<Float>    // Every sample, for recording (RA waveform for respiration)

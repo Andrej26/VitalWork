@@ -97,7 +97,7 @@ class ConnectionRepository @Inject constructor(
     /** R-R interval sample flow from BLE HR sensor (ms) */
     val bleRrIntervalSampleFlow: SharedFlow<Float> = bleManager.rrIntervalSampleFlow
 
-    /** Breathing rate (br/min) from respiration sensor */
+    /** Raw Respiration Amplitude (RA, dimensionless) from the respiration sensor — not br/min */
     val respirationRate: StateFlow<Float> = respirationDevice.dataRate
 
     /** Low signal warning from respiration sensor */

@@ -159,7 +159,7 @@ class SessionControlViewModel @Inject constructor(
     /** True for 5 s after each BLE (re)connection while first readings may be inaccurate */
     val isHeartRateStabilizing: StateFlow<Boolean> = connectionRepository.isHeartRateWarmingUp
 
-    /** Live respiration rate value */
+    /** Live raw Respiration Amplitude (RA, dimensionless) — not a breaths-per-minute rate */
     val respirationRate: StateFlow<Float> = connectionRepository.respirationRate
 
     /** Low signal warning from respiration sensor */

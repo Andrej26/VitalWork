@@ -18,7 +18,8 @@ fun BioSensorCard(
     state: DeviceState,
     rate: Float,
     stats: String,
-    unit: String = "br/min",
+    /** Unit of [rate] — always passed explicitly; there is no sensible cross-sensor default. */
+    unit: String,
     onToggle: () -> Unit,
     showStreamData: Boolean = false,
     onToggleStreamDisplay: () -> Unit = {}

@@ -9,6 +9,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -34,33 +35,34 @@ class MindfieldRespirationTest {
     // -- Breathing rate: edge cases --
 
     @Test
-    fun calculateBreathingRate_emptyBuffer_returnsZero() {
-        assertEquals(0f, MindfieldRespiration.calculateBreathingRate(), 0f)
+    fun calculateBreathingRate_emptyBuffer_returnsNull() {
+        assertNull(MindfieldRespiration.calculateBreathingRate())
     }
 
     @Test
-    fun calculateBreathingRate_belowMinSamples_returnsZero() {
-        // 14 samples (minimum is 15 = 3 seconds × 5 Hz)
-        repeat(14) { MindfieldRespiration.raBuffer.addLast(50.0 + it) }
+    fun calculateBreathingRate_belowMinSamples_returnsNull() {
+        // 74 samples (minimum is 75 = 15 seconds × 5 Hz) → "no estimate yet"
+        repeat(74) { MindfieldRespiration.raBuffer.addLast(50.0 + it) }
 
-        assertEquals(0f, MindfieldRespiration.calculateBreathingRate(), 0f)
+        assertNull(MindfieldRespiration.calculateBreathingRate())
     }
 
     @Test
     fun calculateBreathingRate_exactlyMinSamples_returnsRate() {
-        // 15 samples with crossings should produce a non-zero rate
-        fillSineWave(breathsPerMin = 15.0, sampleCount = 15)
+        // 75 samples with crossings should produce a non-zero rate
+        fillSineWave(breathsPerMin = 15.0, sampleCount = 75)
 
         val rate = MindfieldRespiration.calculateBreathingRate()
-        assertTrue("Expected rate > 0 but got $rate", rate > 0f)
+        assertNotNull(rate)
+        assertTrue("Expected rate > 0 but got $rate", rate!! > 0f)
     }
 
     @Test
     fun calculateBreathingRate_constantSignal_returnsZero() {
-        // All same value → no crossings → 0 breaths
+        // All same value → window is full but there are no crossings → a real 0 br/min, not null
         repeat(150) { MindfieldRespiration.raBuffer.addLast(100.0) }
 
-        assertEquals(0f, MindfieldRespiration.calculateBreathingRate(), 0f)
+        assertEquals(0f, MindfieldRespiration.calculateBreathingRate()!!, 0f)
     }
 
     // -- Breathing rate: accuracy --
@@ -71,7 +73,7 @@ class MindfieldRespirationTest {
         fillSineWave(breathsPerMin = 2.0, sampleCount = 150)
 
         val rate = MindfieldRespiration.calculateBreathingRate()
-        assertEquals(2.0f, rate, 0.5f)
+        assertEquals(2.0f, rate!!, 0.5f)
     }
 
     @Test
@@ -80,7 +82,7 @@ class MindfieldRespirationTest {
         fillSineWave(breathsPerMin = 15.0, sampleCount = 150)
 
         val rate = MindfieldRespiration.calculateBreathingRate()
-        assertEquals(15.0f, rate, 1.0f)
+        assertEquals(15.0f, rate!!, 1.0f)
     }
 
     @Test
@@ -89,7 +91,7 @@ class MindfieldRespirationTest {
 
         val rate = MindfieldRespiration.calculateBreathingRate()
         // Discrete sampling causes ±2 crossings at window boundaries
-        assertEquals(30.0f, rate, 3.0f)
+        assertEquals(30.0f, rate!!, 3.0f)
     }
 
     @Test
@@ -105,7 +107,8 @@ class MindfieldRespirationTest {
         assertEquals(150, MindfieldRespiration.raBuffer.size)
         // Should still compute a rate from the remaining 150 samples
         val rate = MindfieldRespiration.calculateBreathingRate()
-        assertTrue("Expected rate > 0 but got $rate", rate > 0f)
+        assertNotNull(rate)
+        assertTrue("Expected rate > 0 but got $rate", rate!! > 0f)
     }
 
     // -- Verification: failure cases --
@@ -169,6 +172,26 @@ class MindfieldRespirationTest {
         MindfieldRespiration.finishVerification()
 
         assertEquals(DeviceState.Streaming, MindfieldRespiration.state.value)
+    }
+
+    // -- Pause --
+
+    @Test
+    fun stopStreaming_clearsRateWindow() {
+        // Reach Streaming, then fill the rate window and pause.
+        MindfieldRespiration.isVerifying = true
+        MindfieldRespiration.verifyCount = 5
+        for (i in 0 until 5) {
+            MindfieldRespiration.verifyBuffer[i] = 50.0 + i * 10.0
+        }
+        MindfieldRespiration.finishVerification()
+        fillSineWave(breathsPerMin = 15.0, sampleCount = 150)
+
+        MindfieldRespiration.stopStreaming()
+
+        // Samples from before the pause must not survive into the post-resume estimate.
+        assertEquals(0, MindfieldRespiration.raBuffer.size)
+        assertNull(MindfieldRespiration.calculateBreathingRate())
     }
 
     // -- Helper --

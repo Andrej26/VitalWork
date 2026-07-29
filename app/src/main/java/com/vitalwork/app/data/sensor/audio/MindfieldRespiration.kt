@@ -81,10 +81,14 @@ object MindfieldRespiration : SensorDevice {
     private const val LOW_SIGNAL_THRESHOLD = 0.4
     private const val LOW_SIGNAL_WARNING_MS = 1500L    // 1.5s -> WARNING
 
-    // Breathing rate calculation - sliding window of RA samples
+    // Breathing rate calculation - sliding window of RA samples.
+    // Display-only: the recorded/exported RESPIRATION samples are the raw RA waveform, never this.
     private const val RATE_WINDOW_SECONDS = 30
     private const val RATE_WINDOW_SAMPLES = RATE_WINDOW_SECONDS * SAMPLE_FREQ // 150 samples
-    private const val RATE_MIN_SAMPLES = 3 * SAMPLE_FREQ // 15 samples (need ≥3s for estimate)
+    // The estimate quantizes to 60 / window_seconds steps, so a short window is meaningless
+    // (3 s could only ever report 0 or 20 br/min). 15 s caps the step at 4 br/min; a full
+    // 30 s window gives 2 br/min.
+    private const val RATE_MIN_SAMPLES = 15 * SAMPLE_FREQ // 75 samples (need ≥15s for estimate)
     internal val raBuffer = ArrayDeque<Double>()
 
     override fun connect(context: Context) {
@@ -154,6 +158,9 @@ object MindfieldRespiration : SensorDevice {
     override fun stopStreaming() {
         if (_state.value == DeviceState.Streaming) {
             stopWatchdog()
+            // Drop the rate window: samples from before the pause would otherwise be mixed with
+            // post-resume ones across an arbitrary time gap.
+            raBuffer.clear()
             lowSignalStartMs = 0L
             highSignalStartMs = 0L
             _lowSignalWarning.value = LowSignalWarning.NONE
@@ -234,10 +241,13 @@ object MindfieldRespiration : SensorDevice {
                     highSignalStartMs = 0L
                 }
 
+                // Raw RA is what is streamed to the recorder and shown as the primary value.
                 _dataRate.value = ra.toFloat()
                 _sampleFlow.tryEmit(ra.toFloat())
                 val br = calculateBreathingRate()
-                _detailedStats.value = String.format(Locale.US, "%.1f br/min", br)
+                // No decimals: the estimate is quantized to whole breaths over the window.
+                _detailedStats.value =
+                    if (br == null) "-- br/min" else String.format(Locale.US, "%.0f br/min", br)
             }
         }
 
@@ -247,9 +257,15 @@ object MindfieldRespiration : SensorDevice {
     /**
      * Calculate breathing rate (br/min) from the RA waveform using zero-crossing detection.
      * Counts upward crossings of the mean value, each representing one breath cycle.
+     *
+     * Returns `null` while the window holds fewer than [RATE_MIN_SAMPLES] — "no estimate yet",
+     * which is deliberately distinct from a genuine `0f` (window filled, no crossings seen).
+     *
+     * **Display only.** This value is never persisted; `sampleFlow` carries the raw RA waveform
+     * and the breathing rate is re-derivable from it offline with a better algorithm.
      */
-    internal fun calculateBreathingRate(): Float {
-        if (raBuffer.size < RATE_MIN_SAMPLES) return 0f
+    internal fun calculateBreathingRate(): Float? {
+        if (raBuffer.size < RATE_MIN_SAMPLES) return null
 
         val values = raBuffer.toList()
         val mean = values.average()

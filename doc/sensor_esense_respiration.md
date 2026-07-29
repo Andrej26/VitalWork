@@ -8,9 +8,17 @@
 | Product | eSense Respiration |
 | Connection | 3.5mm audio jack |
 | Measured signal | Respiration Amplitude (RA) — chest expansion waveform |
-| Derived signal | Breathing rate (br/min) |
+| Recorded signal | **Raw RA only** (dimensionless, 5 Hz) |
+| Derived signal | Breathing rate (br/min) — **on-screen estimate only, never recorded** |
 
-The eSense Respiration is a chest-strap respiratory sensor that connects via the audio jack of the tablet. It requires no Bluetooth pairing. The device measures chest expansion and contraction as a raw amplitude value (RA), from which the app derives the breathing rate using zero-crossing detection.
+The eSense Respiration is a chest-strap respiratory sensor that connects via the audio jack of the tablet. It requires no Bluetooth pairing. The device measures chest expansion and contraction as a raw amplitude value (RA).
+
+> **What ends up in the data.** `SensorType.RESPIRATION` samples are the **raw RA waveform** — a
+> dimensionless chest-expansion amplitude, *not* breaths per minute. The same holds for the exported
+> JSON/CSV (`sensorType: "respiration"`) and for the upload DTOs sent to the VitalWork server. The
+> app additionally shows a coarse live br/min estimate on the sensor screen, but it is display-only:
+> nothing derived from it is persisted, because breathing rate is far better re-derived from the raw
+> waveform offline (see [Breathing Rate Calculation](#breathing-rate-calculation)).
 
 The SDK (`de.mindfield.esense_sdk_2_lib`) is provided as a local JAR at `app/libs/eSense_sdk_2_lib.jar`.
 
@@ -71,17 +79,22 @@ If RA stays below 0.4 (`LOW_SIGNAL_THRESHOLD`) for more than 1.5 seconds (`LOW_S
 The SDK is always reset by switching to type 1 and back to type 3 on each connect. This flushes internal SDK state and prevents stale data from a previous session from affecting the new connection.
 
 **Streaming can be paused and resumed**
-`stopStreaming()` pauses data collection and stops the watchdog while keeping the SDK sampling. `startStreaming()` resumes. The sensor remains in `Connected` state during a pause.
+`stopStreaming()` pauses data collection, stops the watchdog and clears the breathing-rate window while keeping the SDK sampling. `startStreaming()` resumes; the rate shows `-- br/min` again until 15 s of fresh samples have accumulated. The sensor remains in `Connected` state during a pause.
 
 ## Data Format
 
 | Property | Value |
 |----------|-------|
 | Raw unit | Respiration Amplitude (RA) — dimensionless |
-| Derived unit | Breathing rate in br/min |
+| Recorded unit | RA (the raw value; `sampleFlow` emits exactly what the SDK reports) |
+| Derived unit | Breathing rate in br/min — UI only, not recorded |
 | Output rate | 5 Hz (as set in this application) |
 
 ### Breathing Rate Calculation
+
+**This is a live on-screen indicator, not a data product.** It exists so the operator can sanity-check
+the strap during setup. It is *not* written to the database, the export, or the upload — analysis
+should recompute breathing rate from the recorded RA waveform.
 
 Breathing rate is derived from the RA waveform using **zero-crossing detection**:
 
@@ -90,7 +103,22 @@ Breathing rate is derived from the RA waveform using **zero-crossing detection**
 3. Upward crossings of the mean are counted — each crossing represents one breath cycle.
 4. Rate in br/min = `(crossings / window_duration_sec) × 60`.
 
-At least 3 seconds of data (`RATE_MIN_SAMPLES = 3 × SAMPLE_FREQ = 15`) are required before a rate is returned; below that threshold the rate is reported as `0`.
+At least 15 seconds of data (`RATE_MIN_SAMPLES = 15 × SAMPLE_FREQ = 75`) are required before a rate
+is returned; below that threshold `calculateBreathingRate()` returns `null` and the UI shows
+`-- br/min`. `null` ("no estimate yet") is deliberately distinct from a returned `0f` (window full,
+no mean crossings observed).
+
+**Known limits of this estimate** — reasons not to treat it as a measurement:
+
+- **Quantized.** The result can only be a multiple of `60 / window_seconds` — 2 br/min on a full
+  30 s window, 4 br/min on the 15 s minimum. It is therefore rendered without decimals (`%.0f`).
+- **No filtering or hysteresis.** Crossings are counted against the raw window mean, so noise or a
+  shallow wobble around the mean inflates the count, while slow baseline drift (posture change)
+  pulls the mean along and hides real crossings.
+- **Slow.** A 30 s window means it lags a genuine change in breathing by up to half a minute.
+
+The rate window is cleared on `connect()`, `disconnect()` **and `stopStreaming()`**, so a pause never
+mixes pre-pause samples into the post-resume estimate across an arbitrary time gap.
 
 See [sensor_sampling_rates.md](sensor_sampling_rates.md) for multi-sensor synchronization context.
 
@@ -113,8 +141,8 @@ eSense Respiration (audio jack)
   └─► HardwareController (eSense SDK)
         └─► sdkObserver.valueHasChanged(SensorData)
               └─► _dataRate (StateFlow<Float>) ──────────────────► UI (raw RA)
-              └─► _detailedStats (StateFlow<String>) ──────────────► UI (br/min)
-              └─► sampleFlow (SharedFlow<Float>) ─────────────────► ScenarioRecordingRepository
+              └─► _detailedStats (StateFlow<String>) ──────────────► UI only (br/min estimate)
+              └─► sampleFlow (SharedFlow<Float>) ─────────────────► ScenarioRecordingRepository (raw RA)
               └─► lowSignalWarning (StateFlow) ──────────────────► UI warning
 ```
 

@@ -30,8 +30,10 @@ See [sensor_esense_pulse.md](sensor_esense_pulse.md) for protocol details.
 private const val SAMPLE_FREQ = 5  // in MindfieldRespiration.kt
 ```
 
-- Respiration Amplitude (RA) — raw chest expansion/contraction waveform
-- Breathing rate derived via zero-crossing detection on a 30-second window
+- Respiration Amplitude (RA) — raw chest expansion/contraction waveform. **This is what is
+  recorded**: `SensorType.RESPIRATION` samples are RA, not breaths per minute.
+- A breathing rate is derived via zero-crossing detection on a 30-second window, but only as a live
+  on-screen indicator — it is never persisted. Analysis recomputes it from the recorded RA waveform.
 
 **Nyquist analysis:** Normal breathing rate is 0.2–0.33 Hz. At 5 Hz, oversampling is >15x — more than adequate.
 
@@ -44,7 +46,7 @@ See [sensor_esense_respiration.md](sensor_esense_respiration.md) for protocol de
 ```
 eSense Pulse ──(~4.5 Hz)──► heartRateSampleFlow ────────► ESENSE_HEART_RATE
                           ► rrIntervalSampleFlow ───────► ESENSE_RR_INTERVAL
-eSense Respiration ──(5 Hz)──► sampleFlow ─────────────► RESPIRATION
+eSense Respiration ──(5 Hz)──► sampleFlow (raw RA) ────► RESPIRATION
 ```
 
 Each sample is stored with:
