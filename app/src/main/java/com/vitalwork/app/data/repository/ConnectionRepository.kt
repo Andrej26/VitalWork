@@ -4,7 +4,7 @@ import android.content.Context
 import com.vitalwork.app.data.model.ConnectionState
 import com.vitalwork.app.data.sensor.DeviceState
 import com.vitalwork.app.data.sensor.SensorDevice
-import com.vitalwork.app.data.sensor.audio.LowSignalWarning
+import com.vitalwork.app.data.sensor.audio.RespirationWarning
 import com.vitalwork.app.data.sensor.audio.MindfieldRespiration
 import com.vitalwork.app.data.sensor.ble.BleEvent
 import com.vitalwork.app.data.sensor.ble.BleManager
@@ -100,10 +100,10 @@ class ConnectionRepository @Inject constructor(
     /** Raw Respiration Amplitude (RA, dimensionless) from the respiration sensor — not br/min */
     val respirationRate: StateFlow<Float> = respirationDevice.dataRate
 
-    /** Low signal warning from respiration sensor */
-    val respirationLowSignalWarning: StateFlow<LowSignalWarning> =
-        (respirationDevice as? MindfieldRespiration)?.lowSignalWarning
-            ?: MutableStateFlow(LowSignalWarning.NONE)
+    /** The single respiration problem worth showing the operator (signal lost / no breathing) */
+    val respirationWarning: StateFlow<RespirationWarning> =
+        (respirationDevice as? MindfieldRespiration)?.warning
+            ?: MutableStateFlow(RespirationWarning.NONE)
 
     /** Last disconnect/error reason from respiration sensor (null = no error) */
     val respirationDisconnectReason: StateFlow<String?> =

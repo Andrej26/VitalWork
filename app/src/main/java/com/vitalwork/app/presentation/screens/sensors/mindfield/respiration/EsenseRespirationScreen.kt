@@ -64,10 +64,10 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.vitalwork.app.data.model.ConnectionState
 import com.vitalwork.app.data.sensor.DeviceState
-import com.vitalwork.app.data.sensor.audio.LowSignalWarning
+import com.vitalwork.app.data.sensor.audio.RespirationWarning
 import com.vitalwork.app.presentation.components.BioSensorCard
 import com.vitalwork.app.presentation.components.ConnectionStatusBadge
-import com.vitalwork.app.presentation.components.LowSignalWarningBanner
+import com.vitalwork.app.presentation.components.RespirationWarningBanner
 import com.vitalwork.app.presentation.log.LogEntry
 import com.vitalwork.app.presentation.log.LogType
 import com.vitalwork.app.ui.theme.SuccessGreen
@@ -158,9 +158,9 @@ fun EsenseRespirationScreen(
                         // Sensor Info Card
                         SensorInfoCard(state = uiState.state)
 
-                        // Low signal warning banner
-                        if (uiState.lowSignalWarning != LowSignalWarning.NONE) {
-                            LowSignalWarningBanner(warningLevel = uiState.lowSignalWarning)
+                        // Respiration warning banner — one at a time
+                        if (uiState.warning != RespirationWarning.NONE) {
+                            RespirationWarningBanner(warning = uiState.warning)
                         }
 
                         // Permission Card (if not granted)

@@ -13,7 +13,9 @@ import com.vitalwork.app.data.db.SensorSampleEntity
 import com.vitalwork.app.data.db.SensorType
 import com.vitalwork.app.data.recording.detectEsenseRrIntervalGaps
 import com.vitalwork.app.data.recording.detectHeartRateGaps
+import com.vitalwork.app.data.recording.RespirationIssue
 import com.vitalwork.app.data.recording.detectRespirationGaps
+import com.vitalwork.app.data.recording.detectRespirationIssues
 import com.vitalwork.app.data.repository.ParticipantRepository
 import com.vitalwork.app.data.repository.ScenarioRepository
 import com.vitalwork.app.data.repository.SessionRepository
@@ -95,6 +97,7 @@ class SessionExportService @Inject constructor(
         val hrGaps = detectHeartRateGaps(samples)
         val rrGaps = detectEsenseRrIntervalGaps(samples)
         val respGaps = detectRespirationGaps(samples)
+        val respIssues = detectRespirationIssues(samples)
 
         val hrCount = samples.count { it.sensorType == SensorType.ESENSE_HEART_RATE }
         val rrCount = samples.count { it.sensorType == SensorType.ESENSE_RR_INTERVAL }
@@ -127,6 +130,18 @@ class SessionExportService @Inject constructor(
             if (respGaps.isNotEmpty()) {
                 appendLine("# respiration_gaps,${respGaps.size}")
                 appendLine("# respiration_gap_total_ms,${respGaps.sumOf { it.gapMs }}")
+            }
+            // Respiration stretches that are present but unusable — a slipped strap leaves no gap.
+            // Positions included (unlike gaps above): "when did it slip" is the whole point.
+            RespirationIssue.entries.forEach { reason ->
+                val events = respIssues.filter { it.reason == reason }
+                if (events.isEmpty()) return@forEach
+                val key = "respiration_${reason.name.lowercase()}"
+                appendLine("# $key,${events.size}")
+                appendLine("# ${key}_total_ms,${events.sumOf { it.durationMs }}")
+                events.forEachIndexed { i, event ->
+                    appendLine("# ${key}_${i + 1},${event.startElapsedMs},${event.endElapsedMs}")
+                }
             }
 
             appendLine("timestamp_ms,elapsed_ms,sensor_type,value")

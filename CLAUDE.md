@@ -218,7 +218,7 @@ com.vitalwork.app/
 │   │   ├── DeviceModePreferencesRepository.kt # Persisted Server/Client mode (SharedPrefs); switched in Settings
 │   │   └── SettingsRepository.kt            # Device prefix (A/B/C/D) for code generation; interface + SharedPrefs impl
 │   ├── recording/
-│   │   ├── GapDetector.kt                  # Sensor data gap detection
+│   │   ├── GapDetector.kt                  # Sensor data gap detection + respiration signal-quality events
 │   │   ├── ScenarioRecordingRepository.kt
 │   │   ├── ScenarioRecordingRepositoryImpl.kt # per-scenario capture + session-long watch collector
 │   │   ├── WatchSessionDrainer.kt          # splits session-long watch readings into scenario windows (de-dup)
@@ -233,7 +233,8 @@ com.vitalwork.app/
 │   ├── sensor/
 │   │   ├── SensorDevice.kt                 # Sensor interface
 │   │   ├── audio/
-│   │   │   └── MindfieldRespiration.kt     # eSense Respiration SDK wrapper
+│   │   │   ├── MindfieldRespiration.kt     # eSense Respiration SDK wrapper + RespirationWarning
+│   │   │   └── BreathingRateEstimator.kt   # pure br/min estimator (display only; shared with export QA)
 │   │   ├── ble/
 │   │   │   ├── BleManager.kt               # eSense Pulse BLE interface
 │   │   │   ├── BleManagerImpl.kt            # eSense Pulse BLE implementation
@@ -261,7 +262,7 @@ com.vitalwork.app/
 │   │   ├── BleDialogTypes.kt
 │   │   ├── BluetoothDisabledCard.kt
 │   │   ├── ConnectionStatusBadge.kt
-│   │   ├── LowSignalWarningBanner.kt
+│   │   ├── RespirationWarningBanner.kt     # single respiration banner (signal lost / no breathing)
 │   │   ├── ReadinessWarningCard.kt         # missing-prerequisite banner with Fix buttons
 │   │   ├── SensorTypeCard.kt
 │   │   └── WatchBatteryWarningCard.kt
@@ -402,10 +403,13 @@ scenarios.
 
 **Recorded units.** `ESENSE_HEART_RATE`/`WATCH_HR` are BPM, `ESENSE_RR_INTERVAL`/`WATCH_IBI` are ms,
 `WATCH_EDA` is µS — and **`RESPIRATION` is the raw Respiration Amplitude (RA), a dimensionless
-chest-expansion waveform at 5 Hz, *not* breaths per minute.** The br/min figure on the respiration
-sensor screen is a coarse live indicator only (quantized, unfiltered, 30 s lag) and is never
-persisted; breathing rate is meant to be recomputed from the recorded RA waveform during analysis.
-See [sensor_esense_respiration.md](doc/sensor_esense_respiration.md).
+chest-expansion waveform at 5 Hz, *not* breaths per minute.** A worn strap reads ~200–250 RA at rest;
+a strap off the chest falls below 1. The br/min figure on the respiration sensor screen is a live
+indicator only and is never persisted — breathing rate is meant to be recomputed from the recorded RA
+waveform during analysis. The export additionally carries `respirationIssues` per scenario, derived at
+export time from that same waveform, marking stretches where the strap had slipped (`SIGNAL_LOST`) or
+was not tracking breathing (`NO_BREATHING`) — neither of which produces a gap, since samples keep
+arriving. See [sensor_esense_respiration.md](doc/sensor_esense_respiration.md).
 
 `ScenarioCode` carries a short official code (`A`…`E`) and a display label (e.g. `Scenario A –
 Reference State`) as enum properties — the constant *name* (e.g. `REFERENCE_STATE`) is what's stored
@@ -483,7 +487,7 @@ Unit tests live under `app/src/test/` and run on the host JVM (no device/emulato
 
 | File | Target | What it covers |
 |------|--------|----------------|
-| `data/recording/GapDetectorTest.kt` | `GapDetector.kt` | Gap detection edge cases: empty input, startup threshold, boundary conditions, mixed sensor types, unsorted input, per-sensor-type routing |
+| `data/recording/GapDetectorTest.kt` | `GapDetector.kt` | Gap detection edge cases: empty input, startup threshold, boundary conditions, mixed sensor types, unsorted input, per-sensor-type routing; respiration signal-quality events (strap slip found with exact bounds, 0.8 threshold, runs broken by a sampling outage, flat-but-healthy RA, no samples ≠ lost signal) |
 | `data/recording/ScenarioRecordingRepositoryImplTest.kt` | `ScenarioRecordingRepositoryImpl.kt` | Start/stop state machine, sensor detection, sample buffering + flushing, scenario-end finalization; threaded stop-under-load test asserting no send-after-close leaks from the collectors |
 | `data/recording/WatchSessionDrainerTest.kt` | `WatchSessionDrainer.kt` | Per-(scenario,type) timestamp-window attribution + de-dup for EDA/HR/IBI; gap/boundary/back-to-back rules |
 | `data/recording/WatchReconciliationReportTest.kt` | `WatchReconciliationReport.kt` | ok/mismatch verdict + summary formatting |
@@ -495,7 +499,8 @@ Unit tests live under `app/src/test/` and run on the host JVM (no device/emulato
 | `data/export/upload/SessionHttpUploaderTest.kt` | `SessionHttpUploader.kt` | Upload request shape/auth, 200/201 vs 401 vs error handling, unconfigured-server failure (MockEngine) |
 | `data/link/PeerMessageTest.kt` | `PeerMessage.kt` | Link envelope JSON round-trip + unknown-key tolerance |
 | `data/link/PeerNamingTest.kt` | `PeerNaming.kt` | Prefix-scoped mDNS service naming + matching |
-| `data/sensor/audio/MindfieldRespirationTest.kt` | `MindfieldRespiration.kt` | Zero-crossing breathing rate algorithm and signal verification logic |
+| `data/sensor/audio/BreathingRateEstimatorTest.kt` | `BreathingRateEstimator.kt` | Rate accuracy 4–60 br/min (incl. a real recorded waveform as fixture), 8 s response to a rate step, baseline-drift and shallow-breathing immunity, refractory period, and the Warmup / NoBreathing verdicts |
+| `data/sensor/audio/MindfieldRespirationTest.kt` | `MindfieldRespiration.kt` | Delegation to the estimator, rate-window lifecycle (trim + clear on pause), and signal verification logic |
 | `data/sensor/ble/BleParsersTest.kt` | `BleParsers.kt` | HR measurement + battery characteristic parsing |
 | `data/sensor/watch/WatchLinkStatusTest.kt` | `WatchSensorReceiver.kt` | LIVE/DOZING/DISCONNECTED transitions (reading→LIVE, heartbeat→DOZING, STOP→DISCONNECTED) |
 | `data/sensor/watch/WatchSensorReceiverBatteryAlertTest.kt` | `WatchSensorReceiver.kt` | Low-battery alert tier snapshot (`currentBatteryAlert`) |

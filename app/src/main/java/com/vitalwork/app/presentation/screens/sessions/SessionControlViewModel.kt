@@ -13,7 +13,7 @@ import com.vitalwork.app.data.recording.WatchReconciliationReport
 import com.vitalwork.app.data.system.LocationChecker
 import com.vitalwork.app.data.recording.model.DataRecordingState
 import com.vitalwork.app.data.repository.ConnectionRepository
-import com.vitalwork.app.data.sensor.audio.LowSignalWarning
+import com.vitalwork.app.data.sensor.audio.RespirationWarning
 import com.vitalwork.app.data.repository.ScenarioRepository
 import com.vitalwork.app.data.repository.SessionRepository
 import com.vitalwork.app.data.sensor.DeviceState
@@ -162,9 +162,9 @@ class SessionControlViewModel @Inject constructor(
     /** Live raw Respiration Amplitude (RA, dimensionless) — not a breaths-per-minute rate */
     val respirationRate: StateFlow<Float> = connectionRepository.respirationRate
 
-    /** Low signal warning from respiration sensor */
-    val respirationLowSignalWarning: StateFlow<LowSignalWarning> =
-        connectionRepository.respirationLowSignalWarning
+    /** Respiration warning shown during recording (signal lost / no breathing) */
+    val respirationWarning: StateFlow<RespirationWarning> =
+        connectionRepository.respirationWarning
 
     /** Last disconnect/error reason from respiration sensor */
     val respirationDisconnectReason: StateFlow<String?> =

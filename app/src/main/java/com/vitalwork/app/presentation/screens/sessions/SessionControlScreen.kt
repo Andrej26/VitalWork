@@ -94,7 +94,7 @@ import com.vitalwork.app.presentation.components.onPermissionDenied
 import com.vitalwork.app.service.BatteryOptimizationHelper
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
-import com.vitalwork.app.data.sensor.audio.LowSignalWarning
+import com.vitalwork.app.data.sensor.audio.RespirationWarning
 import android.Manifest
 import android.app.Activity
 import android.content.Intent
@@ -108,7 +108,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.vitalwork.app.presentation.components.BleDialogState
 import com.vitalwork.app.presentation.components.DialogAction
-import com.vitalwork.app.presentation.components.LowSignalWarningBanner
+import com.vitalwork.app.presentation.components.RespirationWarningBanner
 import com.vitalwork.app.presentation.screens.sensors.components.BleDeviceItem
 import com.vitalwork.app.presentation.screens.sensors.toConnectionState
 import com.vitalwork.app.presentation.screens.sessions.components.DeviceSensorGroup
@@ -198,8 +198,8 @@ fun SessionControlScreen(
         viewModel.setBlePermissionsGranted(permissions.values.all { it })
     }
 
-    // Low signal warning
-    val respirationLowSignalWarning by viewModel.respirationLowSignalWarning.collectAsState()
+    // Respiration warning (signal lost / no breathing — mutually exclusive)
+    val respirationWarning by viewModel.respirationWarning.collectAsState()
 
     // Respiration disconnect reason (for error dialog)
     val respirationDisconnectReason by viewModel.respirationDisconnectReason.collectAsState()
@@ -478,9 +478,9 @@ fun SessionControlScreen(
                     onFix = onReadinessFix
                 )
 
-                // Low signal warning banner
-                if (respirationLowSignalWarning != LowSignalWarning.NONE) {
-                    LowSignalWarningBanner(warningLevel = respirationLowSignalWarning)
+                // Respiration warning banner — one at a time; SIGNAL_LOST outranks NO_BREATHING
+                if (respirationWarning != RespirationWarning.NONE) {
+                    RespirationWarningBanner(warning = respirationWarning)
                 }
 
                 // Sensor-lost-during-recording warning banner
