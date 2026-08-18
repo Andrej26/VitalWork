@@ -46,6 +46,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.vitalwork.app.presentation.components.WatermarkedBackground
+import com.vitalwork.app.presentation.components.OutlineCard
 
 private const val MIN_AGE = 18
 private const val MAX_AGE = 80
@@ -91,123 +93,122 @@ fun ParticipantEntryScreen(
             )
         }
     ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .verticalScroll(rememberScrollState()),
-            contentAlignment = Alignment.TopCenter
-        ) {
-            Column(
+        WatermarkedBackground {
+            Box(
                 modifier = Modifier
-                    .widthIn(max = 560.dp)
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .verticalScroll(rememberScrollState()),
+                contentAlignment = Alignment.TopCenter
             ) {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    ),
-                    modifier = Modifier.fillMaxWidth()
+                Column(
+                    modifier = Modifier
+                        .widthIn(max = 560.dp)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp),
-                        verticalArrangement = Arrangement.spacedBy(20.dp)
+                    OutlineCard(
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        // Header
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = null,
-                                modifier = Modifier.size(36.dp),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Column(modifier = Modifier.padding(start = 12.dp)) {
-                                Text(
-                                    text = "New Participant",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(20.dp)
+                        ) {
+                            // Header
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Person,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(36.dp),
+                                    tint = MaterialTheme.colorScheme.primary
                                 )
+                                Column(modifier = Modifier.padding(start = 12.dp)) {
+                                    Text(
+                                        text = "New Participant",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = "Enter the anonymized code and basic demographics, " +
+                                                "then start the session.",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+
+                            // Participant code — auto-generated from the device prefix (Settings),
+                            // read-only so it can't be edited into a colliding code.
+                            OutlinedTextField(
+                                value = uiState.participantCode,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Participant code") },
+                                singleLine = true,
+                                isError = uiState.codeError != null,
+                                supportingText = uiState.codeError?.let { { Text(it) } },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            // Age stepper
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(
-                                    text = "Enter the anonymized code and basic demographics, " +
-                                            "then start the session.",
-                                    style = MaterialTheme.typography.bodySmall
+                                    text = "Age (18 to 80 years old)",
+                                    style = MaterialTheme.typography.labelLarge
+                                )
+                                AgeStepper(
+                                    value = uiState.ageInput,
+                                    enabled = !uiState.isSubmitting,
+                                    isError = uiState.ageError != null,
+                                    onValueChange = viewModel::onAgeChange
+                                )
+                                uiState.ageError?.let {
+                                    Text(
+                                        text = it,
+                                        color = MaterialTheme.colorScheme.error,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+
+                            // Gender segmented buttons
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    text = "Gender",
+                                    style = MaterialTheme.typography.labelLarge
+                                )
+                                GenderSegmentedRow(
+                                    selected = uiState.gender,
+                                    enabled = !uiState.isSubmitting,
+                                    onSelected = viewModel::onGenderChange
                                 )
                             }
-                        }
 
-                        // Participant code — auto-generated from the device prefix (Settings),
-                        // read-only so it can't be edited into a colliding code.
-                        OutlinedTextField(
-                            value = uiState.participantCode,
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Participant code") },
-                            singleLine = true,
-                            isError = uiState.codeError != null,
-                            supportingText = uiState.codeError?.let { { Text(it) } },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        // Age stepper
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                text = "Age (18 to 80 years old)",
-                                style = MaterialTheme.typography.labelLarge
-                            )
-                            AgeStepper(
-                                value = uiState.ageInput,
-                                enabled = !uiState.isSubmitting,
-                                isError = uiState.ageError != null,
-                                onValueChange = viewModel::onAgeChange
-                            )
-                            uiState.ageError?.let {
+                            uiState.submitError?.let {
                                 Text(
                                     text = it,
                                     color = MaterialTheme.colorScheme.error,
-                                    style = MaterialTheme.typography.bodySmall
+                                    style = MaterialTheme.typography.bodyMedium
                                 )
                             }
-                        }
 
-                        // Gender segmented buttons
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                text = "Gender",
-                                style = MaterialTheme.typography.labelLarge
-                            )
-                            GenderSegmentedRow(
-                                selected = uiState.gender,
-                                enabled = !uiState.isSubmitting,
-                                onSelected = viewModel::onGenderChange
-                            )
-                        }
-
-                        uiState.submitError?.let {
-                            Text(
-                                text = it,
-                                color = MaterialTheme.colorScheme.error,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-
-                        Button(
-                            onClick = viewModel::submit,
-                            enabled = uiState.isInitialized && !uiState.isSubmitting,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            if (uiState.isSubmitting) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier
-                                        .padding(end = 8.dp)
-                                        .size(20.dp),
-                                    color = MaterialTheme.colorScheme.onPrimary
-                                )
+                            Button(
+                                onClick = viewModel::submit,
+                                enabled = uiState.isInitialized && !uiState.isSubmitting,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                if (uiState.isSubmitting) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier
+                                            .padding(end = 8.dp)
+                                            .size(20.dp),
+                                        color = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                }
+                                Text(text = "Start session")
                             }
-                            Text(text = "Start session")
                         }
                     }
                 }

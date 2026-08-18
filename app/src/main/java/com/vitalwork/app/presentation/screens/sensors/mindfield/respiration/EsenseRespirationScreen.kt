@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -21,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -34,8 +36,6 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -53,6 +53,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -63,12 +64,18 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.vitalwork.app.data.model.ConnectionState
 import com.vitalwork.app.data.sensor.DeviceState
-import com.vitalwork.app.data.sensor.audio.LowSignalWarning
+import com.vitalwork.app.data.sensor.audio.RespirationWarning
 import com.vitalwork.app.presentation.components.BioSensorCard
 import com.vitalwork.app.presentation.components.ConnectionStatusBadge
-import com.vitalwork.app.presentation.components.LowSignalWarningBanner
+import com.vitalwork.app.presentation.components.RespirationWarningBanner
 import com.vitalwork.app.presentation.log.LogEntry
 import com.vitalwork.app.presentation.log.LogType
+import com.vitalwork.app.ui.theme.SuccessGreen
+import com.vitalwork.app.ui.theme.ErrorRed
+import com.vitalwork.app.presentation.components.WatermarkedBackground
+import com.vitalwork.app.presentation.components.AlertSeverity
+import com.vitalwork.app.presentation.components.AlertCard
+import com.vitalwork.app.presentation.components.OutlineCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -126,73 +133,75 @@ fun EsenseRespirationScreen(
             )
         }
     ) { paddingValues ->
-        BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            val hPad = if (maxWidth >= 600.dp) 24.dp else 16.dp
-
-            Column(
+        WatermarkedBackground {
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = hPad)
+                    .padding(paddingValues)
             ) {
-                // Scrollable upper section (sensor info + controls)
+                val hPad = if (maxWidth >= 600.dp) 24.dp else 16.dp
+
                 Column(
                     modifier = Modifier
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                        .fillMaxSize()
+                        .padding(horizontal = hPad)
                 ) {
-                    Spacer(modifier = Modifier.height(8.dp))
+                    // Scrollable upper section (sensor info + controls)
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Spacer(modifier = Modifier.height(8.dp))
 
-                    // Sensor Info Card
-                    SensorInfoCard(state = uiState.state)
+                        // Sensor Info Card
+                        SensorInfoCard(state = uiState.state)
 
-                    // Low signal warning banner
-                    if (uiState.lowSignalWarning != LowSignalWarning.NONE) {
-                        LowSignalWarningBanner(warningLevel = uiState.lowSignalWarning)
+                        // Respiration warning banner — one at a time
+                        if (uiState.warning != RespirationWarning.NONE) {
+                            RespirationWarningBanner(warning = uiState.warning)
+                        }
+
+                        // Permission Card (if not granted)
+                        if (!uiState.permissionsGranted) {
+                            PermissionRequestCard(
+                                onRequestPermissions = { permissionLauncher.launch(Manifest.permission.RECORD_AUDIO) }
+                            )
+                        }
+
+                        // Sensor Control Card (only if permissions granted)
+                        if (uiState.permissionsGranted) {
+                            Text(
+                                text = "Sensor Control",
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
+
+                            BioSensorCard(
+                                sensorName = "Mindfield Respiration",
+                                state = uiState.state,
+                                rate = uiState.rate,
+                                stats = uiState.stats,
+                                unit = "RA",
+                                onToggle = viewModel::toggleConnection,
+                                showStreamData = uiState.showStreamData,
+                                onToggleStreamDisplay = viewModel::toggleStreamDisplay
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
                     }
 
-                    // Permission Card (if not granted)
-                    if (!uiState.permissionsGranted) {
-                        PermissionRequestCard(
-                            onRequestPermissions = { permissionLauncher.launch(Manifest.permission.RECORD_AUDIO) }
-                        )
-                    }
-
-                    // Sensor Control Card (only if permissions granted)
-                    if (uiState.permissionsGranted) {
-                        Text(
-                            text = "Sensor Control",
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
-
-                        BioSensorCard(
-                            sensorName = "Mindfield Respiration",
-                            state = uiState.state,
-                            rate = uiState.rate,
-                            stats = uiState.stats,
-                            unit = "RA",
-                            onToggle = viewModel::toggleConnection,
-                            showStreamData = uiState.showStreamData,
-                            onToggleStreamDisplay = viewModel::toggleStreamDisplay
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
+                    // Fixed-height log section at the bottom
+                    LogSection(
+                        logEntries = uiState.logEntries,
+                        onClearLog = viewModel::clearLog,
+                        modifier = Modifier
+                            .height(220.dp)
+                            .padding(bottom = 8.dp)
+                    )
                 }
-
-                // Fixed-height log section at the bottom
-                LogSection(
-                    logEntries = uiState.logEntries,
-                    onClearLog = viewModel::clearLog,
-                    modifier = Modifier
-                        .height(220.dp)
-                        .padding(bottom = 8.dp)
-                )
             }
         }
     }
@@ -211,24 +220,27 @@ private fun SensorInfoCard(
         DeviceState.Disconnected -> ConnectionState.DISCONNECTED
     }
 
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
+    OutlineCard(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = Icons.Default.Mic,
-                contentDescription = null,
-                modifier = Modifier.size(48.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.secondaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Mic,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
 
             Spacer(modifier = Modifier.width(16.dp))
 
@@ -255,45 +267,15 @@ private fun PermissionRequestCard(
     onRequestPermissions: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.Security,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onErrorContainer
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Permissions Required",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onErrorContainer
-                )
-            }
-
-            Text(
-                text = "Microphone permission is required to connect to the eSense Respiration sensor via audio jack.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onErrorContainer
-            )
-
-            Button(
-                onClick = onRequestPermissions,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Grant Permissions")
-            }
-        }
-    }
+    AlertCard(
+        title = "Permissions Required",
+        description = "Microphone permission is required to connect to the eSense Respiration sensor via audio jack.",
+        icon = Icons.Default.Security,
+        severity = AlertSeverity.BLOCKING,
+        actionLabel = "Grant Permissions",
+        onAction = onRequestPermissions,
+        modifier = modifier
+    )
 }
 
 @Composable
@@ -304,12 +286,7 @@ private fun LogSection(
 ) {
     val listState = rememberLazyListState()
 
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
+    OutlineCard(modifier = modifier.fillMaxWidth()) {
         Column {
             Row(
                 modifier = Modifier
@@ -376,11 +353,11 @@ private fun LogEntryItem(entry: LogEntry) {
         }
         LogType.SUCCESS -> {
             icon = Icons.Outlined.CheckCircle
-            color = Color(0xFF4CAF50)
+            color = SuccessGreen
         }
         LogType.ERROR -> {
             icon = Icons.Outlined.Error
-            color = Color(0xFFF44336)
+            color = ErrorRed
         }
         LogType.INFO -> {
             icon = Icons.Outlined.Info
@@ -388,7 +365,7 @@ private fun LogEntryItem(entry: LogEntry) {
         }
         LogType.NOTIFICATION -> {
             icon = Icons.Outlined.Notifications
-            color = Color(0xFF9C27B0)
+            color = MaterialTheme.colorScheme.tertiary
         }
     }
 

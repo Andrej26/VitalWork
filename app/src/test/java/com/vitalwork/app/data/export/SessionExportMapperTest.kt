@@ -24,6 +24,7 @@ class SessionExportMapperTest {
     private lateinit var fakeScenarioDao: FakeScenarioDao
     private lateinit var fakeSensorSampleDao: FakeSensorSampleDao
     private lateinit var scenarioRepository: ScenarioRepository
+    private lateinit var sampleCollector: ScenarioSampleCollector
     private lateinit var mapper: SessionExportMapper
 
     @Before
@@ -31,8 +32,16 @@ class SessionExportMapperTest {
         fakeScenarioDao = FakeScenarioDao()
         fakeSensorSampleDao = FakeSensorSampleDao()
         scenarioRepository = ScenarioRepository(fakeScenarioDao, fakeSensorSampleDao, TimeProvider.system())
-        mapper = SessionExportMapper(scenarioRepository, TimeProvider.system())
+        sampleCollector = ScenarioSampleCollector(scenarioRepository)
+        mapper = SessionExportMapper(sampleCollector, TimeProvider.system())
     }
+
+    /** Mirrors the production path: collect each scenario's samples once, then build the export. */
+    private suspend fun buildExport(
+        participant: ParticipantEntity,
+        session: SessionEntity,
+        scenarios: List<ScenarioEntity>
+    ) = mapper.buildExportData(participant, session, sampleCollector.collect(scenarios))
 
     @Test
     fun buildScenarioExport_sensorTypesMappedToLowercase() {
@@ -93,6 +102,61 @@ class SessionExportMapperTest {
     }
 
     @Test
+    fun buildScenarioExport_respirationIssuesNullWhenNoRespirationSamples() {
+        // The sensor was simply not connected — that must not read as a lost signal.
+        val scenario = scenario()
+        val samples = listOf(
+            sample(scenario.id, SensorType.ESENSE_HEART_RATE, elapsedMs = 0L),
+            sample(scenario.id, SensorType.ESENSE_HEART_RATE, elapsedMs = 1_000L)
+        )
+
+        val result = mapper.buildScenarioExport(scenario, samples)
+
+        assertNull(result.respirationIssues)
+    }
+
+    @Test
+    fun buildScenarioExport_respirationIssuesNullWhenSignalIsHealthy() {
+        val scenario = scenario()
+
+        val result = mapper.buildScenarioExport(scenario, breathingSamples(scenario.id, seconds = 60))
+
+        assertNull(result.respirationIssues)
+    }
+
+    @Test
+    fun buildScenarioExport_strapSlipIsReportedWithCountsAndDuration() {
+        val scenario = scenario()
+        val samples = breathingSamples(scenario.id, seconds = 60, strapOffSeconds = 20..29)
+
+        val issues = mapper.buildScenarioExport(scenario, samples).respirationIssues
+
+        assertNotNull(issues)
+        assertEquals(1, issues!!.signalLostCount)
+        assertEquals(0, issues.noBreathingCount)
+        assertEquals(1, issues.events.size)
+        assertEquals("SIGNAL_LOST", issues.events[0].reason)
+        assertEquals(20_000L, issues.events[0].startElapsedMs)
+        assertEquals(9_800L, issues.events[0].durationMs)
+        assertEquals(9_800L, issues.signalLostTotalMs)
+    }
+
+    /** 5 Hz respiration waveform; seconds inside [strapOffSeconds] carry the strap-off RA level. */
+    private fun breathingSamples(
+        scenarioId: Long,
+        seconds: Int,
+        strapOffSeconds: IntRange? = null
+    ): List<SensorSampleEntity> = (0 until seconds * 5).map { i ->
+        val t = i / 5.0
+        val value = if (strapOffSeconds != null && t.toInt() in strapOffSeconds) {
+            0.4f
+        } else {
+            (210.0 + 25.0 * kotlin.math.sin(2.0 * Math.PI * 13.0 / 60.0 * t)).toFloat()
+        }
+        sample(scenarioId, SensorType.RESPIRATION, elapsedMs = (t * 1000).toLong(), value = value)
+    }
+
+    @Test
         fun buildExportData_statisticsDerivedFromExportedSamples() = runTest {
         val participant = participant()
         // Stored counters are deliberately wrong/stale — statistics must ignore them and count the
@@ -117,7 +181,7 @@ class SessionExportMapperTest {
             sample(scenario.id, SensorType.WATCH_IBI)
         ))
 
-        val result = mapper.buildExportData(participant, session, listOf(scenario))
+        val result = buildExport(participant, session, listOf(scenario))
 
         assertEquals(1, result.session.statistics.scenarioCount)
         assertEquals(2, result.session.statistics.hrSampleCount)
@@ -139,7 +203,7 @@ class SessionExportMapperTest {
             sample(unfinished.id, SensorType.WATCH_HR)
         ))
 
-        val result = mapper.buildExportData(participant, session, listOf(unfinished))
+        val result = buildExport(participant, session, listOf(unfinished))
 
         assertEquals(1, result.session.statistics.scenarioCount)
         assertEquals(1, result.session.statistics.hrSampleCount)
@@ -156,7 +220,7 @@ class SessionExportMapperTest {
             sample(scenario.id, SensorType.ESENSE_HEART_RATE, value = 75f)
         ))
 
-        val result = mapper.buildExportData(participant, session, listOf(scenario))
+        val result = buildExport(participant, session, listOf(scenario))
 
         assertEquals(1, result.scenarios.size)
         assertEquals(2, result.scenarios[0].samples.size)
@@ -168,7 +232,7 @@ class SessionExportMapperTest {
         val participant = participant(code = "P-042", age = 31, gender = "F")
         val session = session()
 
-        val result = mapper.buildExportData(participant, session, emptyList())
+        val result = buildExport(participant, session, emptyList())
 
         assertEquals("P-042", result.participant.participantCode)
         assertEquals(31, result.participant.age)
@@ -183,11 +247,11 @@ class SessionExportMapperTest {
             status = SessionStatus.UPLOADED
         )
 
-        val result = mapper.buildExportData(participant, session, emptyList())
+        val result = buildExport(participant, session, emptyList())
 
         assertEquals("VW-260528-143012", result.session.sessionCode)
         assertEquals("UPLOADED", result.session.status)
-        assertEquals("2.1.0", result.version)
+        assertEquals("2.2.0", result.version)
     }
 
     @Test
@@ -199,7 +263,7 @@ class SessionExportMapperTest {
         val session = session()
         val scenario = scenario(id = 5L)
 
-        val result = mapper.buildExportData(participant, session, listOf(scenario))
+        val result = buildExport(participant, session, listOf(scenario))
 
         assertEquals("1970-01-01T00:16:40Z", result.session.startedAt)
         assertEquals("1970-01-01T00:17:40Z", result.session.endedAt)

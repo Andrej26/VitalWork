@@ -93,8 +93,12 @@ class PeerLinkManagerImpl @Inject constructor(
     private val _activeRole = MutableStateFlow<PeerRole?>(null)
     override val activeRole: StateFlow<PeerRole?> = _activeRole.asStateFlow()
 
+    // Mutated from Java-WebSocket callback threads and read from IO/main — @Volatile for visibility.
+    @Volatile
     private var server: WebSocketServer? = null
+    @Volatile
     private var serverConn: WebSocket? = null
+    @Volatile
     private var client: WebSocketClient? = null
 
     override fun startServer() {

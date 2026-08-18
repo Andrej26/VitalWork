@@ -50,10 +50,13 @@ class SessionHttpUploader(
         mapper: SessionUploadMapper,
     ) : this(sessionRepository, participantRepository, scenarioRepository, mapper, CIO.create())
 
+    /** Single reused Json instance (parsing the response + content negotiation). */
+    private val responseJson = Json { ignoreUnknownKeys = true }
+
     private val client = HttpClient(engine) {
         expectSuccess = false
         install(ContentNegotiation) {
-            json(Json { ignoreUnknownKeys = true })
+            json(responseJson)
         }
         install(HttpTimeout) {
             requestTimeoutMillis = REQUEST_TIMEOUT_MS
@@ -92,7 +95,7 @@ class SessionHttpUploader(
             when (response.status) {
                 HttpStatusCode.OK, HttpStatusCode.Created -> {
                     val message = runCatching {
-                        Json { ignoreUnknownKeys = true }
+                        responseJson
                             .decodeFromString<SessionUploadResponse>(response.bodyAsText())
                             .message
                     }.getOrNull()?.takeIf { it.isNotBlank() } ?: "Session uploaded."

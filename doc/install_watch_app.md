@@ -29,7 +29,7 @@ You'll see something like `192.168.100.37:33479`.
 > reboot). The IP can also change. Always re-check this screen — don't assume last time's value.
 
 ### Step 2 — Connect adb to the watch
-In a PowerShell window in the project folder (`d:\00_Projekty_Praca\VitalWork`):
+In a PowerShell window in the project folder (`d:\00_VR_Projects\VitalWork`):
 
 ```powershell
 $adb = "C:\Users\andre\AppData\Local\Android\Sdk\platform-tools\adb.exe"

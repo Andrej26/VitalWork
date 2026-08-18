@@ -99,16 +99,15 @@ The app has three main responsibilities:
 
 ## Git Workflow
 
-- `main` — Production branch
-- `dev` — Development/integration branch (default for PRs)
-- Feature branches: `feature/<name>` or `<author>/<name>`
+- `main` — Production branch; the base for PRs
+- Feature branches: `feature/<name>` or `<author>/<name>` (current work is on `Restructualization-and-Revizualization`)
 
 ## Supported Sensors
 
 | Sensor | Vendor | Connection | Data Collected |
 |--------|--------|------------|----------------|
 | eSense Pulse | Mindfield | BLE | Heart rate (BPM), RR intervals |
-| eSense Respiration | Mindfield | Audio jack | Respiration rate |
+| eSense Respiration | Mindfield | Audio jack | Respiration Amplitude (RA) — raw waveform, 5 Hz |
 | Galaxy Watch 8 | Samsung | Wearable Data Layer (via `:wear` companion) | Heart rate (BPM), IBI (ms), EDA (µS), battery |
 
 Per-sensor references live in [doc/](doc/): [sensor_esense_pulse.md](doc/sensor_esense_pulse.md),
@@ -186,6 +185,7 @@ com.vitalwork.app/
 │   │   └── SensorSampleDao.kt
 │   ├── export/                             # Local session export (JSON + CSV to Documents)
 │   │   ├── SessionExportService.kt         # implements SessionExporter; MediaStore/legacy writes
+│   │   ├── ScenarioSampleCollector.kt      # shared sample load (once per scenario) + per-type counts
 │   │   ├── SessionExportMapper.kt          # entities → export shape; statistics counted from exported samples
 │   │   ├── SessionUploader.kt              # upload interface (bound to SessionHttpUploader)
 │   │   ├── model/
@@ -218,7 +218,7 @@ com.vitalwork.app/
 │   │   ├── DeviceModePreferencesRepository.kt # Persisted Server/Client mode (SharedPrefs); switched in Settings
 │   │   └── SettingsRepository.kt            # Device prefix (A/B/C/D) for code generation; interface + SharedPrefs impl
 │   ├── recording/
-│   │   ├── GapDetector.kt                  # Sensor data gap detection
+│   │   ├── GapDetector.kt                  # Sensor data gap detection + respiration signal-quality events
 │   │   ├── ScenarioRecordingRepository.kt
 │   │   ├── ScenarioRecordingRepositoryImpl.kt # per-scenario capture + session-long watch collector
 │   │   ├── WatchSessionDrainer.kt          # splits session-long watch readings into scenario windows (de-dup)
@@ -233,7 +233,8 @@ com.vitalwork.app/
 │   ├── sensor/
 │   │   ├── SensorDevice.kt                 # Sensor interface
 │   │   ├── audio/
-│   │   │   └── MindfieldRespiration.kt     # eSense Respiration SDK wrapper
+│   │   │   ├── MindfieldRespiration.kt     # eSense Respiration SDK wrapper + RespirationWarning
+│   │   │   └── BreathingRateEstimator.kt   # pure br/min estimator (display only; shared with export QA)
 │   │   ├── ble/
 │   │   │   ├── BleManager.kt               # eSense Pulse BLE interface
 │   │   │   ├── BleManagerImpl.kt            # eSense Pulse BLE implementation
@@ -261,7 +262,7 @@ com.vitalwork.app/
 │   │   ├── BleDialogTypes.kt
 │   │   ├── BluetoothDisabledCard.kt
 │   │   ├── ConnectionStatusBadge.kt
-│   │   ├── LowSignalWarningBanner.kt
+│   │   ├── RespirationWarningBanner.kt     # single respiration banner (signal lost / no breathing)
 │   │   ├── ReadinessWarningCard.kt         # missing-prerequisite banner with Fix buttons
 │   │   ├── SensorTypeCard.kt
 │   │   └── WatchBatteryWarningCard.kt
@@ -320,7 +321,6 @@ com.vitalwork.app/
 │       │       ├── DeviceSensorGroup.kt
 │       │       ├── EndSessionWatchDialog.kt # end-session watch wake/transfer state machine UI
 │       │       ├── LiveSensorCard.kt
-│       │       ├── SensorSummaryCard.kt
 │       │       ├── SessionCard.kt
 │       │       └── UploadProgressDialog.kt
 │       ├── settings/                       # Device prefix (A/B/C/D) + device mode (Server/Client)
@@ -401,6 +401,16 @@ scenarios.
 | `ScenarioCode` | `REFERENCE_STATE`, `COGNITIVE_LOAD`, `DISTRACTING_ENVIRONMENT`, `LONG_TERM_FATIGUE`, `REACTION_TASKS` |
 | `SensorType` | `ESENSE_HEART_RATE`, `RESPIRATION`, `ESENSE_RR_INTERVAL`, `WATCH_HR`, `WATCH_IBI`, `WATCH_EDA` |
 
+**Recorded units.** `ESENSE_HEART_RATE`/`WATCH_HR` are BPM, `ESENSE_RR_INTERVAL`/`WATCH_IBI` are ms,
+`WATCH_EDA` is µS — and **`RESPIRATION` is the raw Respiration Amplitude (RA), a dimensionless
+chest-expansion waveform at 5 Hz, *not* breaths per minute.** A worn strap reads ~200–250 RA at rest;
+a strap off the chest falls below 1. The br/min figure on the respiration sensor screen is a live
+indicator only and is never persisted — breathing rate is meant to be recomputed from the recorded RA
+waveform during analysis. The export additionally carries `respirationIssues` per scenario, derived at
+export time from that same waveform, marking stretches where the strap had slipped (`SIGNAL_LOST`) or
+was not tracking breathing (`NO_BREATHING`) — neither of which produces a gap, since samples keep
+arriving. See [sensor_esense_respiration.md](doc/sensor_esense_respiration.md).
+
 `ScenarioCode` carries a short official code (`A`…`E`) and a display label (e.g. `Scenario A –
 Reference State`) as enum properties — the constant *name* (e.g. `REFERENCE_STATE`) is what's stored
 in the DB and sent to the server, so the descriptive labels can change without breaking old rows. (The
@@ -477,8 +487,8 @@ Unit tests live under `app/src/test/` and run on the host JVM (no device/emulato
 
 | File | Target | What it covers |
 |------|--------|----------------|
-| `data/recording/GapDetectorTest.kt` | `GapDetector.kt` | Gap detection edge cases: empty input, startup threshold, boundary conditions, mixed sensor types, unsorted input, per-sensor-type routing |
-| `data/recording/ScenarioRecordingRepositoryImplTest.kt` | `ScenarioRecordingRepositoryImpl.kt` | Start/stop state machine, sensor detection, sample buffering + flushing, scenario-end finalization |
+| `data/recording/GapDetectorTest.kt` | `GapDetector.kt` | Gap detection edge cases: empty input, startup threshold, boundary conditions, mixed sensor types, unsorted input, per-sensor-type routing; respiration signal-quality events (strap slip found with exact bounds, 0.8 threshold, runs broken by a sampling outage, flat-but-healthy RA, no samples ≠ lost signal) |
+| `data/recording/ScenarioRecordingRepositoryImplTest.kt` | `ScenarioRecordingRepositoryImpl.kt` | Start/stop state machine, sensor detection, sample buffering + flushing, scenario-end finalization; threaded stop-under-load test asserting no send-after-close leaks from the collectors |
 | `data/recording/WatchSessionDrainerTest.kt` | `WatchSessionDrainer.kt` | Per-(scenario,type) timestamp-window attribution + de-dup for EDA/HR/IBI; gap/boundary/back-to-back rules |
 | `data/recording/WatchReconciliationReportTest.kt` | `WatchReconciliationReport.kt` | ok/mismatch verdict + summary formatting |
 | `data/repository/ParticipantRepositoryTest.kt` | `ParticipantRepository.kt` | Code generation (`A-001`…, per-device-prefix scoped), uniqueness validation, fetch by ID/code |
@@ -489,7 +499,8 @@ Unit tests live under `app/src/test/` and run on the host JVM (no device/emulato
 | `data/export/upload/SessionHttpUploaderTest.kt` | `SessionHttpUploader.kt` | Upload request shape/auth, 200/201 vs 401 vs error handling, unconfigured-server failure (MockEngine) |
 | `data/link/PeerMessageTest.kt` | `PeerMessage.kt` | Link envelope JSON round-trip + unknown-key tolerance |
 | `data/link/PeerNamingTest.kt` | `PeerNaming.kt` | Prefix-scoped mDNS service naming + matching |
-| `data/sensor/audio/MindfieldRespirationTest.kt` | `MindfieldRespiration.kt` | Zero-crossing breathing rate algorithm and signal verification logic |
+| `data/sensor/audio/BreathingRateEstimatorTest.kt` | `BreathingRateEstimator.kt` | Rate accuracy 4–60 br/min (incl. a real recorded waveform as fixture), 8 s response to a rate step, baseline-drift and shallow-breathing immunity, refractory period, and the Warmup / NoBreathing verdicts |
+| `data/sensor/audio/MindfieldRespirationTest.kt` | `MindfieldRespiration.kt` | Delegation to the estimator, rate-window lifecycle (trim + clear on pause), and signal verification logic |
 | `data/sensor/ble/BleParsersTest.kt` | `BleParsers.kt` | HR measurement + battery characteristic parsing |
 | `data/sensor/watch/WatchLinkStatusTest.kt` | `WatchSensorReceiver.kt` | LIVE/DOZING/DISCONNECTED transitions (reading→LIVE, heartbeat→DOZING, STOP→DISCONNECTED) |
 | `data/sensor/watch/WatchSensorReceiverBatteryAlertTest.kt` | `WatchSensorReceiver.kt` | Low-battery alert tier snapshot (`currentBatteryAlert`) |

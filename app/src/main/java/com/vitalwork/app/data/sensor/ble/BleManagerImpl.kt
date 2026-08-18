@@ -57,6 +57,8 @@ class BleManagerImpl(
     private val bleScanner: BluetoothLeScanner?
         get() = bluetoothAdapter?.bluetoothLeScanner
 
+    // Mutated from GATT callback threads and read from main/IO — @Volatile for cross-thread visibility.
+    @Volatile
     private var bluetoothGatt: BluetoothGatt? = null
 
     // State flows
@@ -348,6 +350,13 @@ class BleManagerImpl(
 
     @SuppressLint("MissingPermission")
     override fun connect(device: BleDevice) {
+        // Close any leftover GATT client from a prior/aborted attempt before opening a new one.
+        // Android caps GATT client registrations (~30); leaking them makes connectGatt() silently
+        // fail with status 133. close() alone frees the registration and, unlike disconnect(), fires
+        // no async onConnectionStateChange that could clobber the fresh connection below.
+        bluetoothGatt?.let { runCatching { it.close() } }
+        bluetoothGatt = null
+
         stopScan()
 
         _connectionState.value = ConnectionState.CONNECTING

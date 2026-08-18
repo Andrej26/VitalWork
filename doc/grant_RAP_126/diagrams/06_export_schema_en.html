@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>06 — Export Schema (JSON / CSV)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: #FFFFFF; color: #40484C;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 24px 26px 20px;
+    position: relative; overflow: hidden;
+  }
+  body > * { position: relative; z-index: 1; }
+
+  /* Watermark */
+  .wm {
+    position: absolute; z-index: 0; left: 61%; top: 62%;
+    transform: translate(-50%, -50%) rotate(-24deg);
+    font-size: 115px; font-weight: 700; letter-spacing: 0.02em;
+    color: #083E50; opacity: 0.035; white-space: nowrap; pointer-events: none;
+  }
+  .ecg { position: absolute; z-index: 0; left: 0; bottom: 6px; width: 100%; opacity: 0.07; pointer-events: none; }
+
+  /* Header — centered, compact */
+  .head-text { text-align: center; margin-bottom: 4px; }
+  .eyebrow {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.14em;
+    text-transform: uppercase; color: #0E5871;
+  }
+  h1 { font-size: 19px; font-weight: 700; color: #083E50; letter-spacing: 0.01em; }
+  .subtitle { font-size: 12px; color: #4C626B; margin: 6px 0 12px; max-width: 700px; text-align: center; line-height: 1.6; }
+  .subnote { font-size: 11px; color: #70787D; font-style: italic; margin-bottom: 14px; text-align: center; }
+
+  /* Legend — pill chips, aligned with the data-model entity colors (diagram 03) */
+  .legend { display: flex; gap: 8px 10px; margin-bottom: 6px; flex-wrap: wrap; justify-content: center; }
+  .lchip {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 11px; color: #40484C;
+    border: 1px solid #DCE4E9; border-radius: 999px; padding: 4px 12px 4px 6px;
+    background: #F6F8F9;
+  }
+  .ld { width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0; }
+
+  .cols { display: flex; gap: 30px; align-items: flex-start; }
+  .panel { width: 400px; }
+  .panel.json { width: 460px; }
+  .panel-title {
+    font-size: 13px; font-weight: 700; color: #083E50; text-align: center;
+    margin-bottom: 3px; letter-spacing: 0.02em;
+  }
+  .panel-sub {
+    font-size: 11px; color: #4C626B; text-align: center; margin-bottom: 14px;
+    font-family: Consolas, 'Courier New', monospace;
+  }
+
+  /* JSON tree cards */
+  .card {
+    border-radius: 9px; overflow: hidden; position: relative;
+    box-shadow: 0 1px 5px rgba(8,62,80,0.09); margin-bottom: 0;
+    background: #fff;
+  }
+  .card-head {
+    padding: 8px 14px; font-size: 12.5px; font-weight: 700;
+    letter-spacing: 0.01em;
+  }
+  .card-body { background: #fff; padding: 6px 0; }
+  .fld {
+    display: flex; align-items: baseline; gap: 8px;
+    padding: 4.5px 14px; font-size: 11.5px; line-height: 1.4;
+  }
+  .fname { font-weight: 600; color: #191C1E; flex: 0 0 112px; font-family: Consolas, 'Courier New', monospace; font-size: 11px; }
+  .fdesc { color: #4C626B; font-size: 10.5px; flex: 1 1 auto; min-width: 0; }
+  .fex-wrap { flex: 0 0 148px; text-align: right; }
+  .fex {
+    font-family: Consolas, 'Courier New', monospace; font-size: 10px;
+    color: #083E50; background: #E1F2FB; border: 1px solid #9DC8DC;
+    border-radius: 4px;
+    padding: 1px 6px; white-space: nowrap; display: inline-block;
+  }
+  .nest { padding-left: 14px; border-left: 2px solid #DCE4E9; margin: 2px 0 6px 14px; }
+
+  /* Card categories — same entity colors as diagram 03 */
+  .hd-session     { background: #CFE6F2; color: #083E50; border-bottom: 1.5px solid #0E5871; }
+  .hd-participant { background: #E3F1E4; color: #1B5E20; border-bottom: 1.5px solid #2E7D32; }
+  .hd-scenario    { background: #FFF4DE; color: #6E4400; border-bottom: 1.5px solid #B26A00; }
+  .hd-samples     { background: #B5D4E0; color: #083E50; border-bottom: 1.5px solid #083E50; }
+  .bd-session     { border: 1.5px solid #0E5871; }
+  .bd-participant { border: 1.5px solid #2E7D32; }
+  .bd-scenario    { border: 1.5px solid #B26A00; }
+  .bd-samples     { border: 1.5px solid #083E50; }
+
+  .down { width: 2px; height: 15px; background: #0E5871; margin: 0 auto; }
+
+  .bridge {
+    width: 100%; text-align: center; font-size: 10.5px; color: #4C626B;
+    margin: 13px 0 9px; font-style: italic;
+  }
+
+  /* Excel-style preview */
+  .xl-label {
+    font-size: 10.5px; color: #4C626B; text-align: center; margin: 4px 0 8px;
+  }
+  .xlbox {
+    border-radius: 9px; overflow: hidden; box-shadow: 0 1px 5px rgba(8,62,80,0.1);
+    border: 1px solid #DCE4E9; background: #fff;
+  }
+  .xl-toolbar {
+    background: #217346; color: #fff; font-size: 11px; font-weight: 700;
+    padding: 6px 10px;
+  }
+  .xl-meta {
+    background: #F6F8F9; font-size: 10px; color: #4C626B;
+    font-family: Consolas, 'Courier New', monospace;
+    padding: 3px 10px; border-bottom: 1px solid #DCE4E9;
+  }
+  table.xl { width: 100%; border-collapse: collapse; font-size: 11px; background: #fff; }
+  table.xl th {
+    background: #EAEEF0; color: #40484C; font-weight: 700; text-align: left;
+    padding: 5px 10px; border: 1px solid #DCE4E9;
+  }
+  table.xl td {
+    padding: 5px 10px; border: 1px solid #E4E9EB; color: #191C1E;
+    font-family: Consolas, 'Courier New', monospace; font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
+  }
+  table.xl tr:nth-child(even) td { background: #F6F8F9; }
+  table.xl td.rownum, table.xl th.rownum {
+    background: #EAEEF0; color: #70787D; text-align: center; font-family: inherit;
+    width: 22px;
+  }
+
+  .foot {
+    margin-top: 20px; font-size: 11px; color: #4C626B; text-align: center; max-width: 760px; line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+
+<div class="wm">VitalWork</div>
+<svg class="ecg" viewBox="0 0 950 70" height="70" preserveAspectRatio="none"><polyline points="0,40 304,40 342,40 370,12 399,66 427,26 446,40 950,40" fill="none" stroke="#0E5871" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+
+<div class="head-text">
+  <div class="eyebrow">VitalWork · Technical Documentation</div>
+  <h1>Session Export Schema — JSON &amp; CSV</h1>
+</div>
+<p class="subtitle">When a session ends, the app automatically uploads it to the VitalWork server. Saving <b>JSON</b>/<b>CSV</b> files locally on the device <br> is a separate, optional step the operator can trigger for a spreadsheet-friendly copy or an offline backup <br> — same data, same shape shown below either way.</p>
+
+<div class="legend">
+  <div class="lchip"><span class="ld" style="background:#CFE6F2;border:1.5px solid #0E5871;"></span>session data</div>
+  <div class="lchip"><span class="ld" style="background:#E3F1E4;border:1.5px solid #2E7D32;"></span>participant data</div>
+  <div class="lchip"><span class="ld" style="background:#FFF4DE;border:1.5px solid #B26A00;"></span>scenario data</div>
+  <div class="lchip"><span class="ld" style="background:#B5D4E0;border:1.5px solid #083E50;"></span>sample lists</div>
+  <div class="lchip"><span class="fex">example value</span></div>
+</div>
+<p class="subnote">Example values below are illustrative (session codes, timestamps and counts are not from a real recording).</p>
+
+<div class="cols">
+
+  <!-- ============ JSON ============ -->
+  <div class="panel json">
+    <div class="panel-title">JSON — the full session</div>
+    <div class="panel-sub">{sessionCode}_export.json · used for upload</div>
+
+    <div class="card bd-session">
+      <div class="card-head hd-session">Session export</div>
+      <div class="card-body">
+        <div class="fld"><span class="fname">version</span><span class="fdesc">export schema version</span><span class="fex-wrap"><span class="fex">"2.2.0"</span></span></div>
+        <div class="fld"><span class="fname">exportedAt</span><span class="fdesc">when this file was created (UTC)</span><span class="fex-wrap"><span class="fex">2026-06-24T08:20:00Z</span></span></div>
+        <div class="fld"><span class="fname">participant</span><span class="fdesc">who took part → below</span><span class="fex-wrap"><span class="fex">A-007-260624-063337</span></span></div>
+        <div class="fld"><span class="fname">session</span><span class="fdesc">the session itself → below</span><span class="fex-wrap"><span class="fex">VW-A-260624-063346</span></span></div>
+        <div class="fld"><span class="fname">scenarios</span><span class="fdesc">every biofeedback scenario run → below</span><span class="fex-wrap"><span class="fex">5 scenarios</span></span></div>
+      </div>
+    </div>
+
+    <div class="down"></div>
+
+    <div class="card bd-participant">
+      <div class="card-head hd-participant">Participant</div>
+      <div class="card-body">
+        <div class="fld"><span class="fname">participantCode</span><span class="fdesc">anonymous ID</span><span class="fex-wrap"><span class="fex">A-007-260624-063337</span></span></div>
+        <div class="fld"><span class="fname">age</span><span class="fdesc">self-reported, optional</span><span class="fex-wrap"><span class="fex">32</span></span></div>
+        <div class="fld"><span class="fname">gender</span><span class="fdesc">self-reported, optional</span><span class="fex-wrap"><span class="fex">"F"</span></span></div>
+      </div>
+    </div>
+
+    <div class="down"></div>
+
+    <div class="card bd-session">
+      <div class="card-head hd-session">Session</div>
+      <div class="card-body">
+        <div class="fld"><span class="fname">sessionCode</span><span class="fdesc">session ID</span><span class="fex-wrap"><span class="fex">VW-A-260624-063346</span></span></div>
+        <div class="fld"><span class="fname">startedAt</span><span class="fdesc">session start (UTC)</span><span class="fex-wrap"><span class="fex">2026-06-24T06:33:46Z</span></span></div>
+        <div class="fld"><span class="fname">endedAt</span><span class="fdesc">session end (UTC)</span><span class="fex-wrap"><span class="fex">2026-06-24T08:18:31Z</span></span></div>
+        <div class="fld"><span class="fname">status</span><span class="fdesc">completed, or already uploaded</span><span class="fex-wrap"><span class="fex">"UPLOADED"</span></span></div>
+        <div class="fld"><span class="fname">statistics</span><span class="fdesc">how many readings, per sensor →</span></div>
+        <div class="nest">
+          <div class="fld"><span class="fname">scenarioCount</span><span class="fdesc">scenarios recorded</span><span class="fex-wrap"><span class="fex">5</span></span></div>
+          <div class="fld"><span class="fname">hrSampleCount</span><span class="fdesc">heart rate — eSense Pulse (chest)</span><span class="fex-wrap"><span class="fex">25834</span></span></div>
+          <div class="fld"><span class="fname">respirationSampleCount</span><span class="fdesc">respiration amplitude — eSense (audio jack)</span><span class="fex-wrap"><span class="fex">27000</span></span></div>
+          <div class="fld"><span class="fname">rrIntervalSampleCount</span><span class="fdesc">R-R intervals — eSense Pulse (chest)</span><span class="fex-wrap"><span class="fex">7475</span></span></div>
+          <div class="fld"><span class="fname">edaSampleCount</span><span class="fdesc">skin conductance — Galaxy Watch</span><span class="fex-wrap"><span class="fex">5364</span></span></div>
+          <div class="fld"><span class="fname">watchHrSampleCount</span><span class="fdesc">heart rate — Galaxy Watch</span><span class="fex-wrap"><span class="fex">5117</span></span></div>
+          <div class="fld"><span class="fname">watchIbiSampleCount</span><span class="fdesc">inter-beat intervals — Galaxy Watch</span><span class="fex-wrap"><span class="fex">1214</span></span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="down"></div>
+
+    <div class="card bd-scenario">
+      <div class="card-head hd-scenario">Each scenario (one of many, in "scenarios")</div>
+      <div class="card-body">
+        <div class="fld"><span class="fname">scenarioCode</span><span class="fdesc">which of the five scenarios A–E this run was</span><span class="fex-wrap"><span class="fex">"COGNITIVE_LOAD" (= B)</span></span></div>
+        <div class="fld"><span class="fname">startedAt</span><span class="fdesc">recording start (UTC)</span><span class="fex-wrap"><span class="fex">2026-06-24T06:50:38Z</span></span></div>
+        <div class="fld"><span class="fname">endedAt</span><span class="fdesc">recording end (UTC)</span><span class="fex-wrap"><span class="fex">2026-06-24T07:10:38Z</span></span></div>
+        <div class="fld"><span class="fname">gaps</span><span class="fdesc">signal dropouts in HR / RR / respiration, if any</span><span class="fex-wrap"><span class="fex">null (none this run)</span></span></div>
+        <div class="fld"><span class="fname">respirationIssues</span><span class="fdesc">respiration stretches recorded but unusable — strap slipped (SIGNAL_LOST) or not tracking breathing (NO_BREATHING)</span><span class="fex-wrap"><span class="fex">null (none this run)</span></span></div>
+        <div class="fld"><span class="fname">samples</span><span class="fdesc">the sensor readings → below</span><span class="fex-wrap"><span class="fex">345 samples</span></span></div>
+      </div>
+    </div>
+
+    <div class="down"></div>
+
+    <div class="card bd-samples">
+      <div class="card-head hd-samples">Each sample (one of many, in "samples")</div>
+      <div class="card-body">
+        <div class="fld"><span class="fname">timestampMs</span><span class="fdesc">exact moment measured (NTP-corrected)</span><span class="fex-wrap"><span class="fex">1782283839046</span></span></div>
+        <div class="fld"><span class="fname">elapsedMs</span><span class="fdesc">ms since the scenario began</span><span class="fex-wrap"><span class="fex">279</span></span></div>
+        <div class="fld"><span class="fname">sensorType</span><span class="fdesc">which sensor this reading is from (snake_case, same as CSV)</span><span class="fex-wrap"><span class="fex">"watch_hr"</span></span></div>
+        <div class="fld"><span class="fname">value</span><span class="fdesc">the reading itself — unit depends on the sensor (BPM, ms, RA, µS)</span><span class="fex-wrap"><span class="fex">82.0 (BPM)</span></span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ CSV ============ -->
+  <div class="panel">
+    <div class="panel-title">CSV — one scenario recording at a time</div>
+    <div class="panel-sub">{sessionCode}_{NN}_{scenarioCode}.csv · opens in Excel</div>
+
+    <div class="card bd-scenario">
+      <div class="card-head hd-scenario">Top of the file — comment lines</div>
+      <div class="card-body">
+        <div class="fld"><span class="fname"># session_code</span><span class="fdesc">same facts as JSON, above</span></div>
+        <div class="fld"><span class="fname"># scenario_code</span><span class="fdesc">e.g. COGNITIVE_LOAD</span></div>
+        <div class="fld"><span class="fname"># start_time / end_time</span><span class="fdesc">ISO timestamps</span></div>
+        <div class="fld"><span class="fname"># *_samples</span><span class="fdesc">per-sensor counts (only if &gt; 0)</span></div>
+        <div class="fld"><span class="fname"># *_gaps</span><span class="fdesc">gap count + total ms (only if any)</span></div>
+        <div class="fld"><span class="fname"># respiration_signal_lost / _no_breathing</span><span class="fdesc">respiration quality issues: count, total ms + per-event positions (only if any)</span></div>
+      </div>
+    </div>
+
+    <div class="down"></div>
+
+    <div class="card bd-samples">
+      <div class="card-head hd-samples">Rest of the file — one row per sample</div>
+      <div class="card-body">
+        <div class="fld"><span class="fname">columns</span><span class="fdesc">timestamp_ms, elapsed_ms, sensor_type, value</span><span class="fex-wrap"><span class="fex">4 columns</span></span></div>
+      </div>
+    </div>
+
+    <div class="bridge">same scenario + sample data as the JSON — just flattened into a table, one file per scenario recording</div>
+
+    <div class="xl-label">what it looks like opened in Excel:</div>
+    <div class="xlbox">
+      <div class="xl-toolbar">📊 VW-A-260624-063346_02_COGNITIVE_LOAD.csv</div>
+      <div class="xl-meta"># session_code,VW-A-260624-063346&nbsp;&nbsp;·&nbsp;&nbsp;# scenario_code,COGNITIVE_LOAD</div>
+      <table class="xl">
+        <tr><th class="rownum">#</th><th>timestamp_ms</th><th>elapsed_ms</th><th>sensor_type</th><th>value</th></tr>
+        <tr><td class="rownum">1</td><td>…283839046</td><td>279</td><td>watch_hr</td><td>82.0</td></tr>
+        <tr><td class="rownum">2</td><td>…283839237</td><td>470</td><td>watch_eda</td><td>21.434</td></tr>
+        <tr><td class="rownum">3</td><td>…283840047</td><td>1280</td><td>esense_heart_rate</td><td>78.0</td></tr>
+        <tr><td class="rownum">⋮</td><td colspan="4" style="text-align:center;color:#70787D;font-style:italic;">⋮ &nbsp;more sample rows continue below&nbsp; ⋮</td></tr>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<div class="foot">
+  The upload sends this same data to the VitalWork server in one piece, matched by session code — re-uploading the same session simply replaces it there.<br>
+  Signal gaps and respiration quality issues aren't stored anywhere directly — they're calculated automatically whenever the data is exported.
+</div>
+
+</body>
+</html>

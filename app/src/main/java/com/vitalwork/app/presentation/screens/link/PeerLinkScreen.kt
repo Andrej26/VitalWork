@@ -17,8 +17,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LinkOff
-import androidx.compose.material.icons.filled.ScreenShare
-import androidx.compose.material.icons.filled.StopScreenShare
+import androidx.compose.material.icons.automirrored.filled.ScreenShare
+import androidx.compose.material.icons.automirrored.filled.StopScreenShare
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -58,6 +58,11 @@ import org.webrtc.EglBase
 import org.webrtc.RendererCommon
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
+import com.vitalwork.app.presentation.components.WatermarkedBackground
+import androidx.compose.material.icons.outlined.Warning
+import com.vitalwork.app.presentation.components.AlertSeverity
+import com.vitalwork.app.presentation.components.AlertCard
+import com.vitalwork.app.presentation.components.OutlineCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -119,59 +124,73 @@ fun PeerLinkScreen(
             )
         }
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            if (!batteryExempt) {
-                BatteryReminderCard(
-                    onAllow = { BatteryOptimizationHelper.openExemptionSettings(context) }
-                )
-            }
+        WatermarkedBackground {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                if (!batteryExempt) {
+                    BatteryReminderCard(
+                        onAllow = { BatteryOptimizationHelper.openExemptionSettings(context) }
+                    )
+                }
 
-            StatusCard(role = role, connectionState = connectionState, peerLabel = peerLabel)
+                StatusCard(role = role, connectionState = connectionState, peerLabel = peerLabel)
 
-            if (role == PeerRole.SERVER) {
-                ScreenMonitorCard(
-                    // While viewing, let the card grow to fill the screen so the mirror is as large
-                    // as possible; collapse to natural height when there's nothing to show.
-                    modifier = if (remoteVideoTrack != null) Modifier.weight(1f) else Modifier,
-                    connected = connectionState == ConnectionState.CONNECTED,
-                    shareState = shareState,
-                    remoteVideoTrack = remoteVideoTrack,
-                    eglBase = viewModel.eglBase,
-                    onView = viewModel::requestScreen,
-                    onStop = viewModel::stopShare
-                )
-            } else if (shareState == ShareState.SHARING) {
-                SharingCard(onStop = viewModel::stopShare)
-            }
+                if (role == PeerRole.SERVER) {
+                    ScreenMonitorCard(
+                        // While viewing, let the card grow to fill the screen so the mirror is as large
+                        // as possible; collapse to natural height when there's nothing to show.
+                        modifier = if (remoteVideoTrack != null) Modifier.weight(1f) else Modifier,
+                        connected = connectionState == ConnectionState.CONNECTED,
+                        shareState = shareState,
+                        remoteVideoTrack = remoteVideoTrack,
+                        eglBase = viewModel.eglBase,
+                        onView = viewModel::requestScreen,
+                        onStop = viewModel::stopShare
+                    )
+                } else if (shareState == ShareState.SHARING) {
+                    SharingCard(onStop = viewModel::stopShare)
+                }
 
-            if (role == PeerRole.CLIENT && connectionState != ConnectionState.CONNECTED) {
-                DiscoveredDevicesCard(devices = devices, onSelect = viewModel::onDeviceSelected)
-            }
+                if (role == PeerRole.CLIENT && connectionState != ConnectionState.CONNECTED) {
+                    DiscoveredDevicesCard(devices = devices, onSelect = viewModel::onDeviceSelected)
+                }
 
-            if (role == PeerRole.SERVER) {
-                // Server is started manually: Connect to host, Disconnect to stop.
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Button(
-                        onClick = viewModel::connect,
-                        enabled = !isActive,
-                        modifier = Modifier.weight(1f)
+                if (role == PeerRole.SERVER) {
+                    // Server is started manually: Connect to host, Disconnect to stop.
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(Icons.Default.Link, contentDescription = null)
-                        Text("  Connect")
+                        Button(
+                            onClick = viewModel::connect,
+                            enabled = !isActive,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Link, contentDescription = null)
+                            Text("  Connect")
+                        }
+                        OutlinedButton(
+                            onClick = viewModel::disconnect,
+                            enabled = isActive,
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Icon(Icons.Default.LinkOff, contentDescription = null)
+                            Text("  Disconnect")
+                        }
                     }
+                } else if (isActive) {
+                    // Client connects by tapping a discovered device; only needs Disconnect.
                     OutlinedButton(
                         onClick = viewModel::disconnect,
-                        enabled = isActive,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = MaterialTheme.colorScheme.error
                         )
@@ -180,18 +199,6 @@ fun PeerLinkScreen(
                         Text("  Disconnect")
                     }
                 }
-            } else if (isActive) {
-                // Client connects by tapping a discovered device; only needs Disconnect.
-                OutlinedButton(
-                    onClick = viewModel::disconnect,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    )
-                ) {
-                    Icon(Icons.Default.LinkOff, contentDescription = null)
-                    Text("  Disconnect")
-                }
             }
         }
     }
@@ -199,28 +206,15 @@ fun PeerLinkScreen(
 
 @Composable
 private fun BatteryReminderCard(onAllow: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer
-        )
-    ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                text = "Allow background",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onErrorContainer
-            )
-            Text(
-                text = "This device may kill the connection when the screen is off. Exempt VitalWork " +
-                    "from battery optimization to keep the link alive in the background.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onErrorContainer
-            )
-            Button(onClick = onAllow) { Text("Allow") }
-        }
-    }
+    AlertCard(
+        title = "Allow background",
+        description = "This device may kill the connection when the screen is off. Exempt VitalWork " +
+            "from battery optimization to keep the link alive in the background.",
+        icon = Icons.Outlined.Warning,
+        severity = AlertSeverity.BLOCKING,
+        actionLabel = "Allow",
+        onAction = onAllow
+    )
 }
 
 @Composable
@@ -233,7 +227,7 @@ private fun ScreenMonitorCard(
     onStop: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(modifier = modifier.fillMaxWidth()) {
+    OutlineCard(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 text = "Screen monitor",
@@ -280,7 +274,7 @@ private fun ScreenMonitorCard(
                     ),
                     elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
                 ) {
-                    Icon(Icons.Default.ScreenShare, contentDescription = null)
+                    Icon(Icons.AutoMirrored.Filled.ScreenShare, contentDescription = null)
                     Text(
                         text = "  View screen",
                         style = MaterialTheme.typography.titleMedium,
@@ -295,7 +289,7 @@ private fun ScreenMonitorCard(
                         contentColor = MaterialTheme.colorScheme.error
                     )
                 ) {
-                    Icon(Icons.Default.StopScreenShare, contentDescription = null)
+                    Icon(Icons.AutoMirrored.Filled.StopScreenShare, contentDescription = null)
                     Text("  Stop viewing")
                 }
             }
@@ -308,7 +302,7 @@ private fun SharingCard(onStop: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+            containerColor = MaterialTheme.colorScheme.primaryContainer
         )
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -316,13 +310,13 @@ private fun SharingCard(onStop: () -> Unit) {
                 text = "Sharing your screen",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onTertiaryContainer
+                color = MaterialTheme.colorScheme.onPrimaryContainer
             )
             Text(
                 text = "The screen stays on (dimmed) while sharing, so the operator keeps seeing it " +
                     "even when it looks off.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onTertiaryContainer
+                color = MaterialTheme.colorScheme.onPrimaryContainer
             )
             // Dimming the backlight to near-black needs the "Modify system settings" special access.
             // Without it the screen still stays on, just at normal brightness.
@@ -332,7 +326,7 @@ private fun SharingCard(onStop: () -> Unit) {
                     text = "To dim this screen to near-black while sharing, allow \"Modify system " +
                         "settings\".",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
                 OutlinedButton(
                     onClick = { ScreenDimController.openWriteSettings(context) },
@@ -348,7 +342,7 @@ private fun SharingCard(onStop: () -> Unit) {
                     contentColor = MaterialTheme.colorScheme.error
                 )
             ) {
-                Icon(Icons.Default.StopScreenShare, contentDescription = null)
+                Icon(Icons.AutoMirrored.Filled.StopScreenShare, contentDescription = null)
                 Text("  Stop sharing")
             }
         }
@@ -397,12 +391,7 @@ private fun StatusCard(
     connectionState: ConnectionState,
     peerLabel: String?
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
+    OutlineCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             // Gray (disconnected) / green (connected) dot — same indicator the sensors use.
             ConnectionStatusBadge(state = connectionState)
@@ -425,7 +414,7 @@ private fun DiscoveredDevicesCard(
     devices: List<PeerDevice>,
     onSelect: (PeerDevice) -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    OutlineCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 text = "Discovered peers",

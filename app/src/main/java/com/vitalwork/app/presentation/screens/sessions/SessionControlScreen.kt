@@ -94,7 +94,7 @@ import com.vitalwork.app.presentation.components.onPermissionDenied
 import com.vitalwork.app.service.BatteryOptimizationHelper
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
-import com.vitalwork.app.data.sensor.audio.LowSignalWarning
+import com.vitalwork.app.data.sensor.audio.RespirationWarning
 import android.Manifest
 import android.app.Activity
 import android.content.Intent
@@ -108,7 +108,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.vitalwork.app.presentation.components.BleDialogState
 import com.vitalwork.app.presentation.components.DialogAction
-import com.vitalwork.app.presentation.components.LowSignalWarningBanner
+import com.vitalwork.app.presentation.components.RespirationWarningBanner
 import com.vitalwork.app.presentation.screens.sensors.components.BleDeviceItem
 import com.vitalwork.app.presentation.screens.sensors.toConnectionState
 import com.vitalwork.app.presentation.screens.sessions.components.DeviceSensorGroup
@@ -116,6 +116,11 @@ import com.vitalwork.app.presentation.screens.sessions.components.EndSessionWatc
 import com.vitalwork.app.presentation.screens.sessions.components.LiveSensorCard
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.vitalwork.app.ui.theme.WarningAmber
+import com.vitalwork.app.ui.theme.ErrorRed
+import com.vitalwork.app.presentation.components.WatermarkedBackground
+import com.vitalwork.app.presentation.components.AlertSeverity
+import com.vitalwork.app.presentation.components.AlertCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -149,6 +154,10 @@ fun SessionControlScreen(
 
     // Recording state
     val recordingUiState by viewModel.recordingUiState.collectAsState()
+
+    // Setup-mode gate: at least one sensor must be connected before advancing to the scenario hub,
+    // otherwise a scenario run would start a countdown but silently record nothing.
+    val anySensorConnected by viewModel.anySensorConnected.collectAsState()
 
     // Session state
     val session by viewModel.session.collectAsState()
@@ -189,8 +198,8 @@ fun SessionControlScreen(
         viewModel.setBlePermissionsGranted(permissions.values.all { it })
     }
 
-    // Low signal warning
-    val respirationLowSignalWarning by viewModel.respirationLowSignalWarning.collectAsState()
+    // Respiration warning (signal lost / no breathing — mutually exclusive)
+    val respirationWarning by viewModel.respirationWarning.collectAsState()
 
     // Respiration disconnect reason (for error dialog)
     val respirationDisconnectReason by viewModel.respirationDisconnectReason.collectAsState()
@@ -404,7 +413,7 @@ fun SessionControlScreen(
             .then(
                 if (isRecording) Modifier.border(
                     width = 4.dp,
-                    color = Color(0xFFF44336).copy(alpha = borderAlpha)
+                    color = ErrorRed.copy(alpha = borderAlpha)
                 ) else Modifier
             )
     ) {
@@ -444,7 +453,7 @@ fun SessionControlScreen(
                 },
                 colors = if (isRecording) {
                     TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color(0xFFF44336)
+                        containerColor = ErrorRed
                     )
                 } else {
                     TopAppBarDefaults.topAppBarColors(
@@ -454,215 +463,240 @@ fun SessionControlScreen(
             )
         }
     ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(12.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // Readiness backup banner (only shows when a prerequisite is missing)
-            ReadinessWarningCard(
-                missing = missingPrerequisites,
-                onFix = onReadinessFix
-            )
-
-            // Low signal warning banner
-            if (respirationLowSignalWarning != LowSignalWarning.NONE) {
-                LowSignalWarningBanner(warningLevel = respirationLowSignalWarning)
-            }
-
-            // Sensor-lost-during-recording warning banner
-            if (recordingUiState.isRecording) {
-                val lostSensors = buildList {
-                    if (recordingUiState.heartRateWasEnabled && !recordingUiState.isHeartRateConnected) add("eSense Pulse")
-                    if (recordingUiState.respirationWasEnabled && !recordingUiState.isRespirationConnected) add("eSense Respiration")
-                }
-                if (lostSensors.isNotEmpty()) {
-                    SensorLostDuringRecordingBanner(sensorNames = lostSensors)
-                }
-            }
-
-            // Galaxy Watch low-battery warning — surfaced before/while a session runs so the operator
-            // doesn't start a long session on a dying watch (and risk losing the End-Session flush).
-            if (watchBatteryAlert != WatchBatteryAlert.NONE && watchBatteryLevel != null) {
-                WatchBatteryWarningBanner(
-                    level = watchBatteryLevel!!,
-                    critical = watchBatteryAlert == WatchBatteryAlert.CRITICAL
-                )
-            }
-
-            // Galaxy Watch link-lost warning — the watch buffers EDA locally, so data isn't lost on a
-            // brief drop; warn so the operator restores Bluetooth (don't pause the session).
-            if (watchBatteryLevel != null && watchConnectionState != ConnectionState.CONNECTED) {
-                WatchLinkLostBanner()
-            }
-
-            // Hero auto-return countdown: a scenario run's whole purpose is to hand back to the
-            // scenario-selection hub after the scenario's full duration (A/E 10 min, B/C 20 min,
-            // D 30 min), so it's the focal point at the top. When the countdown ends we stop+finalize
-            // the recording first, then return to the hub. Hidden in setup mode, which is just a
-            // sensor-connection gate before any scenario is picked.
-            if (!setupMode) {
-                ReturnCountdownHero(
-                    seconds = viewModel.countdownSeconds,
-                    startElapsedMs = recordingUiState.recordingStartElapsedMs,
-                    onFinished = { viewModel.finishScenario(onCountdownFinished) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp)
-                )
-            }
-
-            // Mindfield eSense device group
-            val eSenseConnectionState = when {
-                pulseSensorState == ConnectionState.CONNECTED ||
-                        respirationConnectionState == ConnectionState.CONNECTED -> ConnectionState.CONNECTED
-                pulseSensorState == ConnectionState.CONNECTING ||
-                        respirationConnectionState == ConnectionState.CONNECTING -> ConnectionState.CONNECTING
-                pulseSensorState == ConnectionState.ERROR ||
-                        respirationConnectionState == ConnectionState.ERROR -> ConnectionState.ERROR
-                else -> ConnectionState.DISCONNECTED
-            }
-            DeviceSensorGroup(
-                deviceName = "Mindfield eSense",
-                connectionState = eSenseConnectionState,
-                footer = if (recordingUiState.isHeartRateConnected || recordingUiState.heartRateWasEnabled) {
-                    {
-                        PulseRrRow(
-                            latestValue = pulseLatestRr,
-                            sampleCount = recordingUiState.esenseRrIntervalSampleCount,
-                            connectionState = pulseSensorState
-                        )
-                    }
-                } else null
+        WatermarkedBackground {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(12.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                LiveSensorCard(
-                    icon = Icons.Default.FavoriteBorder,
-                    label = "Heart Rate",
-                    value = when {
-                        heartRate != null -> heartRate.toString()
-                        pulseSensorState == ConnectionState.CONNECTED -> "..."
-                        else -> "--"
-                    },
-                    unit = "BPM",
-                    connectionState = pulseSensorState,
-                    sampleCount = recordingUiState.heartRateSampleCount,
-                    animate = heartRate != null && heartRate!! > 0,
-                    onClick = { viewModel.onHeartRateCardClick() },
-                    batteryLevel = bleBatteryLevel,
-                    compact = true,
-                    modifier = Modifier.weight(1f)
+                // Readiness backup banner (only shows when a prerequisite is missing)
+                ReadinessWarningCard(
+                    missing = missingPrerequisites,
+                    onFix = onReadinessFix
                 )
-                LiveSensorCard(
-                    icon = Icons.Default.Mic,
-                    label = "Respiration",
-                    value = if (respirationConnectionState == ConnectionState.CONNECTED)
-                        String.format(java.util.Locale.US, "%.1f", respirationRate)
-                    else "--",
-                    unit = "RA",
-                    connectionState = respirationConnectionState,
-                    sampleCount = recordingUiState.respirationSampleCount,
-                    onClick = { viewModel.onRespirationCardClick(context) },
-                    compact = true,
-                    modifier = Modifier.weight(1f)
-                )
-            }
 
-            // Galaxy Watch 8 device group — live HR (BPM) + EDA (µS) cards with an IBI footer. The watch
-            // streams HR/IBI/EDA over the Data Layer; all three are captured/sliced into scenarios on the
-            // tablet. Header label reflects the finer link status so an expected Doze gap reads as
-            // "buffering", not "Disconnected" (consistent with the Sensors → Galaxy Watch screen).
-            // IBI capture pauses while the wearer moves, so its footer value is gated on freshness.
-            val watchConnected = watchConnectionState == ConnectionState.CONNECTED
-            val ibiFresh = watchIbi?.let {
-                System.currentTimeMillis() - it.timestampMs < WATCH_IBI_STALE_MS
-            } == true
-            DeviceSensorGroup(
-                deviceName = "Galaxy Watch 8",
-                connectionState = watchConnectionState,
-                batteryLevel = watchBatteryLevel,
-                statusLabel = watchLinkStatusLabel(watchConnectionState, watchLinkStatus),
-                // The watch needs no pairing (the Wave app manages that) — it only needs the phone's
-                // Bluetooth on for the Data Layer to run over direct BT. So a tap anywhere on the group
-                // enables Bluetooth when it's off, otherwise nudges the operator to start tracking.
-                onClick = {
-                    if (!bluetoothEnabled) {
-                        @Suppress("DEPRECATION")
-                        enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
-                    } else {
-                        scope.launch {
-                            snackbarHostState.showSnackbar(
-                                message = "Bluetooth is on. Make sure the watch's Wave app is " +
-                                    "running and tracking.",
-                                duration = SnackbarDuration.Short
+                // Respiration warning banner — one at a time; SIGNAL_LOST outranks NO_BREATHING
+                if (respirationWarning != RespirationWarning.NONE) {
+                    RespirationWarningBanner(warning = respirationWarning)
+                }
+
+                // Sensor-lost-during-recording warning banner
+                if (recordingUiState.isRecording) {
+                    val lostSensors = buildList {
+                        if (recordingUiState.heartRateWasEnabled && !recordingUiState.isHeartRateConnected) add("eSense Pulse")
+                        if (recordingUiState.respirationWasEnabled && !recordingUiState.isRespirationConnected) add("eSense Respiration")
+                    }
+                    if (lostSensors.isNotEmpty()) {
+                        SensorLostDuringRecordingBanner(sensorNames = lostSensors)
+                    }
+                }
+
+                // Galaxy Watch low-battery warning — surfaced before/while a session runs so the operator
+                // doesn't start a long session on a dying watch (and risk losing the End-Session flush).
+                if (watchBatteryAlert != WatchBatteryAlert.NONE && watchBatteryLevel != null) {
+                    WatchBatteryWarningBanner(
+                        level = watchBatteryLevel!!,
+                        critical = watchBatteryAlert == WatchBatteryAlert.CRITICAL
+                    )
+                }
+
+                // Galaxy Watch link-lost warning — the watch buffers EDA locally, so data isn't lost on a
+                // brief drop; warn so the operator restores Bluetooth (don't pause the session).
+                if (watchBatteryLevel != null && watchConnectionState != ConnectionState.CONNECTED) {
+                    WatchLinkLostBanner()
+                }
+
+                // No-sensor warning during a scenario run: startManualRecording() self-guards on a
+                // connected sensor, so entering a scenario with none leaves the countdown idle and nothing
+                // recording. Tell the operator why (mirrors the setup-screen gate) instead of leaving a
+                // frozen countdown unexplained. Only in a real scenario run (not setup, which has its own
+                // gate), and only while nothing is recording — a mid-recording drop is covered by
+                // SensorLostDuringRecordingBanner above.
+                if (!setupMode && !anySensorConnected && !recordingUiState.isRecording) {
+                    NoSensorConnectedBanner()
+                }
+
+                // Hero auto-return countdown: a scenario run's whole purpose is to hand back to the
+                // scenario-selection hub after the scenario's full duration (A/E 10 min, B/C 20 min,
+                // D 30 min), so it's the focal point at the top. When the countdown ends we stop+finalize
+                // the recording first, then return to the hub. Hidden in setup mode, which is just a
+                // sensor-connection gate before any scenario is picked.
+                if (!setupMode) {
+                    ReturnCountdownHero(
+                        seconds = viewModel.countdownSeconds,
+                        startElapsedMs = recordingUiState.recordingStartElapsedMs,
+                        onFinished = { viewModel.finishScenario(onCountdownFinished) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                    )
+                }
+
+                // Mindfield eSense device group
+                val eSenseConnectionState = when {
+                    pulseSensorState == ConnectionState.CONNECTED ||
+                            respirationConnectionState == ConnectionState.CONNECTED -> ConnectionState.CONNECTED
+                    pulseSensorState == ConnectionState.CONNECTING ||
+                            respirationConnectionState == ConnectionState.CONNECTING -> ConnectionState.CONNECTING
+                    pulseSensorState == ConnectionState.ERROR ||
+                            respirationConnectionState == ConnectionState.ERROR -> ConnectionState.ERROR
+                    else -> ConnectionState.DISCONNECTED
+                }
+                DeviceSensorGroup(
+                    deviceName = "Mindfield eSense",
+                    connectionState = eSenseConnectionState,
+                    footer = if (recordingUiState.isHeartRateConnected || recordingUiState.heartRateWasEnabled) {
+                        {
+                            PulseRrRow(
+                                latestValue = pulseLatestRr,
+                                sampleCount = recordingUiState.esenseRrIntervalSampleCount,
+                                connectionState = pulseSensorState
                             )
                         }
-                    }
-                },
-                clickHint = if (!bluetoothEnabled) "Tap to enable Bluetooth"
-                            else "Tap for connection help",
-                footer = {
-                    PulseRrRow(
-                        label = "IBI",
-                        latestValue = if (watchConnected && ibiFresh) watchIbi?.value?.toInt() else null,
-                        sampleCount = recordingUiState.watchIbiSampleCount,
-                        connectionState = watchConnectionState
-                    )
-                }
-            ) {
-                LiveSensorCard(
-                    icon = Icons.Default.FavoriteBorder,
-                    label = "Heart Rate",
-                    value = when {
-                        watchConnected && watchHeartRate != null -> watchHeartRate.toString()
-                        watchConnected -> "..."
-                        else -> "--"
-                    },
-                    unit = "BPM",
-                    connectionState = watchConnectionState,
-                    sampleCount = recordingUiState.watchHrSampleCount,
-                    animate = watchConnected && (watchHeartRate ?: 0) > 0,
-                    batteryLevel = watchBatteryLevel,
-                    compact = true,
-                    modifier = Modifier.weight(1f)
-                )
-                LiveSensorCard(
-                    icon = Icons.Default.Watch,
-                    label = "EDA",
-                    value = if (watchConnected && watchEda != null)
-                        String.format(java.util.Locale.US, "%.2f", watchEda)
-                    else "--",
-                    unit = "µS",
-                    connectionState = watchConnectionState,
-                    sampleCount = recordingUiState.edaSampleCount,
-                    batteryLevel = watchBatteryLevel,
-                    compact = true,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            // Setup mode is a one-time sensor-connection gate before any scenario is picked: confirm
-            // which sensors are connected, then proceed to the scenario hub. Scenario runs themselves
-            // record fully automatically (start on entry, stop when the countdown ends), so there are
-            // no manual recording controls — the REC badge + red border in the top bar show state.
-            if (setupMode) {
-                Button(
-                    onClick = onProceed,
-                    modifier = Modifier.fillMaxWidth()
+                    } else null
                 ) {
-                    Text("Proceed to scenarios")
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Icon(
-                        imageVector = Icons.Default.SkipNext,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
+                    LiveSensorCard(
+                        icon = Icons.Default.FavoriteBorder,
+                        label = "Heart Rate",
+                        value = when {
+                            heartRate != null -> heartRate.toString()
+                            pulseSensorState == ConnectionState.CONNECTED -> "..."
+                            else -> "--"
+                        },
+                        unit = "BPM",
+                        connectionState = pulseSensorState,
+                        sampleCount = recordingUiState.heartRateSampleCount,
+                        animate = heartRate != null && heartRate!! > 0,
+                        onClick = { viewModel.onHeartRateCardClick() },
+                        batteryLevel = bleBatteryLevel,
+                        compact = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    LiveSensorCard(
+                        icon = Icons.Default.Mic,
+                        label = "Respiration",
+                        value = if (respirationConnectionState == ConnectionState.CONNECTED)
+                            String.format(java.util.Locale.US, "%.1f", respirationRate)
+                        else "--",
+                        unit = "RA",
+                        connectionState = respirationConnectionState,
+                        sampleCount = recordingUiState.respirationSampleCount,
+                        onClick = { viewModel.onRespirationCardClick(context) },
+                        compact = true,
+                        modifier = Modifier.weight(1f)
                     )
                 }
-            }
 
-            Spacer(modifier = Modifier.height(8.dp))
+                // Galaxy Watch 8 device group — live HR (BPM) + EDA (µS) cards with an IBI footer. The watch
+                // streams HR/IBI/EDA over the Data Layer; all three are captured/sliced into scenarios on the
+                // tablet. Header label reflects the finer link status so an expected Doze gap reads as
+                // "buffering", not "Disconnected" (consistent with the Sensors → Galaxy Watch screen).
+                // IBI capture pauses while the wearer moves, so its footer value is gated on freshness.
+                val watchConnected = watchConnectionState == ConnectionState.CONNECTED
+                val ibiFresh = watchIbi?.let {
+                    System.currentTimeMillis() - it.timestampMs < WATCH_IBI_STALE_MS
+                } == true
+                DeviceSensorGroup(
+                    deviceName = "Galaxy Watch 8",
+                    connectionState = watchConnectionState,
+                    batteryLevel = watchBatteryLevel,
+                    statusLabel = watchLinkStatusLabel(watchConnectionState, watchLinkStatus),
+                    // The watch needs no pairing (the Wave app manages that) — it only needs the phone's
+                    // Bluetooth on for the Data Layer to run over direct BT. So a tap anywhere on the group
+                    // enables Bluetooth when it's off, otherwise nudges the operator to start tracking.
+                    onClick = {
+                        if (!bluetoothEnabled) {
+                            @Suppress("DEPRECATION")
+                            enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+                        } else {
+                            scope.launch {
+                                snackbarHostState.showSnackbar(
+                                    message = "Bluetooth is on — nothing more to do on this device. " +
+                                        "Open the Wave app on the watch and tap Start; it connects here " +
+                                        "automatically.",
+                                    duration = SnackbarDuration.Long
+                                )
+                            }
+                        }
+                    },
+                    clickHint = if (!bluetoothEnabled) "Tap to enable Bluetooth"
+                                else "Tap for connection help",
+                    footer = {
+                        PulseRrRow(
+                            label = "IBI",
+                            latestValue = if (watchConnected && ibiFresh) watchIbi?.value?.toInt() else null,
+                            sampleCount = recordingUiState.watchIbiSampleCount,
+                            connectionState = watchConnectionState
+                        )
+                    }
+                ) {
+                    LiveSensorCard(
+                        icon = Icons.Default.FavoriteBorder,
+                        label = "Heart Rate",
+                        value = when {
+                            watchConnected && watchHeartRate != null -> watchHeartRate.toString()
+                            watchConnected -> "..."
+                            else -> "--"
+                        },
+                        unit = "BPM",
+                        connectionState = watchConnectionState,
+                        sampleCount = recordingUiState.watchHrSampleCount,
+                        animate = watchConnected && (watchHeartRate ?: 0) > 0,
+                        batteryLevel = watchBatteryLevel,
+                        compact = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    LiveSensorCard(
+                        icon = Icons.Default.Watch,
+                        label = "EDA",
+                        value = if (watchConnected && watchEda != null)
+                            String.format(java.util.Locale.US, "%.2f", watchEda)
+                        else "--",
+                        unit = "µS",
+                        connectionState = watchConnectionState,
+                        sampleCount = recordingUiState.edaSampleCount,
+                        batteryLevel = watchBatteryLevel,
+                        compact = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                // Setup mode is a one-time sensor-connection gate before any scenario is picked: confirm
+                // which sensors are connected, then proceed to the scenario hub. Scenario runs themselves
+                // record fully automatically (start on entry, stop when the countdown ends), so there are
+                // no manual recording controls — the REC badge + red border in the top bar show state.
+                if (setupMode) {
+                    Button(
+                        onClick = onProceed,
+                        enabled = anySensorConnected,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Proceed to scenarios")
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(
+                            imageVector = Icons.Default.SkipNext,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    if (!anySensorConnected) {
+                        Text(
+                            text = "Connect at least one sensor to continue.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 6.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+            }
         }
     }
     // While a scenario is recording (the auto-return countdown), make the phone safe to pocket:
@@ -841,7 +875,7 @@ private fun RecordingBadge(
                     color = if (recordingState == DataRecordingState.RECORDING)
                         Color.White
                     else
-                        Color(0xFFFFA000),
+                        WarningAmber,
                     shape = CircleShape
                 )
         )
@@ -1151,116 +1185,54 @@ private fun respirationErrorMessage(reason: String): String = when {
 
 @Composable
 private fun SensorLostDuringRecordingBanner(sensorNames: List<String>) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer
-        )
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Warning,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onErrorContainer,
-                modifier = Modifier.size(24.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Column {
-                Text(
-                    text = "${sensorNames.joinToString(" & ")} disconnected",
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Recording continues — reconnect to resume data capture",
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-        }
-    }
+    AlertCard(
+        title = "${sensorNames.joinToString(" & ")} disconnected",
+        description = "Recording continues — reconnect to resume data capture",
+        icon = Icons.Outlined.Warning,
+        severity = AlertSeverity.BLOCKING,
+        pulse = true
+    )
+}
+
+/**
+ * Shown on a scenario run when no sensor is connected: the recording + auto-return countdown are
+ * both gated on a connected sensor ([SessionControlViewModel.startManualRecording]), so without one
+ * nothing starts. Explains the otherwise-silent idle state so the operator knows to connect a sensor.
+ */
+@Composable
+private fun NoSensorConnectedBanner() {
+    AlertCard(
+        title = "No sensor connected",
+        description = "Recording and the countdown won't start until at least one sensor is " +
+            "connected. Connect one above to begin this scenario.",
+        icon = Icons.Default.Sensors,
+        severity = AlertSeverity.BLOCKING
+    )
 }
 
 @Composable
 private fun WatchLinkLostBanner() {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer
-        )
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.Watch,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onErrorContainer,
-                modifier = Modifier.size(24.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Column {
-                Text(
-                    text = "Galaxy Watch link lost",
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Sensor data keeps buffering on the watch — turn its Bluetooth back on to recover it",
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-        }
-    }
+    AlertCard(
+        title = "Galaxy Watch link lost",
+        description = "Sensor data keeps buffering on the watch — turn its Bluetooth back on to recover it",
+        icon = Icons.Default.Watch,
+        severity = AlertSeverity.BLOCKING
+    )
 }
 
 @Composable
 private fun WatchBatteryWarningBanner(level: Int, critical: Boolean) {
-    val container = if (critical) MaterialTheme.colorScheme.errorContainer
-                    else MaterialTheme.colorScheme.tertiaryContainer
-    val onContainer = if (critical) MaterialTheme.colorScheme.onErrorContainer
-                      else MaterialTheme.colorScheme.onTertiaryContainer
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = container)
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Warning,
-                contentDescription = null,
-                tint = onContainer,
-                modifier = Modifier.size(24.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Column {
-                Text(
-                    text = if (critical) "Galaxy Watch battery critical ($level%)"
-                           else "Galaxy Watch battery low ($level%)",
-                    color = onContainer,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = if (critical)
-                        "At this level the watch can stop recording sensor data while the screen is off — that data will be lost. Charge it before continuing."
-                    else
-                        "Charge it before a long session — if it drops further the watch can stop recording during sleep and lose that data.",
-                    color = onContainer,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-        }
-    }
+    AlertCard(
+        title = if (critical) "Galaxy Watch battery critical ($level%)"
+            else "Galaxy Watch battery low ($level%)",
+        description = if (critical)
+            "At this level the watch can stop recording sensor data while the screen is off — that data will be lost. Charge it before continuing."
+        else
+            "Charge it before a long session — if it drops further the watch can stop recording during sleep and lose that data.",
+        icon = Icons.Outlined.Warning,
+        severity = if (critical) AlertSeverity.BLOCKING else AlertSeverity.ADVISORY,
+        pulse = critical
+    )
 }
 
 @Composable

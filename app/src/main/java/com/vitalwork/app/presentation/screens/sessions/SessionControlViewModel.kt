@@ -13,7 +13,7 @@ import com.vitalwork.app.data.recording.WatchReconciliationReport
 import com.vitalwork.app.data.system.LocationChecker
 import com.vitalwork.app.data.recording.model.DataRecordingState
 import com.vitalwork.app.data.repository.ConnectionRepository
-import com.vitalwork.app.data.sensor.audio.LowSignalWarning
+import com.vitalwork.app.data.sensor.audio.RespirationWarning
 import com.vitalwork.app.data.repository.ScenarioRepository
 import com.vitalwork.app.data.repository.SessionRepository
 import com.vitalwork.app.data.sensor.DeviceState
@@ -159,12 +159,12 @@ class SessionControlViewModel @Inject constructor(
     /** True for 5 s after each BLE (re)connection while first readings may be inaccurate */
     val isHeartRateStabilizing: StateFlow<Boolean> = connectionRepository.isHeartRateWarmingUp
 
-    /** Live respiration rate value */
+    /** Live raw Respiration Amplitude (RA, dimensionless) — not a breaths-per-minute rate */
     val respirationRate: StateFlow<Float> = connectionRepository.respirationRate
 
-    /** Low signal warning from respiration sensor */
-    val respirationLowSignalWarning: StateFlow<LowSignalWarning> =
-        connectionRepository.respirationLowSignalWarning
+    /** Respiration warning shown during recording (signal lost / no breathing) */
+    val respirationWarning: StateFlow<RespirationWarning> =
+        connectionRepository.respirationWarning
 
     /** Last disconnect/error reason from respiration sensor */
     val respirationDisconnectReason: StateFlow<String?> =
@@ -407,6 +407,24 @@ class SessionControlViewModel @Inject constructor(
         val watchConnected = connectionRepository.watchConnectionState.value == ConnectionState.CONNECTED
         return bleConnected || respConnected || watchConnected
     }
+
+    /**
+     * Reactive mirror of [anySensorConnected] for the setup-screen gate: true when at least one sensor
+     * (eSense Pulse / eSense Respiration / Galaxy Watch) is connected. Drives the "Proceed to scenarios"
+     * button's enabled state so the operator can't advance into a scenario that would silently record
+     * nothing (a scenario run's [startManualRecording] self-guards on the same condition anyway, but
+     * gating here surfaces the reason instead of leaving a countdown running with no data).
+     */
+    val anySensorConnected: StateFlow<Boolean> = combine(
+        connectionRepository.bleConnectionState,
+        connectionRepository.respirationState,
+        connectionRepository.watchConnectionState,
+    ) { bleState, respState, watchState ->
+        val bleConnected = bleState == ConnectionState.CONNECTED
+        val respConnected = respState == DeviceState.Streaming || respState == DeviceState.Connected
+        val watchConnected = watchState == ConnectionState.CONNECTED
+        bleConnected || respConnected || watchConnected
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     /**
      * Start a scenario + sensor recording from the phone. Creates a scenario row for a fixed

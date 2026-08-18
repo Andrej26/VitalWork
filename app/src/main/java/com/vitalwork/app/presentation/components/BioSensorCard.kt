@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.vitalwork.app.data.sensor.DeviceState
+import com.vitalwork.app.ui.theme.SuccessGreen
 
 @Composable
 fun BioSensorCard(
@@ -17,15 +18,13 @@ fun BioSensorCard(
     state: DeviceState,
     rate: Float,
     stats: String,
-    unit: String = "br/min",
+    /** Unit of [rate] — always passed explicitly; there is no sensible cross-sensor default. */
+    unit: String,
     onToggle: () -> Unit,
     showStreamData: Boolean = false,
     onToggleStreamDisplay: () -> Unit = {}
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
-    ) {
+    OutlineCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -34,13 +33,12 @@ fun BioSensorCard(
             ) {
                 Text(
                     text = sensorName,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                    style = MaterialTheme.typography.titleMedium
                 )
                 // Small badge for state
                 Surface(
                     shape = RoundedCornerShape(16.dp),
-                    color = if (state == DeviceState.Streaming) Color(0xFF4CAF50) else Color.Gray.copy(alpha = 0.5f)
+                    color = if (state == DeviceState.Streaming) SuccessGreen else Color.Gray.copy(alpha = 0.5f)
                 ) {
                     Text(
                         text = state.name.uppercase(),
@@ -59,20 +57,19 @@ fun BioSensorCard(
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
                     text = String.format("%.1f", displayRate),
-                    style = MaterialTheme.typography.displayLarge,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                    style = MaterialTheme.typography.displayLarge
                 )
                 Text(
                     text = " $unit",
                     modifier = Modifier.padding(bottom = 6.dp),
-                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.weight(1f))
                 Text(
                     text = displayStats,
                     style = MaterialTheme.typography.bodySmall,
                     fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.6f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                 )
             }
 
@@ -81,17 +78,13 @@ fun BioSensorCard(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     onClick = onToggle,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                        contentColor = MaterialTheme.colorScheme.tertiaryContainer
-                    )
+                    modifier = Modifier.weight(1f)
                 ) {
                     Text(if (state == DeviceState.Disconnected) "CONNECT" else "DISCONNECT")
                 }
 
                 if (state == DeviceState.Streaming) {
-                    Button(onClick = onToggleStreamDisplay, modifier = Modifier.weight(1f)) {
+                    OutlinedButton(onClick = onToggleStreamDisplay, modifier = Modifier.weight(1f)) {
                         Text(if (showStreamData) "HIDE DATA" else "SHOW DATA")
                     }
                 }

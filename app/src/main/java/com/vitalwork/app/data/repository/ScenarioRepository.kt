@@ -24,14 +24,8 @@ class ScenarioRepository @Inject constructor(
     suspend fun getScenariosForSessionOnce(sessionId: Long): List<ScenarioEntity> =
         scenarioDao.getScenariosForSessionOnce(sessionId)
 
-    fun getActiveScenario(sessionId: Long): Flow<ScenarioEntity?> =
-        scenarioDao.getActiveScenario(sessionId)
-
     suspend fun getScenarioById(id: Long): ScenarioEntity? =
         scenarioDao.getScenarioById(id)
-
-    suspend fun getCompletedScenarioCount(sessionId: Long): Int =
-        scenarioDao.getCompletedScenarioCount(sessionId)
 
     /** Creates a new scenario for the given session. */
     suspend fun createScenario(

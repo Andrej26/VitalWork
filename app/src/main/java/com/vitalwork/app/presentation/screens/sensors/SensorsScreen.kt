@@ -30,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.vitalwork.app.presentation.components.SensorTypeCard
+import com.vitalwork.app.presentation.components.WatermarkedBackground
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,51 +66,53 @@ fun SensorsScreen(
             )
         }
     ) { paddingValues ->
-        BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            val hPad = if (maxWidth >= 600.dp) 24.dp else 16.dp
-
-            Column(
+        WatermarkedBackground {
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = hPad, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(paddingValues)
             ) {
-                Text(
-                    text = "Available Sensors",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                val hPad = if (maxWidth >= 600.dp) 24.dp else 16.dp
 
-                Spacer(modifier = Modifier.height(4.dp))
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = hPad, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "Available Sensors",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
 
-                SensorTypeCard(
-                    name = "eSense Pulse",
-                    description = "Heart Rate Monitor (BLE)",
-                    icon = Icons.Default.Bluetooth,
-                    connectionState = bleConnectionState,
-                    onClick = { onNavigateToSensorDetail("esense_pulse") }
-                )
+                    Spacer(modifier = Modifier.height(4.dp))
 
-                SensorTypeCard(
-                    name = "eSense Respiration",
-                    description = "Breathing Sensor (Audio Jack)",
-                    icon = Icons.Default.Mic,
-                    connectionState = respirationState.toConnectionState(),
-                    onClick = { onNavigateToSensorDetail("esense_respiration") }
-                )
+                    SensorTypeCard(
+                        name = "eSense Pulse",
+                        description = "Heart Rate Monitor (BLE)",
+                        icon = Icons.Default.Bluetooth,
+                        connectionState = bleConnectionState,
+                        onClick = { onNavigateToSensorDetail("esense_pulse") }
+                    )
 
-                SensorTypeCard(
-                    name = "Galaxy Watch",
-                    description = "HR / IBI / EDA (Wear OS)",
-                    icon = Icons.Default.Watch,
-                    connectionState = watchConnectionState,
-                    onClick = { onNavigateToSensorDetail("galaxy_watch") }
-                )
+                    SensorTypeCard(
+                        name = "eSense Respiration",
+                        description = "Breathing Sensor (Audio Jack)",
+                        icon = Icons.Default.Mic,
+                        connectionState = respirationState.toConnectionState(),
+                        onClick = { onNavigateToSensorDetail("esense_respiration") }
+                    )
+
+                    SensorTypeCard(
+                        name = "Galaxy Watch",
+                        description = "HR / IBI / EDA (Wear OS)",
+                        icon = Icons.Default.Watch,
+                        connectionState = watchConnectionState,
+                        onClick = { onNavigateToSensorDetail("galaxy_watch") }
+                    )
+                }
             }
         }
     }

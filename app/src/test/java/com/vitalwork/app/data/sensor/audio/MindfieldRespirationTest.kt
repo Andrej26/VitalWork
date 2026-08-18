@@ -33,79 +33,53 @@ class MindfieldRespirationTest {
 
     // -- Breathing rate: edge cases --
 
+    // The estimator itself is covered by BreathingRateEstimatorTest; these check the delegation
+    // and the buffer lifecycle that MindfieldRespiration owns.
+
     @Test
-    fun calculateBreathingRate_emptyBuffer_returnsZero() {
-        assertEquals(0f, MindfieldRespiration.calculateBreathingRate(), 0f)
+    fun calculateBreathingRate_emptyBuffer_reportsWarmup() {
+        assertEquals(BreathingRateEstimate.Warmup, MindfieldRespiration.calculateBreathingRate())
     }
 
     @Test
-    fun calculateBreathingRate_belowMinSamples_returnsZero() {
-        // 14 samples (minimum is 15 = 3 seconds × 5 Hz)
-        repeat(14) { MindfieldRespiration.raBuffer.addLast(50.0 + it) }
+    fun calculateBreathingRate_belowWarmupWindow_reportsWarmup() {
+        // 59 samples — under the estimator's 12 s (60 sample) warmup.
+        repeat(59) { MindfieldRespiration.raBuffer.addLast(210.0 + it) }
 
-        assertEquals(0f, MindfieldRespiration.calculateBreathingRate(), 0f)
+        assertEquals(BreathingRateEstimate.Warmup, MindfieldRespiration.calculateBreathingRate())
     }
 
     @Test
-    fun calculateBreathingRate_exactlyMinSamples_returnsRate() {
-        // 15 samples with crossings should produce a non-zero rate
-        fillSineWave(breathsPerMin = 15.0, sampleCount = 15)
+    fun calculateBreathingRate_normalBreathing_delegatesToEstimator() {
+        fillSineWave(breathsPerMin = 15.0, sampleCount = 300)
 
-        val rate = MindfieldRespiration.calculateBreathingRate()
-        assertTrue("Expected rate > 0 but got $rate", rate > 0f)
+        val result = MindfieldRespiration.calculateBreathingRate()
+        assertTrue("Expected a rate but got $result", result is BreathingRateEstimate.Rate)
+        assertEquals(15.0f, (result as BreathingRateEstimate.Rate).brPerMin, 1.0f)
     }
 
     @Test
-    fun calculateBreathingRate_constantSignal_returnsZero() {
-        // All same value → no crossings → 0 breaths
-        repeat(150) { MindfieldRespiration.raBuffer.addLast(100.0) }
+    fun calculateBreathingRate_constantSignal_reportsNoBreathing() {
+        repeat(300) { MindfieldRespiration.raBuffer.addLast(210.0) }
 
-        assertEquals(0f, MindfieldRespiration.calculateBreathingRate(), 0f)
-    }
-
-    // -- Breathing rate: accuracy --
-
-    @Test
-    fun calculateBreathingRate_singleBreathCycle_correctRate() {
-        // 1 sine cycle over 150 samples (30s) = 1 upward crossing = 2.0 br/min
-        fillSineWave(breathsPerMin = 2.0, sampleCount = 150)
-
-        val rate = MindfieldRespiration.calculateBreathingRate()
-        assertEquals(2.0f, rate, 0.5f)
+        assertEquals(
+            BreathingRateEstimate.NoBreathing,
+            MindfieldRespiration.calculateBreathingRate()
+        )
     }
 
     @Test
-    fun calculateBreathingRate_normalBreathing_correctRate() {
-        // ~15 breaths/min is normal adult resting rate
-        fillSineWave(breathsPerMin = 15.0, sampleCount = 150)
-
-        val rate = MindfieldRespiration.calculateBreathingRate()
-        assertEquals(15.0f, rate, 1.0f)
-    }
-
-    @Test
-    fun calculateBreathingRate_rapidBreathing_higherRate() {
-        fillSineWave(breathsPerMin = 30.0, sampleCount = 150)
-
-        val rate = MindfieldRespiration.calculateBreathingRate()
-        // Discrete sampling causes ±2 crossings at window boundaries
-        assertEquals(30.0f, rate, 3.0f)
-    }
-
-    @Test
-    fun calculateBreathingRate_bufferExceedsWindow_trimmedTo150() {
-        // Add 200 samples — buffer should cap at 150 (RATE_WINDOW_SAMPLES)
-        repeat(200) { i ->
-            MindfieldRespiration.raBuffer.addLast(50.0 + sin(i.toDouble()) * 20.0)
-            while (MindfieldRespiration.raBuffer.size > 150) {
+    fun calculateBreathingRate_bufferExceedsWindow_trimmedTo300() {
+        // Add 400 samples — the live buffer caps at 300 (RATE_WINDOW_SAMPLES = 60 s × 5 Hz)
+        repeat(400) { i ->
+            MindfieldRespiration.raBuffer.addLast(210.0 + sin(i.toDouble()) * 20.0)
+            while (MindfieldRespiration.raBuffer.size > 300) {
                 MindfieldRespiration.raBuffer.removeFirst()
             }
         }
 
-        assertEquals(150, MindfieldRespiration.raBuffer.size)
-        // Should still compute a rate from the remaining 150 samples
-        val rate = MindfieldRespiration.calculateBreathingRate()
-        assertTrue("Expected rate > 0 but got $rate", rate > 0f)
+        assertEquals(300, MindfieldRespiration.raBuffer.size)
+        assertNotNull(MindfieldRespiration.calculateBreathingRate())
     }
 
     // -- Verification: failure cases --
@@ -171,6 +145,27 @@ class MindfieldRespirationTest {
         assertEquals(DeviceState.Streaming, MindfieldRespiration.state.value)
     }
 
+    // -- Pause --
+
+    @Test
+    fun stopStreaming_clearsRateWindow() {
+        // Reach Streaming, then fill the rate window and pause.
+        MindfieldRespiration.isVerifying = true
+        MindfieldRespiration.verifyCount = 5
+        for (i in 0 until 5) {
+            MindfieldRespiration.verifyBuffer[i] = 50.0 + i * 10.0
+        }
+        MindfieldRespiration.finishVerification()
+        fillSineWave(breathsPerMin = 15.0, sampleCount = 300)
+
+        MindfieldRespiration.stopStreaming()
+
+        // Samples from before the pause must not survive into the post-resume estimate.
+        assertEquals(0, MindfieldRespiration.raBuffer.size)
+        assertEquals(BreathingRateEstimate.Warmup, MindfieldRespiration.calculateBreathingRate())
+        assertEquals(RespirationWarning.NONE, MindfieldRespiration.warning.value)
+    }
+
     // -- Helper --
 
     /**
@@ -182,8 +177,8 @@ class MindfieldRespirationTest {
         val freqHz = breathsPerMin / 60.0
         for (i in 0 until sampleCount) {
             val t = i / sampleFreq
-            // Sine wave centered at 100 RA with amplitude 50
-            val ra = 100.0 + 50.0 * sin(2.0 * Math.PI * freqHz * t)
+            // Sine wave centered at 210 RA with amplitude 50 — the range a worn strap produces.
+            val ra = 210.0 + 50.0 * sin(2.0 * Math.PI * freqHz * t)
             MindfieldRespiration.raBuffer.addLast(ra)
         }
     }

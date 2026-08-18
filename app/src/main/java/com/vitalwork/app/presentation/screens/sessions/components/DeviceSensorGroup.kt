@@ -40,6 +40,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.vitalwork.app.data.model.ConnectionState
 import com.vitalwork.app.presentation.components.ConnectionStatusBadge
+import com.vitalwork.app.ui.theme.SuccessGreen
+import com.vitalwork.app.ui.theme.WarningAmber
+import com.vitalwork.app.ui.theme.ErrorRed
 
 @Composable
 fun DeviceSensorGroup(
@@ -60,27 +63,41 @@ fun DeviceSensorGroup(
             (connectionState == ConnectionState.DISCONNECTED || connectionState == ConnectionState.ERROR)
     val borderColor by animateColorAsState(
         targetValue = when (connectionState) {
-            ConnectionState.CONNECTED -> Color(0xFF4CAF50)
-            ConnectionState.CONNECTING -> Color(0xFFFFA000)
-            ConnectionState.RECONNECTING -> Color(0xFFFFA000)
-            ConnectionState.ERROR -> Color(0xFFF44336)
+            ConnectionState.CONNECTED -> SuccessGreen
+            ConnectionState.CONNECTING -> WarningAmber
+            ConnectionState.RECONNECTING -> WarningAmber
+            ConnectionState.ERROR -> ErrorRed
             ConnectionState.DISCONNECTED -> MaterialTheme.colorScheme.outlineVariant
         },
         animationSpec = tween(300),
         label = "device_group_border"
     )
 
+    // A disconnected, tappable group gets a dashed primary border — the same "empty slot to fill"
+    // affordance as the disconnected LiveSensorCard, so the tap-here language is unified across the
+    // screen. Connected/connecting/error states keep the solid status-colored border.
+    val groupShape = MaterialTheme.shapes.medium
     Card(
         modifier = modifier
             .fillMaxWidth()
             .then(
-                if (isClickable) Modifier.clickable { onClick?.invoke() }
+                if (isClickable) Modifier.clickable { onClick() }
                 else Modifier
+            )
+            .then(
+                if (isClickable) Modifier.dashedBorder(
+                    color = MaterialTheme.colorScheme.primary,
+                    shape = groupShape,
+                    strokeWidth = 1.5.dp,
+                    dashLength = 6.dp,
+                    gapLength = 4.dp
+                ) else Modifier
             ),
+        shape = groupShape,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        border = BorderStroke(1.5.dp, borderColor)
+        border = if (isClickable) null else BorderStroke(1.5.dp, borderColor)
     ) {
         Column(
             modifier = Modifier.padding(12.dp),
@@ -128,11 +145,7 @@ fun DeviceSensorGroup(
             footer?.invoke(this)
 
             if (isClickable && clickHint != null) {
-                Text(
-                    text = clickHint,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
-                )
+                TapActionPill(text = clickHint, compact = true)
             }
         }
     }

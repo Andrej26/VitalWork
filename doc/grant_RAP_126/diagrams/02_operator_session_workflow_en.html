@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>02 — Process Map</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: #FFFFFF; color: #40484C;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 24px 22px 20px;
+    position: relative; overflow: hidden;
+  }
+  body > * { position: relative; z-index: 1; }
+
+  /* Watermark — fixed to the viewport (not body) so it can't sit below the actual content when the
+     window is taller than the rendered flow, which would otherwise defeat png autocrop. */
+  .wm {
+    position: fixed; z-index: 0; left: 50%; top: 55%;
+    transform: translate(-50%, -50%) rotate(-10deg);
+    font-size: 150px; font-weight: 700; letter-spacing: 0.02em;
+    color: #083E50; opacity: 0.035; white-space: nowrap; pointer-events: none;
+  }
+  .ecg { position: fixed; z-index: 0; left: 0; bottom: 6px; width: 100%; opacity: 0.07; pointer-events: none; }
+
+  /* Header — centered, compact */
+  .head-text { text-align: center; margin-bottom: 4px; }
+  .eyebrow {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.14em;
+    text-transform: uppercase; color: #0E5871;
+  }
+  h1 { font-size: 19px; font-weight: 700; color: #083E50; letter-spacing: 0.01em; }
+  .subtitle { font-size: 12px; color: #4C626B; margin: 6px 0 12px; max-width: 640px; text-align: center; }
+
+  /* Legend — pill chips like diagram 01 */
+  .legend { display: flex; gap: 8px 10px; margin-bottom: 14px; flex-wrap: wrap; justify-content: center; max-width: 720px; }
+  .lchip {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 11px; color: #40484C;
+    border: 1px solid #DCE4E9; border-radius: 999px; padding: 4px 12px 4px 6px;
+    background: #F6F8F9;
+  }
+  .ld { width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0; }
+  .ld-pill { border-radius: 8px; width: 22px; }
+
+  .flow { display: flex; flex-direction: column; align-items: center; gap: 0; width: 720px; }
+
+  /* Terminals: start = outlined teal pill, end = solid brand-teal pill */
+  .term {
+    background: #F3F9FC; border: 2px solid #0E5871; border-radius: 24px;
+    padding: 9px 32px; font-size: 13px; font-weight: 700; color: #083E50;
+    text-align: center;
+  }
+  .term-end {
+    background: #B5D4E0; border: 2px solid #083E50; border-radius: 24px;
+    padding: 9px 32px; font-size: 13px; font-weight: 700; color: #083E50;
+    text-align: center;
+  }
+
+  .step {
+    border-radius: 9px; padding: 10px 16px; font-size: 13px; text-align: center; width: 100%;
+    position: relative;
+  }
+  .step .title { font-weight: 700; display: block; }
+  .step .sub { font-size: 11px; color: #4C626B; margin-top: 2px; display: block; }
+  .who { font-size: 19px; line-height: 1; position: absolute; top: -8px; right: -12px; filter: drop-shadow(0 1px 1px rgba(0,0,0,0.25)); }
+
+  /* Step categories — VitalWork palette */
+  .s-teal  { background: #CFE6F2; border: 1.5px solid #0E5871; color: #083E50; }
+  .s-green { background: #E3F1E4; border: 1.5px solid #2E7D32; color: #1B5E20; }
+  .s-amber { background: #FFF4DE; border: 1.5px solid #B26A00; color: #6E4400; }
+  .s-deep  { background: #B5D4E0; border: 1.5px solid #083E50; color: #083E50; }
+  .s-deep .sub { color: #37545F; }
+
+  .phase {
+    border-radius: 11px; padding: 14px 16px; width: 100%;
+    display: flex; flex-direction: column; align-items: center; gap: 0;
+  }
+  .phase-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; width: 100%; text-align: left; padding-left: 2px; }
+  .ph-setup { background: #F3F9FC; border: 1px solid #0E5871; }
+  .ph-setup .phase-label { color: #0E5871; }
+  .ph-run   { background: #F2F8F2; border: 1px solid #2E7D32; }
+  .ph-run   .phase-label { color: #2E7D32; }
+  .ph-end   { background: #FFFAF0; border: 1px solid #B26A00; }
+  .ph-end   .phase-label { color: #B26A00; }
+  .ph-fin   { background: #EAF3F6; border: 1px solid #083E50; }
+  .ph-fin   .phase-label { color: #083E50; }
+
+  .loop-note { font-size: 10.5px; color: #B3261E; margin-top: 10px; }
+
+  .conn { width: 2px; height: 20px; margin: 0 auto; position: relative; }
+  .conn::after { content:''; position:absolute; bottom:-6px; left:-4px; border:5px solid transparent; }
+  .c-grey  { background:#9AA5AB; } .c-grey::after  { border-top-color:#9AA5AB; }
+  .c-teal  { background:#0E5871; } .c-teal::after  { border-top-color:#0E5871; }
+  .c-green { background:#2E7D32; } .c-green::after { border-top-color:#2E7D32; }
+  .c-amber { background:#B26A00; } .c-amber::after { border-top-color:#B26A00; }
+  .c-deep  { background:#083E50; } .c-deep::after  { border-top-color:#083E50; }
+
+  .step-row { display: flex; align-items: stretch; gap: 0; width: 100%; }
+  .step-row .step { flex: 1; }
+  .h-arr { flex-shrink: 0; width: 26px; height: 2px; align-self: center; position: relative; }
+  .h-arr::after { content:''; position:absolute; right:-6px; top:-4px; border:5px solid transparent; }
+  .ha-teal  { background:#0E5871; } .ha-teal::after  { border-left-color:#0E5871; }
+  .ha-green { background:#2E7D32; } .ha-green::after { border-left-color:#2E7D32; }
+  .ha-amber { background:#B26A00; } .ha-amber::after { border-left-color:#B26A00; }
+  .ha-deep  { background:#083E50; } .ha-deep::after  { border-left-color:#083E50; }
+
+  .hub-label { font-size: 11.5px; color: #2E7D32; font-weight: 700; margin: 6px 0; text-align: center; }
+</style>
+</head>
+<body>
+
+<div class="wm">VitalWork</div>
+<svg class="ecg" viewBox="0 0 800 70" height="70" preserveAspectRatio="none"><polyline points="0,40 256,40 288,40 312,12 336,66 360,26 376,40 800,40" fill="none" stroke="#0E5871" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+
+<div class="head-text">
+  <div class="eyebrow">VitalWork · Technical Documentation</div>
+  <h1>Session Workflow (Step-by-Step Process)</h1>
+</div>
+<p class="subtitle">What the operator does and what the app does automatically, from setup to upload on the VitalWork server</p>
+
+<div class="legend">
+  <div class="lchip"><div class="ld ld-pill" style="background:#F3F9FC;border:2px solid #0E5871;"></div>Start / end of the process</div>
+  <div class="lchip"><div class="ld" style="background:#CFE6F2;border:1.5px solid #0E5871;"></div>Setup step</div>
+  <div class="lchip"><div class="ld" style="background:#E3F1E4;border:1.5px solid #2E7D32;"></div>Recording-loop step</div>
+  <div class="lchip"><div class="ld" style="background:#FFF4DE;border:1.5px solid #B26A00;"></div>Watch data-transfer step</div>
+  <div class="lchip"><div class="ld" style="background:#B5D4E0;border:1.5px solid #083E50;"></div>Finalise / export step</div>
+  <div class="lchip">👤 operator action&nbsp;&nbsp;📱 app does this automatically</div>
+</div>
+
+<div class="flow">
+
+  <div class="term">Start — device already in Client mode</div>
+  <div class="conn c-teal"></div>
+
+  <!-- Phase 1: Setup -->
+  <div class="phase ph-setup">
+    <div class="phase-label">Phase 1 — Setup</div>
+    <div class="step-row" style="align-items:center;">
+      <div class="step s-teal">
+        <span class="title">Ready?</span><span class="who">📱</span>
+        <span class="sub">battery + notifications must be granted · BLE/mic checked at connect</span>
+      </div>
+      <div class="h-arr ha-teal"></div>
+      <div class="step s-teal">
+        <span class="title">Create Participant</span><span class="who">👤</span>
+        <span class="sub">auto anonymous code · starts session (ACTIVE)</span>
+      </div>
+      <div class="h-arr ha-teal"></div>
+      <div class="step s-teal">
+        <span class="title">Sensor Setup Gate</span><span class="who">👤</span>
+        <span class="sub">connect Pulse · Respiration · Watch · Proceed unlocks with ≥ 1 sensor</span>
+      </div>
+    </div>
+    <div class="loop-note">↺ Prerequisites missing → “Start New Session” stays disabled until fixed via the warning card</div>
+  </div>
+  <div class="conn c-teal"></div>
+
+  <div class="hub-label">Scenario Hub — operator picks scenario A–E, or ends the session</div>
+  <div class="conn c-green"></div>
+
+  <!-- Phase 2: Recording loop -->
+  <div class="phase ph-run">
+    <div class="phase-label">Phase 2 — Per-scenario recording loop (repeats for A–E)</div>
+    <div class="step-row">
+      <div class="step s-green">
+        <span class="title">Pick Scenario A–E</span><span class="who">👤</span>
+        <span class="sub">from the scenario hub</span>
+      </div>
+      <div class="h-arr ha-green"></div>
+      <div class="step s-green">
+        <span class="title">Countdown → Recording starts</span><span class="who">📱</span>
+        <span class="sub">auto-start · NTP timestamp</span>
+      </div>
+      <div class="h-arr ha-green"></div>
+      <div class="step s-green">
+        <span class="title">Capture sensor samples</span><span class="who">📱</span>
+        <span class="sub">HR · R-R · Respiration · Watch HR/IBI/EDA</span>
+      </div>
+      <div class="h-arr ha-green"></div>
+      <div class="step s-green">
+        <span class="title">Return to Scenario Hub</span><span class="who">📱</span>
+        <span class="sub">scenario closed · pick next, or end</span>
+      </div>
+    </div>
+    <div class="loop-note">↺ No sensor connected → “No sensor connected” banner; countdown &amp; recording wait until one connects</div>
+  </div>
+  <div class="conn c-amber"></div>
+
+  <!-- End session step -->
+  <div class="step s-teal" style="width:360px;">
+    <span class="title">End Session</span><span class="who">👤</span>
+    <span class="sub">from the scenario hub, once all scenarios are done</span>
+  </div>
+  <div class="conn c-amber"></div>
+
+  <!-- Phase 3: Watch data transfer -->
+  <div class="phase ph-end">
+    <div class="phase-label">Phase 3 — Galaxy Watch data transfer (store-and-forward)</div>
+    <div class="step-row">
+      <div class="step s-amber">
+        <span class="title">Wake the watch</span><span class="who">📱</span>
+        <span class="sub">remote command · manual tap if it misses</span>
+      </div>
+      <div class="h-arr ha-amber"></div>
+      <div class="step s-amber">
+        <span class="title">Transfer stored data</span><span class="who">📱</span>
+        <span class="sub">watch ships buffered HR/IBI/EDA rows</span>
+      </div>
+      <div class="h-arr ha-amber"></div>
+      <div class="step s-amber">
+        <span class="title">Acknowledge &amp; finalize</span><span class="who">📱</span>
+        <span class="sub">watch store truncated only after ack</span>
+      </div>
+    </div>
+    <div class="loop-note">↺ Timeout / abort → session still ends; watch keeps its data for next time</div>
+  </div>
+  <div class="conn c-deep"></div>
+
+  <!-- Phase 4: Finalise -->
+  <div class="phase ph-fin">
+    <div class="phase-label">Phase 4 — Finalise &amp; Export</div>
+    <div class="step-row">
+      <div class="step s-deep">
+        <span class="title">Count collected samples</span><span class="who">📱</span>
+        <span class="sub">per sensor type · session status → COMPLETED</span>
+      </div>
+      <div class="h-arr ha-deep"></div>
+      <div class="step s-deep">
+        <span class="title">Upload to server</span><span class="who">📱</span>
+        <span class="sub">automatic · status → UPLOADED</span>
+      </div>
+      <div class="h-arr ha-deep"></div>
+      <div class="step s-deep">
+        <span class="title">Retry if it failed</span><span class="who">👤</span>
+        <span class="sub">manual button on the Review screen</span>
+      </div>
+    </div>
+  </div>
+  <div class="conn c-deep"></div>
+
+  <div class="term-end">Status → UPLOADED</div>
+
+  <div class="conn c-grey"></div>
+  <div class="step s-teal" style="width:360px;border-style:dashed;">
+    <span class="title">Export JSON + CSV (optional)</span><span class="who">👤</span>
+    <span class="sub">manual, to Documents folder — not required for upload</span>
+  </div>
+
+</div>
+</body>
+</html>

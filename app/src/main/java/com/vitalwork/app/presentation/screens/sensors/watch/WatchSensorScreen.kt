@@ -16,7 +16,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -37,6 +36,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.vitalwork.app.data.model.ConnectionState
 import com.vitalwork.app.presentation.components.BluetoothDisabledCard
+import com.vitalwork.app.presentation.components.OutlineCard
+import com.vitalwork.app.presentation.components.WatermarkedBackground
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,86 +72,88 @@ fun WatchSensorScreen(
             )
         }
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            // Bluetooth Disabled Warning — the watch link runs over direct Bluetooth, so without it
-            // data can't arrive reliably (the cloud relay dies when the phone sleeps). Same card and
-            // behaviour as the eSense Pulse screen.
-            if (!bluetoothEnabled) {
-                BluetoothDisabledCard(
-                    onClick = {
-                        enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
-                    }
-                )
-            }
-
-            // Connection status
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
-                    Text("Channel", style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    // Prefer the finer link status so an expected screen-off/Doze gap reads as
-                    // "buffering", not a scary "Disconnected". Fall back to the coarse state only for
-                    // CONNECTING/ERROR, which the link status doesn't model.
-                    Text(
-                        text = when (connection) {
-                            ConnectionState.CONNECTING -> "Connecting…"
-                            ConnectionState.ERROR -> "Error"
-                            else -> when (linkStatus) {
-                                com.vitalwork.app.data.sensor.watch.WatchLinkStatus.LIVE -> "Connected"
-                                com.vitalwork.app.data.sensor.watch.WatchLinkStatus.DOZING -> "Watch dozing — buffering"
-                                com.vitalwork.app.data.sensor.watch.WatchLinkStatus.DISCONNECTED -> "Disconnected"
-                            }
-                        },
-                        style = MaterialTheme.typography.titleMedium
+        WatermarkedBackground {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Bluetooth Disabled Warning — the watch link runs over direct Bluetooth, so without it
+                // data can't arrive reliably (the cloud relay dies when the phone sleeps). Same card and
+                // behaviour as the eSense Pulse screen.
+                if (!bluetoothEnabled) {
+                    BluetoothDisabledCard(
+                        onClick = {
+                            enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+                        }
                     )
-                    battery?.let {
+                }
+
+                // Connection status
+                OutlineCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("Channel", style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        // Prefer the finer link status so an expected screen-off/Doze gap reads as
+                        // "buffering", not a scary "Disconnected". Fall back to the coarse state only for
+                        // CONNECTING/ERROR, which the link status doesn't model.
+                        Text(
+                            text = when (connection) {
+                                ConnectionState.CONNECTING -> "Connecting…"
+                                ConnectionState.ERROR -> "Error"
+                                else -> when (linkStatus) {
+                                    com.vitalwork.app.data.sensor.watch.WatchLinkStatus.LIVE -> "Connected"
+                                    com.vitalwork.app.data.sensor.watch.WatchLinkStatus.DOZING -> "Watch dozing — buffering"
+                                    com.vitalwork.app.data.sensor.watch.WatchLinkStatus.DISCONNECTED -> "Disconnected"
+                                }
+                            },
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        battery?.let {
+                            Spacer(Modifier.height(4.dp))
+                            Text("Watch battery: $it%", style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+
+                // Available trackers (what this watch can give us)
+                OutlineCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("Supported trackers", style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.height(4.dp))
-                        Text("Watch battery: $it%", style = MaterialTheme.typography.bodyMedium)
+                        if (trackers.isEmpty()) {
+                            Text("—", style = MaterialTheme.typography.bodyMedium)
+                        } else {
+                            trackers.forEach { Text("• $it", style = MaterialTheme.typography.bodySmall) }
+                        }
                     }
                 }
-            }
 
-            // Available trackers (what this watch can give us)
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
-                    Text("Supported trackers", style = MaterialTheme.typography.labelMedium,
+                // Live readings per type
+                Text("Live readings", style = MaterialTheme.typography.titleMedium)
+                if (readings.isEmpty()) {
+                    Text("Waiting for data… (start tracking on the watch)",
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(4.dp))
-                    if (trackers.isEmpty()) {
-                        Text("—", style = MaterialTheme.typography.bodyMedium)
-                    } else {
-                        trackers.forEach { Text("• $it", style = MaterialTheme.typography.bodySmall) }
-                    }
-                }
-            }
-
-            // Live readings per type
-            Text("Live readings", style = MaterialTheme.typography.titleMedium)
-            if (readings.isEmpty()) {
-                Text("Waiting for data… (start tracking on the watch)",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else {
-                readings.toSortedMap().forEach { (type, r) ->
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(watchSignalLabel(type), style = MaterialTheme.typography.titleMedium)
-                            Text(
-                                text = watchValueText(type, r.value),
-                                style = MaterialTheme.typography.titleLarge,
-                                fontFamily = FontFamily.Monospace
-                            )
+                } else {
+                    readings.toSortedMap().forEach { (type, r) ->
+                        OutlineCard(modifier = Modifier.fillMaxWidth()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(watchSignalLabel(type), style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    text = watchValueText(type, r.value),
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
                         }
                     }
                 }

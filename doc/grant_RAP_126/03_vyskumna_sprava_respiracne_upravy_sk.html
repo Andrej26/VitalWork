@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Výskumná správa — miesta na úpravu po respiračných zmenách</title>
+<style>
+  :root {
+    --paper: #FAF9F7;
+    --paper-raised: #FFFFFF;
+    --ink: #1A1D1C;
+    --ink-soft: #4A524E;
+    --ink-faint: #79837D;
+    --rule: #E0DEDA;
+    --rule-strong: #C9C6C0;
+    --accent: #0E5871;
+    --before: #9A3F2E;
+    --before-bg: #FBF1EE;
+    --after: #2E7D32;
+    --after-bg: #EFF6EF;
+    --req: #9A3F2E;
+    --opt: #8A7530;
+    --info: #0E5871;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --serif: Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
+    --sans: "Inter Tight", "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #141716;
+      --paper-raised: #1C2120;
+      --ink: #E8E9E6;
+      --ink-soft: #ADB5B0;
+      --ink-faint: #7C8681;
+      --rule: #2C3331;
+      --rule-strong: #3E4644;
+      --accent: #6FB4CE;
+      --before: #E08C77;
+      --before-bg: #2A1D19;
+      --after: #7FC486;
+      --after-bg: #17251A;
+      --req: #E08C77;
+      --opt: #D6BC6C;
+      --info: #6FB4CE;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper: #141716;
+    --paper-raised: #1C2120;
+    --ink: #E8E9E6;
+    --ink-soft: #ADB5B0;
+    --ink-faint: #7C8681;
+    --rule: #2C3331;
+    --rule-strong: #3E4644;
+    --accent: #6FB4CE;
+    --before: #E08C77;
+    --before-bg: #2A1D19;
+    --after: #7FC486;
+    --after-bg: #17251A;
+    --req: #E08C77;
+    --opt: #D6BC6C;
+    --info: #6FB4CE;
+  }
+
+  :root[data-theme="light"] {
+    --paper: #FAF9F7;
+    --paper-raised: #FFFFFF;
+    --ink: #1A1D1C;
+    --ink-soft: #4A524E;
+    --ink-faint: #79837D;
+    --rule: #E0DEDA;
+    --rule-strong: #C9C6C0;
+    --accent: #0E5871;
+    --before: #9A3F2E;
+    --before-bg: #FBF1EE;
+    --after: #2E7D32;
+    --after-bg: #EFF6EF;
+    --req: #9A3F2E;
+    --opt: #8A7530;
+    --info: #0E5871;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 16px;
+    line-height: 1.6;
+    margin: 0;
+    padding: 0 20px 96px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 940px; margin: 0 auto; }
+
+  /* ---------- theme toggle ---------- */
+
+  .theme-toggle {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 10;
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    background: var(--paper-raised);
+    border: 1px solid var(--rule-strong);
+    padding: 7px 12px;
+    cursor: pointer;
+    line-height: 1;
+  }
+  .theme-toggle:hover { color: var(--ink); border-color: var(--ink-faint); }
+  @media print { .theme-toggle { display: none; } }
+
+  /* ---------- masthead ---------- */
+
+  .masthead {
+    padding: 56px 0 28px;
+    border-bottom: 2px solid var(--ink);
+    margin-bottom: 40px;
+  }
+
+  .eyebrow {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 14px;
+  }
+
+  h1 {
+    font-size: clamp(30px, 4.6vw, 44px);
+    line-height: 1.12;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+    margin: 0 0 18px;
+  }
+
+  .standfirst {
+    font-size: 18px;
+    line-height: 1.62;
+    color: var(--ink-soft);
+    max-width: 64ch;
+    margin: 0 0 26px;
+  }
+
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 28px;
+    font-family: var(--sans);
+    font-size: 12.5px;
+    color: var(--ink-faint);
+  }
+  .meta-row b {
+    color: var(--ink-soft);
+    font-weight: 600;
+  }
+
+  /* ---------- verdict ---------- */
+
+  .verdict {
+    background: var(--paper-raised);
+    border: 1px solid var(--rule);
+    border-left: 4px solid var(--accent);
+    padding: 24px 28px;
+    margin-bottom: 48px;
+  }
+  .verdict h2 {
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 12px;
+  }
+  .verdict p { margin: 0 0 12px; max-width: 68ch; }
+  .verdict p:last-child { margin-bottom: 0; }
+
+  .tally {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 26px;
+    margin-top: 20px;
+    padding-top: 18px;
+    border-top: 1px solid var(--rule);
+    font-family: var(--sans);
+  }
+  .tally-item { display: flex; align-items: baseline; gap: 9px; }
+  .tally-num {
+    font-size: 26px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+  .tally-lbl { font-size: 12.5px; color: var(--ink-faint); }
+  .t-req .tally-num { color: var(--req); }
+  .t-opt .tally-num { color: var(--opt); }
+  .t-ok  .tally-num { color: var(--after); }
+
+  /* ---------- section heads ---------- */
+
+  h2.sect {
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0 0 20px;
+    padding-bottom: 9px;
+    border-bottom: 1px solid var(--rule-strong);
+  }
+
+  /* ---------- change blocks ---------- */
+
+  .change {
+    display: grid;
+    grid-template-columns: 4px 1fr;
+    gap: 0 22px;
+    margin-bottom: 40px;
+  }
+  .rail { background: var(--rule-strong); }
+  .change.req .rail { background: var(--req); }
+  .change.opt .rail { background: var(--opt); }
+
+  .body { min-width: 0; }
+
+  .chg-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px 14px;
+    margin-bottom: 6px;
+  }
+
+  .page-ref {
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    font-variant-numeric: tabular-nums;
+    color: var(--paper);
+    background: var(--ink);
+    padding: 3px 9px;
+    white-space: nowrap;
+  }
+
+  .locus {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--ink-faint);
+  }
+
+  .tag {
+    font-family: var(--sans);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border: 1px solid currentColor;
+    white-space: nowrap;
+  }
+  .tag.req { color: var(--req); }
+  .tag.opt { color: var(--opt); }
+
+  h3.chg-title {
+    font-size: 21px;
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+    margin: 0 0 10px;
+  }
+
+  .why {
+    color: var(--ink-soft);
+    margin: 0 0 18px;
+    max-width: 68ch;
+  }
+
+  /* ---------- before / after ---------- */
+
+  .ba {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 760px) {
+    .ba { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    border: 1px solid var(--rule);
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .panel-head {
+    font-family: var(--sans);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .p-before { background: var(--before-bg); }
+  .p-before .panel-head { color: var(--before); border-bottom-color: var(--before); }
+  .p-after { background: var(--after-bg); }
+  .p-after .panel-head { color: var(--after); border-bottom-color: var(--after); }
+
+  .panel-body {
+    padding: 15px;
+    font-size: 14.5px;
+    line-height: 1.62;
+    overflow-x: auto;
+  }
+  .panel-body p { margin: 0 0 10px; }
+  .panel-body p:last-child { margin-bottom: 0; }
+  .panel-body ul { margin: 0 0 10px; padding-left: 20px; }
+  .panel-body ul:last-child { margin-bottom: 0; }
+  .panel-body li { margin-bottom: 5px; }
+
+  code, .mono {
+    font-family: var(--mono);
+    font-size: 0.885em;
+  }
+
+  ins {
+    background: rgba(46, 125, 50, 0.17);
+    text-decoration: none;
+    box-shadow: 0 1px 0 var(--after);
+    padding: 0 1px;
+  }
+  del {
+    background: rgba(154, 63, 46, 0.14);
+    text-decoration-color: var(--before);
+    text-decoration-thickness: 1.5px;
+    padding: 0 1px;
+  }
+
+  .absent {
+    font-style: italic;
+    color: var(--ink-faint);
+  }
+
+  .note {
+    font-family: var(--sans);
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+    margin-top: 14px;
+    padding-left: 13px;
+    border-left: 2px solid var(--rule-strong);
+    max-width: 66ch;
+  }
+  .note b { color: var(--ink); font-weight: 600; }
+
+  /* ---------- checked-and-fine table ---------- */
+
+  .table-scroll { overflow-x: auto; margin-bottom: 44px; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 14.5px;
+    min-width: 560px;
+  }
+  th {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    text-align: left;
+    padding: 0 14px 8px 0;
+    border-bottom: 1px solid var(--rule-strong);
+  }
+  td {
+    padding: 11px 14px 11px 0;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+    color: var(--ink-soft);
+  }
+  td:first-child {
+    font-family: var(--sans);
+    font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  .ok-mark { color: var(--after); font-weight: 600; }
+
+  footer {
+    margin-top: 56px;
+    padding-top: 22px;
+    border-top: 1px solid var(--rule-strong);
+    font-family: var(--sans);
+    font-size: 12.5px;
+    line-height: 1.65;
+    color: var(--ink-faint);
+    max-width: 70ch;
+  }
+</style>
+</head>
+<body>
+
+<button class="theme-toggle" type="button" onclick="(function(r){var d=r.dataset.theme==='dark'||(!r.dataset.theme&&matchMedia('(prefers-color-scheme: dark)').matches);r.dataset.theme=d?'light':'dark';})(document.documentElement)">Svetlá / tmavá</button>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">Kontrola konzistencie dokumentácie · RAP_126</p>
+    <h1>Výskumná správa: čo treba prepísať po respiračných zmenách</h1>
+    <p class="standfirst">
+      Prešiel som celý text kolegovej správy proti zmenám, ktoré sme spravili v aplikácii
+      (nový estimátor dychovej frekvencie, varovania kvality signálu, exportná schéma 2.2.0).
+      Text správy je respiračnými zmenami zasiahnutý len okrajovo — nižšie sú všetky
+      miesta, kde by som zasahoval, aj s číslom strany.
+    </p>
+    <div class="meta-row">
+      <span><b>Zdroj:</b> Výskumná správa.pdf, verzia 20260728</span>
+      <span><b>Rozsah:</b> 81 strán, prehľadané všetky</span>
+      <span><b>Vynechané:</b> staré obrázky (podľa zadania)</span>
+    </div>
+  </header>
+
+  <section class="verdict">
+    <h2>Zhrnutie</h2>
+    <p>
+      Dobrá správa: kolegova správa opisuje <em>databázový a analytický kontrakt</em> pre
+      klasifikátor postavený nad R-R intervalmi. Respiračný kanál v nej vystupuje výhradne
+      ako nepoužitý vstup, ktorý sa do výpočtu nenačítava. Nič z toho, čo sme menili,
+      nemení databázovú schému ani hodnoty, ktoré správa analyzuje — takže <b>žiadna
+      výpočtová, metodická ani záverová časť sa nemení</b>.
+    </p>
+    <p>
+      Zasiahnuté sú len dve vety, ktoré respiračný kanál pomenúvajú, plus jedna
+      terminologická poznámka. Všetko ostatné je konzistentné aj po našich zmenách.
+    </p>
+    <div class="tally">
+      <div class="tally-item t-req">
+        <span class="tally-num">1</span><span class="tally-lbl">potrebná úprava</span>
+      </div>
+      <div class="tally-item t-opt">
+        <span class="tally-num">2</span><span class="tally-lbl">odporúčané spresnenia</span>
+      </div>
+      <div class="tally-item t-ok">
+        <span class="tally-num">5</span><span class="tally-lbl">miest overených bez zmeny</span>
+      </div>
+    </div>
+  </section>
+
+  <h2 class="sect">Miesta na prepis</h2>
+
+  <!-- ===== CHANGE 1 ===== -->
+  <article class="change req">
+    <div class="rail"></div>
+    <div class="body">
+      <div class="chg-head">
+        <span class="page-ref">s. 26</span>
+        <span class="locus">§ 2.3.3 Kanály mimo klasifikačného vstupu</span>
+        <span class="tag req">Potrebná</span>
+      </div>
+      <h3 class="chg-title">„Respiračný priebeh“ nepovie, čo je v tom stĺpci uložené</h3>
+      <p class="why">
+        Toto je jediné miesto v celej správe, kde sa hovorí, čo <code>RESPIRATION</code> obsahuje.
+        Formulácia „respiračný priebeh“ je neurčitá — čitateľ z nej nevie, či ide o dychovú
+        frekvenciu alebo o surový priebeh. Presne tejto zámene sme sa v aplikácii venovali:
+        ukladá sa <b>surová amplitúda dýchania (RA)</b> pri 5 Hz, nie počet nádychov za minútu.
+        Keďže správa definuje dátový kontrakt, mala by to pomenovať jednoznačne.
+      </p>
+      <div class="ba">
+        <div class="panel p-before">
+          <div class="panel-head">Predtým</div>
+          <div class="panel-body">
+            <p>Rovnako sa ako klasifikačné vstupy nepoužívajú:</p>
+            <ul>
+              <li><code>ESENSE_HEART_RATE</code> ani <code>WATCH_HR</code>, teda priame záznamy tepovej frekvencie,</li>
+              <li><code>WATCH_EDA</code>, teda elektrodermálny kanál,</li>
+              <li><del><code>RESPIRATION</code>, teda respiračný priebeh.</del></li>
+            </ul>
+          </div>
+        </div>
+        <div class="panel p-after">
+          <div class="panel-head">Po úprave</div>
+          <div class="panel-body">
+            <p>Rovnako sa ako klasifikačné vstupy nepoužívajú:</p>
+            <ul>
+              <li><code>ESENSE_HEART_RATE</code> ani <code>WATCH_HR</code>, teda priame záznamy tepovej frekvencie,</li>
+              <li><code>WATCH_EDA</code>, teda elektrodermálny kanál,</li>
+              <li><ins><code>RESPIRATION</code>, teda surová amplitúda dýchania (RA) vzorkovaná pri 5 Hz; ide o bezrozmerný priebeh rozťahovania hrudníka, nie o dychovú frekvenciu.</ins></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <p class="note">
+        <b>Prečo to považujem za potrebné, nie za kozmetické:</b> správa inde starostlivo
+        uvádza jednotku každého kanála, ktorý spomína (R-R v ms, EDA ako elektrodermálny kanál).
+        Pri respirácii jednotka chýba a názov zvádza k opačnému výkladu. Ak si niekto neskôr
+        z tejto správy vezme RESPIRATION ako dychovú frekvenciu, dostane nezmysel.
+      </p>
+    </div>
+  </article>
+
+  <!-- ===== CHANGE 2 ===== -->
+  <article class="change opt">
+    <div class="rail"></div>
+    <div class="body">
+      <div class="chg-head">
+        <span class="page-ref">s. 19</span>
+        <span class="locus">Tabuľka 4 — polia sessions_vitalwork</span>
+        <span class="tag opt">Odporúčané</span>
+      </div>
+      <h3 class="chg-title">Počítadlo respiračných vzoriek by malo povedať, čo počíta</h3>
+      <p class="why">
+        Popis „Evidovaný súhrnný počet respiračných vzoriek“ je technicky správny — je to počet
+        riadkov. Ale v spojení s predošlým bodom stojí za to na jednom mieste povedať,
+        akých vzoriek. Jedna vsuvka stačí, tabuľka sa nerozbije.
+      </p>
+      <div class="ba">
+        <div class="panel p-before">
+          <div class="panel-head">Predtým</div>
+          <div class="panel-body">
+            <p><code>respiration_sample_count</code></p>
+            <p><del>Evidovaný súhrnný počet respiračných vzoriek.</del></p>
+          </div>
+        </div>
+        <div class="panel p-after">
+          <div class="panel-head">Po úprave</div>
+          <div class="panel-body">
+            <p><code>respiration_sample_count</code></p>
+            <p><ins>Evidovaný súhrnný počet respiračných vzoriek (amplitúda RA, 5 Hz).</ins></p>
+          </div>
+        </div>
+      </div>
+      <p class="note">
+        Ak sa kolega bráni zásahu do tabuľky, alternatíva je nechať tabuľku tak a vsuvku
+        pridať len do textu na strane 26 — pointa sa v správe povie raz a to stačí.
+      </p>
+    </div>
+  </article>
+
+  <!-- ===== CHANGE 3 ===== -->
+  <article class="change opt">
+    <div class="rail"></div>
+    <div class="body">
+      <div class="chg-head">
+        <span class="page-ref">s. 21</span>
+        <span class="locus">§ 2.1.6 Tabuľka sensor_samples</span>
+        <span class="tag opt">Odporúčané</span>
+      </div>
+      <h3 class="chg-title">Odkaz na „nadväzujúcu časť“ pri respirácii nikam nevedie</h3>
+      <p class="why">
+        Veta sľubuje, že vecný význam a jednotku hodnoty <code>value</code> podľa
+        <code>sensor_type</code> rozoberie nadväzujúca časť. Tá to však robí len pre
+        <code>ESENSE_RR_INTERVAL</code> (Tabuľka 8, s. 25). Pre ostatné kanály vrátane
+        respirácie jednotka v správe nikde nie je. Buď to priznať, alebo doplniť.
+      </p>
+      <div class="ba">
+        <div class="panel p-before">
+          <div class="panel-head">Predtým</div>
+          <div class="panel-body">
+            <p>
+              Pole <code>value</code> má spoločný databázový typ <code>double</code>;
+              jeho vecný význam a jednotka závisia od <code>sensor_type</code>.
+              <del>Podrobný kontrakt používaného vstupného kanála a ostatných dostupných
+              kanálov je uvedený v nadväzujúcej časti.</del>
+            </p>
+          </div>
+        </div>
+        <div class="panel p-after">
+          <div class="panel-head">Po úprave</div>
+          <div class="panel-body">
+            <p>
+              Pole <code>value</code> má spoločný databázový typ <code>double</code>;
+              jeho vecný význam a jednotka závisia od <code>sensor_type</code>.
+              <ins>Podrobný kontrakt používaného vstupného kanála je uvedený
+              v nadväzujúcej časti; jednotky ostatných kanálov sú BPM
+              (<code>ESENSE_HEART_RATE</code>, <code>WATCH_HR</code>), ms
+              (<code>WATCH_IBI</code>), µS (<code>WATCH_EDA</code>) a bezrozmerná
+              amplitúda RA (<code>RESPIRATION</code>).</ins>
+            </p>
+          </div>
+        </div>
+      </div>
+      <p class="note">
+        <b>Menší variant:</b> ak nechce dopĺňať jednotky, stačí zmeniť „<i>a ostatných dostupných
+        kanálov</i>“ na „<i>je uvedený v nadväzujúcej časti</i>“ — veta potom nesľubuje niečo,
+        čo v texte nie je.
+      </p>
+    </div>
+  </article>
+
+  <h2 class="sect">Overené — zmena nie je potrebná</h2>
+
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Strana</th>
+          <th>Miesto</th>
+          <th>Prečo to sedí aj po našich zmenách</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>s. 21</td>
+          <td>Enum <code>sensor_type</code> — šesť hodnôt</td>
+          <td><span class="ok-mark">✓</span> Hodnoty enumu sme nemenili. <code>RESPIRATION</code> ostáva a schéma databázy je nedotknutá.</td>
+        </tr>
+        <tr>
+          <td>s. 20</td>
+          <td>Enum <code>scenario_code</code> — päť scenárov</td>
+          <td><span class="ok-mark">✓</span> Päť biofeedback scenárov A–E sedí; premenovanie prebehlo skôr (DB v6), nie teraz.</td>
+        </tr>
+        <tr>
+          <td>s. 25</td>
+          <td>Tabuľka 8 — R-R vstup a jeho metadáta</td>
+          <td><span class="ok-mark">✓</span> Týka sa výhradne <code>ESENSE_RR_INTERVAL</code>. Respiračné zmeny sa jej nedotýkajú.</td>
+        </tr>
+        <tr>
+          <td>s. 45–52</td>
+          <td>JSON report, schéma <code>schema_output.json</code>, exportné konvencie</td>
+          <td><span class="ok-mark">✓</span> Ide o <b>výstup klasifikátora</b> (verzia algoritmu 0.1.0), nie o náš exportný formát VitalWork. Naša schéma 2.2.0 s poľom <code>respirationIssues</code> je iný artefakt a v správe sa nespomína.</td>
+        </tr>
+        <tr>
+          <td>celý text</td>
+          <td>Dychová frekvencia, br/min, priechody nulou</td>
+          <td><span class="ok-mark">✓</span> Nevyskytujú sa nikde v správe — nový estimátor teda nemá čo prepisovať.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer>
+    Kontrola prebehla proti textovej vrstve PDF (81 strán) a proti aktuálnemu stavu kódu
+    v <span class="mono">app/src/main/java/com/vitalwork/app/data/</span> — konkrétne
+    <span class="mono">sensor/audio/BreathingRateEstimator.kt</span>,
+    <span class="mono">recording/GapDetector.kt</span> a
+    <span class="mono">export/model/SessionExportModel.kt</span>.
+    Staré obrázky a ich popisy som podľa zadania neposudzoval.
+  </footer>
+
+</div>
+
+</body>
+</html>

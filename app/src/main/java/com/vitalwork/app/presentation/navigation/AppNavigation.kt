@@ -112,7 +112,7 @@ fun AppNavigation(
             TutorialScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToSessions = {
-                    navController.navigate(Route.Sessions.route) {
+                    navController.navigate(Route.ParticipantEntry.route) {
                         popUpTo(Route.Home.route)
                     }
                 }
@@ -145,7 +145,7 @@ fun AppNavigation(
                 onOpenSession = { sessionId ->
                     navController.navigate(Route.SessionReview.createRoute(sessionId))
                 },
-                onOpenactiveSession = { sessionId ->
+                onOpenActiveSession = { sessionId ->
                     // Resuming an active session lands on the scenario hub (setup is a one-time gate).
                     navController.navigate(Route.ScenarioSelection.createRoute(sessionId))
                 }

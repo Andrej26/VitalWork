@@ -10,12 +10,6 @@ class FakeSessionDao : SessionDao {
 
     override fun getAllSessions(): Flow<List<SessionEntity>> = flowOf(sessions.toList())
 
-    override fun getSessionsByStatus(status: SessionStatus): Flow<List<SessionEntity>> =
-        flowOf(sessions.filter { it.status == status })
-
-    override fun getSessionsForParticipant(participantId: Long): Flow<List<SessionEntity>> =
-        flowOf(sessions.filter { it.participantId == participantId })
-
     override suspend fun getSessionById(id: Long): SessionEntity? =
         sessions.find { it.id == id }
 

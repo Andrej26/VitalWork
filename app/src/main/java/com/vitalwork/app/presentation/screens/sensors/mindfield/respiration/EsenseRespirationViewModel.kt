@@ -5,7 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.vitalwork.app.data.sensor.DeviceState
 import com.vitalwork.app.data.sensor.SensorDevice
-import com.vitalwork.app.data.sensor.audio.LowSignalWarning
+import com.vitalwork.app.data.sensor.audio.RespirationWarning
 import com.vitalwork.app.data.sensor.audio.MindfieldRespiration
 import com.vitalwork.app.presentation.log.LogEntry
 import com.vitalwork.app.presentation.log.LogType
@@ -33,7 +33,7 @@ data class EsenseRespirationUiState(
     val logEntries: List<LogEntry> = emptyList(),
     val permissionsGranted: Boolean = false,
     val showStreamData: Boolean = false,
-    val lowSignalWarning: LowSignalWarning = LowSignalWarning.NONE,
+    val warning: RespirationWarning = RespirationWarning.NONE,
     val disconnectReason: String? = null
 )
 
@@ -89,8 +89,8 @@ class EsenseRespirationViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            MindfieldRespiration.lowSignalWarning.collect { warning ->
-                _uiState.update { it.copy(lowSignalWarning = warning) }
+            MindfieldRespiration.warning.collect { warning ->
+                _uiState.update { it.copy(warning = warning) }
             }
         }
         viewModelScope.launch {

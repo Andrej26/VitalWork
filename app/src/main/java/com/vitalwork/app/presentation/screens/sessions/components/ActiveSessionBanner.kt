@@ -29,6 +29,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.vitalwork.app.ui.theme.WarningAmber
+import com.vitalwork.app.ui.theme.ErrorRed
 
 @Composable
 fun ActiveSessionBanner(
@@ -54,7 +56,7 @@ fun ActiveSessionBanner(
         onClick = onResume,
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFF44336).copy(alpha = 0.12f)
+            containerColor = ErrorRed.copy(alpha = 0.12f)
         )
     ) {
         Row(
@@ -69,26 +71,26 @@ fun ActiveSessionBanner(
                     modifier = Modifier
                         .size(12.dp)
                         .alpha(pulseAlpha)
-                        .background(Color(0xFFF44336), CircleShape)
+                        .background(ErrorRed, CircleShape)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = "REC",
                     style = MaterialTheme.typography.labelMedium,
-                    color = Color(0xFFF44336),
+                    color = ErrorRed,
                     fontWeight = FontWeight.Bold
                 )
             } else {
                 Box(
                     modifier = Modifier
                         .size(12.dp)
-                        .background(Color(0xFFFFA000), CircleShape)
+                        .background(WarningAmber, CircleShape)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = "ACTIVE",
                     style = MaterialTheme.typography.labelMedium,
-                    color = Color(0xFFFFA000),
+                    color = WarningAmber,
                     fontWeight = FontWeight.Bold
                 )
             }

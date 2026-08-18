@@ -17,15 +17,6 @@ class FakeScenarioDao : ScenarioDao {
     override suspend fun getScenarioById(id: Long): ScenarioEntity? =
         scenarios.find { it.id == id }
 
-    override fun getActiveScenario(sessionId: Long): Flow<ScenarioEntity?> =
-        flowOf(scenarios.firstOrNull { it.sessionId == sessionId && it.endedAt == null })
-
-    override suspend fun getActiveScenarioOnce(sessionId: Long): ScenarioEntity? =
-        scenarios.firstOrNull { it.sessionId == sessionId && it.endedAt == null }
-
-    override suspend fun getCompletedScenarioCount(sessionId: Long): Int =
-        scenarios.count { it.sessionId == sessionId && it.endedAt != null }
-
     override suspend fun insert(scenario: ScenarioEntity): Long {
         val id = nextId++
         scenarios.add(scenario.copy(id = id))

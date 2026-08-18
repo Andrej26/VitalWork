@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>04 — Data Flow Pipeline</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: #FFFFFF; color: #40484C;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 24px 22px 20px;
+    position: relative; overflow: hidden;
+  }
+  body > * { position: relative; z-index: 1; }
+
+  /* Watermark */
+  .wm {
+    position: absolute; z-index: 0; left: 50%; top: 52%;
+    transform: translate(-50%, -50%) rotate(-26deg);
+    font-size: 110px; font-weight: 700; letter-spacing: 0.02em;
+    color: #083E50; opacity: 0.035; white-space: nowrap; pointer-events: none;
+  }
+  .ecg { position: absolute; z-index: 0; left: 0; bottom: 6px; width: 100%; opacity: 0.07; pointer-events: none; }
+
+  /* Header — centered, compact */
+  .head-text { text-align: center; margin-bottom: 4px; }
+  .eyebrow {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.14em;
+    text-transform: uppercase; color: #0E5871;
+  }
+  h1 { font-size: 19px; font-weight: 700; color: #083E50; letter-spacing: 0.01em; }
+  .subtitle { font-size: 12px; color: #4C626B; margin: 6px 0 16px; max-width: 460px; text-align: center; }
+
+  .col { display: flex; flex-direction: column; align-items: center; width: 500px; gap: 0; }
+
+  /* ── Sensor group ── */
+  .sensors {
+    background: #F2F8F2; border: 1.5px solid #2E7D32; border-radius: 12px;
+    padding: 13px 16px; width: 100%;
+  }
+  .sensors-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #2E7D32; margin-bottom: 10px; text-align: center; }
+  .sensor-row { display: flex; gap: 10px; justify-content: center; }
+  .sc {
+    background: #E3F1E4; border: 1.5px solid #2E7D32; border-radius: 9px;
+    padding: 9px 12px; text-align: center; flex: 1;
+  }
+  .sc .name { font-size: 12px; font-weight: 700; color: #1B5E20; display: block; }
+  .sc .conn { font-size: 10px; color: #2E7D32; display: block; margin-top: 2px; }
+  .sc .rate { font-size: 10px; color: #4C626B; display: block; font-family: Consolas, 'Courier New', monospace; }
+  .sc .note { font-size: 10px; color: #B26A00; display: block; }
+
+  /* ── Pipeline nodes ── */
+  .pn {
+    border-radius: 9px; padding: 12px 20px; text-align: center; width: 100%;
+    box-shadow: 0 1px 4px rgba(8,62,80,0.08);
+  }
+  .pn .name { font-size: 13px; font-weight: 700; display: block; }
+  .pn .sub  { font-size: 11px; color: #4C626B; display: block; margin-top: 4px; line-height: 1.5; }
+  .pn .mono { font-family: Consolas, 'Courier New', monospace; font-size: 10.5px; }
+  .pn-mod { background: #CFE6F2; border: 1.5px solid #0E5871; color: #083E50; }
+  .pn-db  { background: #B5D4E0; border: 1.5px solid #083E50; color: #083E50; }
+  .pn-db .sub { color: #37545F; }
+  .pn-ext { background: #FFF4DE; border: 1.5px solid #B26A00; color: #6E4400; }
+  .pn-ext .sub { color: #6E4400; }
+
+  /* ── Vertical arrows ── */
+  .down {
+    width: 2px; height: 26px; background: #0E5871;
+    position: relative; display: flex; justify-content: center;
+  }
+  .down::after {
+    content: ''; position: absolute; bottom: -5px; left: -4px;
+    border: 5px solid transparent; border-top-color: #0E5871;
+  }
+
+  /* step badge */
+  .step {
+    display: inline-block; font-size: 9px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: #70787D; margin-bottom: 5px; align-self: flex-start;
+  }
+
+  /* ── Branch after the database ── */
+  .branch { display: flex; width: 100%; gap: 20px; align-items: flex-start; }
+  .branch-col { display: flex; flex-direction: column; align-items: center; flex: 1; gap: 0; }
+  .branch-lbl { font-size: 10.5px; color: #4C626B; margin-bottom: 8px; text-align: center; }
+  .branch .pn { width: 100%; }
+  .down-sm { width: 2px; height: 20px; background: #0E5871; position: relative; }
+  .down-sm::after { content:''; position:absolute; bottom:-5px; left:-4px; border:5px solid transparent; border-top-color:#0E5871; }
+  .down-sm-upload { background:#B26A00; }
+  .down-sm-upload::after { border-top-color:#B26A00; }
+</style>
+</head>
+<body>
+
+<div class="wm">VitalWork</div>
+<svg class="ecg" viewBox="0 0 560 70" height="70" preserveAspectRatio="none"><polyline points="0,40 179,40 201,40 218,12 235,66 252,26 263,40 560,40" fill="none" stroke="#0E5871" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+
+<div class="head-text">
+  <div class="eyebrow">VitalWork · Technical Documentation</div>
+  <h1>Data Flow Pipeline</h1>
+</div>
+<p class="subtitle">How physiological data travels from sensors on the body to the VitalWork server</p>
+
+<div class="col">
+
+  <!-- ① Sensors -->
+  <span class="step">① Sensor sources</span>
+  <div class="sensors">
+    <div class="sensors-lbl">Physiological signals captured during each biofeedback scenario</div>
+    <div class="sensor-row">
+      <div class="sc">
+        <span class="name">eSense Pulse</span>
+        <span class="conn">BLE</span>
+        <span class="rate">~4.5 Hz · HR / R-R</span>
+      </div>
+      <div class="sc">
+        <span class="name">eSense Respiration</span>
+        <span class="conn">Audio jack</span>
+        <span class="rate">5 Hz · resp. rate</span>
+      </div>
+      <div class="sc">
+        <span class="name">Galaxy Watch 8</span>
+        <span class="conn">Wearable Data Layer</span>
+        <span class="rate">1 Hz · HR / IBI / EDA</span>
+        <span class="note">buffered on the watch —<br>merged at session end (diagram 05)</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="down"></div>
+
+  <!-- ② Capture -->
+  <span class="step">② Capture</span>
+  <div class="pn pn-mod">
+    <span class="name">Recording Engine</span>
+    <span class="sub">Each sample is tagged with sensor type, NTP-corrected timestamp, and elapsed time within the scenario</span>
+  </div>
+
+  <div class="down"></div>
+
+  <!-- ③ Buffer -->
+  <span class="step">③ Buffer</span>
+  <div class="pn pn-mod">
+    <span class="name">Batch Buffer</span>
+    <span class="sub">eSense samples are grouped in memory and written to the database every 50 samples or every 1 second — whichever comes first<br>(watch data skips this buffer — it arrives in one batch at session end)</span>
+  </div>
+
+  <div class="down"></div>
+
+  <!-- ④ Store -->
+  <span class="step">④ Store</span>
+  <div class="pn pn-db">
+    <span class="name">Room Database</span>
+    <span class="sub">All samples saved locally on the device in a SQLite database (sensor_samples table)</span>
+  </div>
+
+  <div class="down"></div>
+
+  <div class="branch-lbl">At session end, two independent paths read from the same database</div>
+
+  <!-- ⑤ Branch: export vs upload -->
+  <div class="branch">
+    <div class="branch-col">
+      <span class="step">⑤a Local export — manual, optional</span>
+      <div class="pn pn-mod">
+        <span class="name">Export Mapper</span>
+        <span class="sub">Reads all rows for the session, flags any gaps in the signal</span>
+      </div>
+      <div class="down-sm"></div>
+      <div class="pn pn-mod">
+        <span class="name">JSON + CSV</span>
+        <span class="sub">Saved to the device's Documents folder as an offline local copy</span>
+      </div>
+    </div>
+    <div class="branch-col">
+      <span class="step">⑤b Server upload — automatic</span>
+      <div class="pn pn-mod">
+        <span class="name">Upload Mapper</span>
+        <span class="sub">Reads participant, session and scenarios; builds the HTTP payload expected by the server API</span>
+      </div>
+      <div class="down-sm down-sm-upload"></div>
+      <div class="pn pn-ext">
+        <span class="name">VitalWork Server</span>
+        <span class="sub"><span class="mono">POST /api/sessions/upload</span> · bearer auth · 600 s timeout<br>Re-sending the same session is safe — identified by sessionCode</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

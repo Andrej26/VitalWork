@@ -25,13 +25,8 @@ import androidx.compose.ui.unit.dp
 import com.vitalwork.app.data.recording.WatchReconciliationReport
 import com.vitalwork.app.presentation.screens.sessions.EndSessionPhase
 import kotlinx.coroutines.delay
-
-/** Orange used for the "Reconnecting" connection indicator — reused here so the transfer spinner
- *  looks identical to the link-reconnecting animation the operator already knows. */
-private val ReconnectingOrange = Color(0xFFFFA000)
-
-/** Green used for the upload-complete check (matches UploadProgressDialog). */
-private val SuccessGreen = Color(0xFF2E7D32)
+import com.vitalwork.app.ui.theme.SuccessGreenDeep
+import com.vitalwork.app.ui.theme.WarningAmber
 
 /** How long the green "Watch data saved" check stays up before navigating to review. */
 private const val COMPLETE_HOLD_MS = 1_500L
@@ -105,7 +100,7 @@ fun EndSessionWatchDialog(
                     Icon(
                         if (mismatch) Icons.Default.Warning else Icons.Default.CheckCircle,
                         contentDescription = null,
-                        tint = if (mismatch) ReconnectingOrange else SuccessGreen,
+                        tint = if (mismatch) WarningAmber else SuccessGreenDeep,
                         modifier = Modifier.size(48.dp)
                     )
                 },
@@ -156,7 +151,7 @@ private fun SpinnerColumn(message: String) {
         CircularProgressIndicator(
             modifier = Modifier.size(32.dp),
             strokeWidth = 3.dp,
-            color = ReconnectingOrange
+            color = WarningAmber
         )
         Spacer(Modifier.height(16.dp))
         Text(message, textAlign = TextAlign.Center)

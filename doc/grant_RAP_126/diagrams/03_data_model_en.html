@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>03 — Data Model</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: #FFFFFF; color: #40484C;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 24px 22px 20px;
+    position: relative; overflow: hidden;
+  }
+  body > * { position: relative; z-index: 1; }
+
+  /* Watermark */
+  .wm {
+    position: absolute; z-index: 0; left: 50%; top: 52%;
+    transform: translate(-50%, -50%) rotate(-12deg);
+    font-size: 150px; font-weight: 700; letter-spacing: 0.02em;
+    color: #083E50; opacity: 0.035; white-space: nowrap; pointer-events: none;
+  }
+  .ecg { position: absolute; z-index: 0; left: 0; bottom: 6px; width: 100%; opacity: 0.07; pointer-events: none; }
+
+  /* Header — centered, compact */
+  .head-text { text-align: center; margin-bottom: 4px; }
+  .eyebrow {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.14em;
+    text-transform: uppercase; color: #0E5871;
+  }
+  h1 { font-size: 19px; font-weight: 700; color: #083E50; letter-spacing: 0.01em; }
+  .subtitle { font-size: 12px; color: #4C626B; margin: 6px 0 2px; max-width: 660px; text-align: center; }
+  .subnote  { font-size: 11px; color: #70787D; margin-bottom: 12px; text-align: center; }
+
+  /* Legend — pill chips */
+  .legend { display: flex; gap: 8px 10px; margin-bottom: 16px; flex-wrap: wrap; justify-content: center; max-width: 720px; }
+  .lchip {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 11px; color: #40484C;
+    border: 1px solid #DCE4E9; border-radius: 999px; padding: 4px 12px 4px 6px;
+    background: #F6F8F9;
+  }
+  .ld { width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0; }
+
+  /* Key badges */
+  .bpk { background:#E3F1E4; border:1px solid #2E7D32; color:#1B5E20; font-size:10.5px; font-weight:700; padding:2px 6px; border-radius:4px; }
+  .bfk { background:#CFE6F2; border:1px solid #0E5871; color:#083E50; font-size:10.5px; font-weight:700; padding:2px 6px; border-radius:4px; }
+  .buk { background:#FFF4DE; border:1px solid #B26A00; color:#6E4400; font-size:10.5px; font-weight:700; padding:2px 6px; border-radius:4px; }
+
+  /* Entity cards */
+  .row { padding:9px 18px; border-bottom:1px solid #F0F3F5; display:flex; align-items:baseline; gap:16px; }
+  .row:last-child { border-bottom: none; }
+  .row-name { display:flex; align-items:center; gap:8px; flex:0 0 250px; }
+  .fname { font-weight:600; font-size:13px; font-family: Consolas, 'Courier New', monospace; color:#191C1E; }
+  .fdesc { font-size:12px; color:#4C626B; line-height:1.5; }
+
+  .card { width:700px; border-radius:10px; overflow:hidden; box-shadow:0 2px 8px rgba(8,62,80,0.10); }
+  .card-head { padding:10px 18px; font-size:13.5px; font-weight:700; letter-spacing:0.03em; }
+  .card-body { background:#fff; }
+
+  .stack { display:flex; flex-direction:column; align-items:center; }
+  .link { display:flex; flex-direction:column; align-items:center; padding:7px 0; }
+  .link .arrow { width:2px; height:18px; background:#0E5871; position:relative; }
+  .link .arrow::after {
+    content:''; position:absolute; left:-4px; bottom:-1px;
+    border-left:5px solid transparent; border-right:5px solid transparent; border-top:7px solid #0E5871;
+  }
+  .link .card-label {
+    font-size:11.5px; font-weight:600; color:#0E5871; background:#F3F9FC;
+    border:1px solid #DCE4E9; border-radius:999px;
+    padding:3px 12px; margin-top:5px;
+  }
+</style>
+</head>
+<body>
+
+<div class="wm">VitalWork</div>
+<svg class="ecg" viewBox="0 0 780 70" height="70" preserveAspectRatio="none"><polyline points="0,40 249,40 280,40 304,12 327,66 351,26 366,40 780,40" fill="none" stroke="#0E5871" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+
+<div class="head-text">
+  <div class="eyebrow">VitalWork · Technical Documentation</div>
+  <h1>Data Model</h1>
+</div>
+<p class="subtitle">Each participant runs exactly one session; each session runs up to five biofeedback scenarios (A–E); <br> each scenario records a stream of sensor samples.</p>
+<p class="subnote">( Room database, schema v6 · cascade-delete foreign keys · 4 entities )</p>
+
+<div class="legend">
+  <div class="lchip"><div class="ld" style="background:#E3F1E4;border:1.5px solid #2E7D32;"></div>PARTICIPANT</div>
+  <div class="lchip"><div class="ld" style="background:#CFE6F2;border:1.5px solid #0E5871;"></div>SESSION</div>
+  <div class="lchip"><div class="ld" style="background:#FFF4DE;border:1.5px solid #B26A00;"></div>SCENARIO</div>
+  <div class="lchip"><div class="ld" style="background:#B5D4E0;border:1.5px solid #083E50;"></div>SENSOR_SAMPLE</div>
+  <div class="lchip"><span class="bpk">PK</span> Primary key</div>
+  <div class="lchip"><span class="bfk">FK</span> Foreign key (cascade delete)</div>
+  <div class="lchip"><span class="buk">UK</span> Unique</div>
+</div>
+
+<div class="stack">
+
+  <!-- PARTICIPANT -->
+  <div class="card" style="border:1.5px solid #2E7D32;">
+    <div class="card-head" style="background:#E3F1E4; color:#1B5E20;">PARTICIPANT</div>
+    <div class="card-body">
+      <div class="row">
+        <div class="row-name"><span class="bpk">PK</span><span class="fname">id</span></div>
+        <div class="fdesc">Long — auto-generated primary key</div>
+      </div>
+      <div class="row">
+        <div class="row-name"><span class="buk">UK</span><span class="fname">participantCode</span></div>
+        <div class="fdesc">A-001-yyMMdd-HHmmss — device-prefix letter + per-prefix counter + timestamp, so it never repeats</div>
+      </div>
+      <div class="row">
+        <div class="row-name"><span class="fname">age / gender</span></div>
+        <div class="fdesc">Int? / String? — optional demographic fields, no name or <br> other identifying data</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="link"><div class="arrow"></div><div class="card-label">1 PARTICIPANT has 1 SESSION</div></div>
+
+  <!-- SESSION -->
+  <div class="card" style="border:1.5px solid #0E5871;">
+    <div class="card-head" style="background:#CFE6F2; color:#083E50;">SESSION</div>
+    <div class="card-body">
+      <div class="row">
+        <div class="row-name"><span class="bpk">PK</span><span class="fname">id</span></div>
+        <div class="fdesc">Long — auto-generated primary key</div>
+      </div>
+      <div class="row">
+        <div class="row-name"><span class="bfk">FK</span><span class="fname">participantId</span></div>
+        <div class="fdesc">→ PARTICIPANT.id — cascade delete</div>
+      </div>
+      <div class="row">
+        <div class="row-name"><span class="buk">UK</span><span class="fname">sessionCode</span></div>
+        <div class="fdesc">VW-A-yyMMdd-HHmmss</div>
+      </div>
+      <div class="row">
+        <div class="row-name"><span class="fname">status</span></div>
+        <div class="fdesc">ACTIVE · COMPLETED · UPLOADED</div>
+      </div>
+      <div class="row">
+        <div class="row-name"><span class="fname">startedAt / endedAt</span></div>
+        <div class="fdesc">NTP-corrected ms — duration is derived as endedAt − startedAt</div>
+      </div>
+      <div class="row">
+        <div class="row-name"><span class="fname">sampleCounts ×6 + scenarioCount</span></div>
+        <div class="fdesc">Cached per-type counts: hr, respiration, rr, eda, watchHr, watchIbi, <br> plus the scenario count</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="link"><div class="arrow"></div><div class="card-label">1 SESSION contains up to 5 SCENARIO (A–E)</div></div>
+
+  <!-- SCENARIO -->
+  <div class="card" style="border:1.5px solid #B26A00;">
+    <div class="card-head" style="background:#FFF4DE; color:#6E4400;">SCENARIO</div>
+    <div class="card-body">
+      <div class="row">
+        <div class="row-name"><span class="bpk">PK</span><span class="fname">id</span></div>
+        <div class="fdesc">Long — auto-generated primary key</div>
+      </div>
+      <div class="row">
+        <div class="row-name"><span class="bfk">FK</span><span class="fname">sessionId</span></div>
+        <div class="fdesc">→ SESSION.id — cascade delete</div>
+      </div>
+      <div class="row">
+        <div class="row-name"><span class="fname">scenarioCode</span></div>
+        <div class="fdesc">A – Reference State · B – Cognitive Load · C – Distracting Environment · <br> D – Long-Term Fatigue · E – Reaction Tasks</div>
+      </div>
+      <div class="row">
+        <div class="row-name"><span class="fname">startedAt / endedAt</span></div>
+        <div class="fdesc">Recording window for this scenario run</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="link"><div class="arrow"></div><div class="card-label">1 SCENARIO records many SENSOR_SAMPLE</div></div>
+
+  <!-- SENSOR_SAMPLE -->
+  <div class="card" style="border:1.5px solid #083E50;">
+    <div class="card-head" style="background:#B5D4E0; color:#083E50;">SENSOR_SAMPLE</div>
+    <div class="card-body">
+      <div class="row">
+        <div class="row-name"><span class="bpk">PK</span><span class="fname">id</span></div>
+        <div class="fdesc">Long — auto-generated primary key</div>
+      </div>
+      <div class="row">
+        <div class="row-name"><span class="bfk">FK</span><span class="fname">scenarioId</span></div>
+        <div class="fdesc">→ SCENARIO.id — cascade delete</div>
+      </div>
+      <div class="row">
+        <div class="row-name"><span class="fname">sensorType</span></div>
+        <div class="fdesc">One of 6 types, each mapped to exactly one physical sensor: ESENSE_HEART_RATE, ESENSE_RR_INTERVAL, RESPIRATION (eSense) · WATCH_HR, WATCH_IBI, WATCH_EDA (Galaxy Watch)</div>
+      </div>
+      <div class="row">
+        <div class="row-name"><span class="fname">value</span></div>
+        <div class="fdesc">Float — the measured reading (BPM, ms, RA amplitude, or µS, <br> depending on sensorType)</div>
+      </div>
+      <div class="row">
+        <div class="row-name"><span class="fname">timestampMs</span></div>
+        <div class="fdesc">NTP-corrected Unix time the sample was taken — on the same timeline across all sensors, so readings line up exactly</div>
+      </div>
+      <div class="row">
+        <div class="row-name"><span class="fname">elapsedMs</span></div>
+        <div class="fdesc">Same moment, shown as milliseconds since this scenario started recording</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

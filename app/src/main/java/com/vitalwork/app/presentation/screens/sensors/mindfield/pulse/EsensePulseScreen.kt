@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -41,7 +43,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
+import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -54,6 +56,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -72,6 +75,10 @@ import com.vitalwork.app.presentation.screens.sensors.components.BleServiceExplo
 import com.vitalwork.app.presentation.screens.sensors.components.HeartRateDisplay
 import com.vitalwork.app.presentation.screens.sensors.components.RrIntervalCard
 import kotlinx.coroutines.launch
+import com.vitalwork.app.presentation.components.WatermarkedBackground
+import com.vitalwork.app.presentation.components.AlertSeverity
+import com.vitalwork.app.presentation.components.AlertCard
+import com.vitalwork.app.presentation.components.OutlineCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -102,10 +109,12 @@ fun EsensePulseScreen(
             )
         }
     ) { paddingValues ->
-        EsensePulseContent(
-            viewModel = viewModel,
-            modifier = Modifier.padding(paddingValues)
-        )
+        WatermarkedBackground {
+            EsensePulseContent(
+                viewModel = viewModel,
+                modifier = Modifier.padding(paddingValues)
+            )
+        }
     }
 }
 
@@ -264,24 +273,27 @@ private fun SensorInfoCard(
     connectionState: ConnectionState,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
+    OutlineCard(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = Icons.Default.Bluetooth,
-                contentDescription = null,
-                modifier = Modifier.size(48.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.secondaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Bluetooth,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
 
             Spacer(modifier = Modifier.width(16.dp))
 
@@ -308,45 +320,15 @@ private fun PermissionRequestCard(
     onRequestPermissions: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.Security,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onErrorContainer
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Permissions Required",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onErrorContainer
-                )
-            }
-
-            Text(
-                text = "Bluetooth and Location permissions are required to scan for and connect to BLE devices.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onErrorContainer
-            )
-
-            Button(
-                onClick = onRequestPermissions,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Grant Permissions")
-            }
-        }
-    }
+    AlertCard(
+        title = "Permissions Required",
+        description = "Bluetooth and Location permissions are required to scan for and connect to BLE devices.",
+        icon = Icons.Default.Security,
+        severity = AlertSeverity.BLOCKING,
+        actionLabel = "Grant Permissions",
+        onAction = onRequestPermissions,
+        modifier = modifier
+    )
 }
 
 @Composable
@@ -354,45 +336,15 @@ private fun LocationDisabledCard(
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer
-        )
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.Security,
-                contentDescription = null,
-                modifier = Modifier.size(32.dp),
-                tint = MaterialTheme.colorScheme.onErrorContainer
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Location Services Disabled",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onErrorContainer
-                )
-                Text(
-                    text = "Location Services must be enabled for BLE scanning to work.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onErrorContainer
-                )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            TextButton(onClick = onOpenSettings) {
-                Text(
-                    text = "Settings",
-                    color = MaterialTheme.colorScheme.onErrorContainer
-                )
-            }
-        }
-    }
+    AlertCard(
+        title = "Location Services Disabled",
+        description = "Location Services must be enabled for BLE scanning to work.",
+        icon = Icons.Default.Security,
+        severity = AlertSeverity.BLOCKING,
+        actionLabel = "Settings",
+        onAction = onOpenSettings,
+        modifier = modifier
+    )
 }
 
 @Composable
@@ -401,12 +353,7 @@ private fun ScanControlCard(
     onToggleScan: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
+    OutlineCard(modifier = modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -608,7 +555,7 @@ private fun ConnectedDeviceTabs(
     val coroutineScope = rememberCoroutineScope()
 
     Column(modifier = modifier.fillMaxWidth()) {
-        TabRow(selectedTabIndex = pagerState.currentPage) {
+        SecondaryTabRow(selectedTabIndex = pagerState.currentPage) {
             tabs.forEachIndexed { index, title ->
                 Tab(
                     selected = pagerState.currentPage == index,
@@ -656,12 +603,7 @@ private fun ConnectedDeviceTabs(
 private fun ConnectingCard(
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
+    OutlineCard(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()

@@ -9,10 +9,13 @@ import android.os.Environment
 import android.provider.MediaStore
 import androidx.annotation.RequiresApi
 import com.vitalwork.app.data.db.ScenarioEntity
+import com.vitalwork.app.data.db.SensorSampleEntity
 import com.vitalwork.app.data.db.SensorType
 import com.vitalwork.app.data.recording.detectEsenseRrIntervalGaps
 import com.vitalwork.app.data.recording.detectHeartRateGaps
+import com.vitalwork.app.data.recording.RespirationIssue
 import com.vitalwork.app.data.recording.detectRespirationGaps
+import com.vitalwork.app.data.recording.detectRespirationIssues
 import com.vitalwork.app.data.repository.ParticipantRepository
 import com.vitalwork.app.data.repository.ScenarioRepository
 import com.vitalwork.app.data.repository.SessionRepository
@@ -36,6 +39,7 @@ class SessionExportService @Inject constructor(
     private val sessionRepository: SessionRepository,
     private val participantRepository: ParticipantRepository,
     private val scenarioRepository: ScenarioRepository,
+    private val sampleCollector: ScenarioSampleCollector,
     private val mapper: SessionExportMapper
 ) : SessionExporter {
 
@@ -59,7 +63,11 @@ class SessionExportService @Inject constructor(
 
                 val scenarios = scenarioRepository.getScenariosForSessionOnce(sessionId)
 
-                val exportData = mapper.buildExportData(participant, session, scenarios)
+                // Read each scenario's samples once and share them between the JSON export and the
+                // per-scenario CSV writers below (avoids a second DB read per scenario).
+                val scenarioSamples = sampleCollector.collect(scenarios)
+
+                val exportData = mapper.buildExportData(participant, session, scenarioSamples)
                 val jsonContent = json.encodeToString(exportData)
 
                 val folderName = session.sessionCode
@@ -67,8 +75,8 @@ class SessionExportService @Inject constructor(
 
                 val outputPath = writeToDocuments(folderName, jsonFileName, jsonContent.toByteArray())
 
-                scenarios.forEachIndexed { index, scenario ->
-                    exportScenarioCsv(session.sessionCode, scenario, folderName, ordinal = index + 1)
+                scenarioSamples.forEachIndexed { index, (scenario, samples) ->
+                    exportScenarioCsv(session.sessionCode, scenario, samples, folderName, ordinal = index + 1)
                 }
 
                 Result.success(outputPath)
@@ -77,18 +85,19 @@ class SessionExportService @Inject constructor(
             }
         }
 
-    private suspend fun exportScenarioCsv(
+    private fun exportScenarioCsv(
         sessionCode: String,
         scenario: ScenarioEntity,
+        samples: List<SensorSampleEntity>,
         folderName: String,
         ordinal: Int
     ) {
-        val samples = scenarioRepository.getSamplesForScenario(scenario.id)
         if (samples.isEmpty()) return
 
         val hrGaps = detectHeartRateGaps(samples)
         val rrGaps = detectEsenseRrIntervalGaps(samples)
         val respGaps = detectRespirationGaps(samples)
+        val respIssues = detectRespirationIssues(samples)
 
         val hrCount = samples.count { it.sensorType == SensorType.ESENSE_HEART_RATE }
         val rrCount = samples.count { it.sensorType == SensorType.ESENSE_RR_INTERVAL }
@@ -121,6 +130,18 @@ class SessionExportService @Inject constructor(
             if (respGaps.isNotEmpty()) {
                 appendLine("# respiration_gaps,${respGaps.size}")
                 appendLine("# respiration_gap_total_ms,${respGaps.sumOf { it.gapMs }}")
+            }
+            // Respiration stretches that are present but unusable — a slipped strap leaves no gap.
+            // Positions included (unlike gaps above): "when did it slip" is the whole point.
+            RespirationIssue.entries.forEach { reason ->
+                val events = respIssues.filter { it.reason == reason }
+                if (events.isEmpty()) return@forEach
+                val key = "respiration_${reason.name.lowercase()}"
+                appendLine("# $key,${events.size}")
+                appendLine("# ${key}_total_ms,${events.sumOf { it.durationMs }}")
+                events.forEachIndexed { i, event ->
+                    appendLine("# ${key}_${i + 1},${event.startElapsedMs},${event.endElapsedMs}")
+                }
             }
 
             appendLine("timestamp_ms,elapsed_ms,sensor_type,value")

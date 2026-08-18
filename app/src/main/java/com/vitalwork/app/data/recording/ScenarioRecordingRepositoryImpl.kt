@@ -186,8 +186,10 @@ class ScenarioRecordingRepositoryImpl(
         if (_recordingState.value != DataRecordingState.RECORDING) return
 
         Log.i(TAG, "stopRecording scenarioId=$currentScenarioId (clean close)")
-        // Cancel collectors
-        collectorJobs.forEach { it.cancel() }
+        // Cancel collectors AND wait for them to fully stop before closing the channel below.
+        // Without the join, a collector resumed mid-flight could reach writeChannel.send() after
+        // close() → ClosedSendChannelException escaping into the SupervisorJob.
+        collectorJobs.forEach { it.cancelAndJoin() }
         collectorJobs.clear()
 
         // Cancel duration tracker

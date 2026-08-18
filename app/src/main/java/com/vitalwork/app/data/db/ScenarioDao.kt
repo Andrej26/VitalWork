@@ -19,15 +19,6 @@ interface ScenarioDao {
     @Query("SELECT * FROM scenarios WHERE id = :id")
     suspend fun getScenarioById(id: Long): ScenarioEntity?
 
-    @Query("SELECT * FROM scenarios WHERE sessionId = :sessionId AND endedAt IS NULL LIMIT 1")
-    fun getActiveScenario(sessionId: Long): Flow<ScenarioEntity?>
-
-    @Query("SELECT * FROM scenarios WHERE sessionId = :sessionId AND endedAt IS NULL LIMIT 1")
-    suspend fun getActiveScenarioOnce(sessionId: Long): ScenarioEntity?
-
-    @Query("SELECT COUNT(*) FROM scenarios WHERE sessionId = :sessionId AND endedAt IS NOT NULL")
-    suspend fun getCompletedScenarioCount(sessionId: Long): Int
-
     @Insert
     suspend fun insert(scenario: ScenarioEntity): Long
 

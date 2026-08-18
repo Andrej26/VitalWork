@@ -111,6 +111,12 @@ import android.media.MediaPlayer
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import androidx.compose.ui.viewinterop.AndroidView
+import com.vitalwork.app.ui.theme.SuccessGreen
+import com.vitalwork.app.ui.theme.WarningAmber
+import androidx.compose.material.icons.filled.Security
+import com.vitalwork.app.presentation.components.AlertSeverity
+import com.vitalwork.app.presentation.components.AlertCard
+import com.vitalwork.app.presentation.components.OutlineCard
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Slide data model
@@ -246,7 +252,7 @@ private val TUTORIAL_SLIDES = listOf(
 private val PhaseColorHR      = Color(0xFFE57373)   // Red 300        — Heart Rate
 private val PhaseColorResp    = Color(0xFF4DB6AC)   // Teal 300       — Respiration
 private val PhaseColorWatch   = Color(0xFF64B5F6)   // Blue 300       — Galaxy Watch
-private val PhaseColorDefault = Color(0xFF9575CD)   // Deep Purple 300 — Welcome / Complete
+private val PhaseColorDefault = Color(0xFF4FA8C5)   // Brand teal 300 — Welcome / Complete
 
 private fun phaseAccentColor(phase: SlidePhase): Color = when (phase) {
     SlidePhase.HEART_RATE      -> PhaseColorHR
@@ -331,6 +337,34 @@ fun TutorialScreen(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { viewModel.recheckLocationEnabled() }
 
+    // Readiness re-derive on resume — catches a battery/notification setting fixed via the finish
+    // step's card (or an OEM revocation) so the "Go to Sessions" gate reflects live OS state.
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+        viewModel.refreshReadiness()
+    }
+
+    // Fix launchers for the finish-step readiness card (mirrors HomeScreen's onFix flow).
+    val notificationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (!granted) com.vitalwork.app.presentation.components.onPermissionDenied(
+            context, Manifest.permission.POST_NOTIFICATIONS
+        )
+        viewModel.refreshReadiness()
+    }
+    val onReadinessFix: (com.vitalwork.app.data.system.SessionPrerequisite) -> Unit = { prerequisite ->
+        when (prerequisite) {
+            com.vitalwork.app.data.system.SessionPrerequisite.NOTIFICATIONS ->
+                notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            com.vitalwork.app.data.system.SessionPrerequisite.MICROPHONE ->
+                audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            com.vitalwork.app.data.system.SessionPrerequisite.BLUETOOTH ->
+                blePermissionLauncher.launch(blePermissions)
+            com.vitalwork.app.data.system.SessionPrerequisite.BATTERY_OPTIMIZATION ->
+                com.vitalwork.app.service.BatteryOptimizationHelper.openExemptionSettings(context)
+        }
+    }
+
 
     Scaffold(
         topBar = {
@@ -404,7 +438,12 @@ fun TutorialScreen(
                             enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
                         }
                     )
-                    SlideType.COMPLETE -> TutorialCompleteStep(onGoToTests = onNavigateToSessions)
+                    SlideType.COMPLETE -> TutorialCompleteStep(
+                        onGoToSessions = onNavigateToSessions,
+                        missingPrerequisites = uiState.missingPrerequisites,
+                        canStartSession = uiState.canStartSession,
+                        onReadinessFix = onReadinessFix
+                    )
                 }
             }
 
@@ -909,7 +948,7 @@ private fun TutorialPulseConnectStep(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFF4CAF50).copy(alpha = 0.15f)
+                        containerColor = SuccessGreen.copy(alpha = 0.15f)
                     )
                 ) {
                     Row(
@@ -920,7 +959,7 @@ private fun TutorialPulseConnectStep(
                         Icon(
                             imageVector = Icons.Default.CheckCircle,
                             contentDescription = null,
-                            tint = Color(0xFF4CAF50),
+                            tint = SuccessGreen,
                             modifier = Modifier.size(24.dp)
                         )
                         Text(
@@ -931,123 +970,36 @@ private fun TutorialPulseConnectStep(
                     }
                 }
             } else {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = "Bluetooth & Location permissions required",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Text(
-                            text = "Grant Bluetooth and Location permissions so the app can scan for and connect to the eSense Pulse sensor.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Button(
-                            onClick = onRequestPermissions,
-                            modifier = Modifier.align(Alignment.End)
-                        ) {
-                            Text("Grant Permissions")
-                        }
-                    }
-                }
+                AlertCard(
+                    title = "Bluetooth & Location permissions required",
+                    description = "Grant Bluetooth and Location permissions so the app can scan for and connect to the eSense Pulse sensor.",
+                    icon = Icons.Default.Security,
+                    severity = AlertSeverity.BLOCKING,
+                    actionLabel = "Grant Permissions",
+                    onAction = onRequestPermissions
+                )
             }
 
             // 2. Bluetooth disabled warning
             if (uiState.blePermissionsGranted && !uiState.bluetoothEnabled) {
-                Card(
-                    onClick = onEnableBluetooth,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.BluetoothDisabled,
-                            contentDescription = null,
-                            modifier = Modifier.size(32.dp),
-                            tint = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Bluetooth Disabled",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                            Text(
-                                text = "Bluetooth must be enabled to scan for the eSense Pulse sensor.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
-                }
+                AlertCard(
+                    title = "Bluetooth Disabled",
+                    description = "Bluetooth must be enabled to scan for the eSense Pulse sensor.",
+                    icon = Icons.Default.BluetoothDisabled,
+                    severity = AlertSeverity.BLOCKING,
+                    onClick = onEnableBluetooth
+                )
             }
 
             // 3. Location disabled warning
             if (uiState.blePermissionsGranted && !uiState.locationEnabled) {
-                Card(
-                    onClick = onOpenLocationSettings,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.LocationOff,
-                            contentDescription = null,
-                            modifier = Modifier.size(32.dp),
-                            tint = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Location Services Disabled",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                            Text(
-                                text = "Location Services must be enabled for BLE scanning to work.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
-                }
+                AlertCard(
+                    title = "Location Services Disabled",
+                    description = "Location Services must be enabled for BLE scanning to work.",
+                    icon = Icons.Default.LocationOff,
+                    severity = AlertSeverity.BLOCKING,
+                    onClick = onOpenLocationSettings
+                )
             }
 
             // 4. Connection / scan UI (only when permissions granted and BT enabled)
@@ -1169,7 +1121,7 @@ private fun TutorialRespirationConnectStep(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFF4CAF50).copy(alpha = 0.15f)
+                        containerColor = SuccessGreen.copy(alpha = 0.15f)
                     )
                 ) {
                     Row(
@@ -1180,7 +1132,7 @@ private fun TutorialRespirationConnectStep(
                         Icon(
                             imageVector = Icons.Default.CheckCircle,
                             contentDescription = null,
-                            tint = Color(0xFF4CAF50),
+                            tint = SuccessGreen,
                             modifier = Modifier.size(24.dp)
                         )
                         Text(
@@ -1191,35 +1143,14 @@ private fun TutorialRespirationConnectStep(
                     }
                 }
             } else {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = "Microphone permission required",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Text(
-                            text = "The audio jack sensor needs microphone access to receive breathing data.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Button(
-                            onClick = onRequestAudioPermission,
-                            modifier = Modifier.align(Alignment.End)
-                        ) {
-                            Text("Grant Permission")
-                        }
-                    }
-                }
+                AlertCard(
+                    title = "Microphone permission required",
+                    description = "The audio jack sensor needs microphone access to receive breathing data.",
+                    icon = Icons.Default.Security,
+                    severity = AlertSeverity.BLOCKING,
+                    actionLabel = "Grant Permission",
+                    onAction = onRequestAudioPermission
+                )
             }
 
             Text(
@@ -1294,46 +1225,13 @@ private fun TutorialWatchConnectStep(
             // link falls back to a cloud relay that can't deliver to a sleeping tablet. Same card and
             // behaviour as the heart-rate step.
             if (!bluetoothEnabled) {
-                Card(
-                    onClick = onEnableBluetooth,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.BluetoothDisabled,
-                            contentDescription = null,
-                            modifier = Modifier.size(32.dp),
-                            tint = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Bluetooth Disabled",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                            Text(
-                                text = "Turn on Bluetooth so the watch can stream over the direct link.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
-                }
+                AlertCard(
+                    title = "Bluetooth Disabled",
+                    description = "Turn on Bluetooth so the watch can stream over the direct link.",
+                    icon = Icons.Default.BluetoothDisabled,
+                    severity = AlertSeverity.BLOCKING,
+                    onClick = onEnableBluetooth
+                )
             }
 
             when (linkStatus) {
@@ -1385,20 +1283,15 @@ private fun WatchStatusCard(
     }
     val dotColor by animateColorAsState(
         targetValue = when (linkStatus) {
-            WatchLinkStatus.LIVE -> Color(0xFF4CAF50)
-            WatchLinkStatus.DOZING -> Color(0xFFFFA000)
+            WatchLinkStatus.LIVE -> SuccessGreen
+            WatchLinkStatus.DOZING -> WarningAmber
             WatchLinkStatus.DISCONNECTED -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
         },
         animationSpec = tween(300),
         label = "watch_dot_color"
     )
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
+    OutlineCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1448,7 +1341,12 @@ private fun WatchStatusCard(
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun TutorialCompleteStep(onGoToTests: () -> Unit) {
+private fun TutorialCompleteStep(
+    onGoToSessions: () -> Unit,
+    missingPrerequisites: Set<com.vitalwork.app.data.system.SessionPrerequisite>,
+    canStartSession: Boolean,
+    onReadinessFix: (com.vitalwork.app.data.system.SessionPrerequisite) -> Unit
+) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val pad = if (maxWidth < 600.dp) 16.dp else 24.dp
         Column(
@@ -1465,7 +1363,7 @@ private fun TutorialCompleteStep(onGoToTests: () -> Unit) {
                 imageVector = Icons.Default.CheckCircle,
                 contentDescription = null,
                 modifier = Modifier.size(80.dp),
-                tint = Color(0xFF4CAF50)
+                tint = SuccessGreen
             )
 
             Text(
@@ -1482,15 +1380,33 @@ private fun TutorialCompleteStep(onGoToTests: () -> Unit) {
                 textAlign = TextAlign.Center
             )
 
+            // Blocking prerequisites (battery/notifications) must be fixed here before the operator
+            // can create a session — a session started without them can't record reliably yet can't
+            // be ended from the setup gate. Card renders nothing when everything's already granted.
+            com.vitalwork.app.presentation.components.ReadinessWarningCard(
+                missing = missingPrerequisites,
+                onFix = onReadinessFix
+            )
+
             Spacer(modifier = Modifier.height(8.dp))
 
             Button(
-                onClick = onGoToTests,
+                onClick = onGoToSessions,
+                enabled = canStartSession,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(Icons.Default.PlayArrow, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Go to Tests")
+                Text("Go to Sessions")
+            }
+
+            if (!canStartSession) {
+                Text(
+                    text = "Fix the warnings above to continue",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    textAlign = TextAlign.Center
+                )
             }
 
             Text(
@@ -1539,20 +1455,15 @@ private fun DeviceStatusCard(
 
     val dotColor by animateColorAsState(
         targetValue = when {
-            isConnected -> Color(0xFF4CAF50)
-            isConnecting -> Color(0xFFFFA000)
+            isConnected -> SuccessGreen
+            isConnecting -> WarningAmber
             else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
         },
         animationSpec = tween(300),
         label = "dot_color"
     )
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
+    OutlineCard(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()

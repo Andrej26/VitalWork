@@ -55,6 +55,10 @@ import com.vitalwork.app.util.TimeFormats
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.vitalwork.app.presentation.components.WatermarkedBackground
+import com.vitalwork.app.presentation.components.OutlineCard
+import com.vitalwork.app.ui.theme.SuccessGreen
+import com.vitalwork.app.ui.theme.SuccessGreenDeep
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -186,168 +190,164 @@ fun SessionDetailScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
-        if (uiState.isLoading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator()
+        WatermarkedBackground {
+            if (uiState.isLoading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+                return@WatermarkedBackground
             }
-            return@Scaffold
-        }
 
-        val session = uiState.session
-        if (session == null) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "Session not found",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            return@Scaffold
-        }
-
-        val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
-            .apply { timeZone = TimeFormats.UTC }
-        val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
-            .apply { timeZone = TimeFormats.UTC }
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+            val session = uiState.session
+            if (session == null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
+                    contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Summary",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium
-                    )
-
-                    Text(
-                        text = "All times UTC",
-                        style = MaterialTheme.typography.bodySmall,
+                        text = "Session not found",
+                        style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-
-                    SummaryRow("Participant", uiState.participantCode ?: "—")
-
-                    SummaryRow("Date", dateFormat.format(Date(session.startedAt)))
-
-                    val startTime = timeFormat.format(Date(session.startedAt))
-                    val endTime = session.endedAt?.let { timeFormat.format(Date(it)) } ?: "N/A"
-                    SummaryRow("Time", "$startTime - $endTime")
-
-                    val durationMs = session.endedAt?.let { it - session.startedAt } ?: 0L
-                    SummaryRow("Duration", formatDuration(durationMs))
-
-                    SummaryRow("Scenarios", session.scenarioCount.toString())
                 }
+                return@WatermarkedBackground
             }
 
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
+            val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
+                .apply { timeZone = TimeFormats.UTC }
+            val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
+                .apply { timeZone = TimeFormats.UTC }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                OutlineCard(
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        text = "Actions",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium
-                    )
-
-                    // Upload to the VitalWork server. Primary action; sets status UPLOADED on success.
-                    Button(
-                        onClick = { viewModel.uploadSession() },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = uiState.uploadState != UploadState.Uploading &&
-                            uiState.scenarios.isNotEmpty()
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.CloudUpload,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            if (session.status == SessionStatus.UPLOADED) "Re-upload to server"
-                            else "Upload to server"
+                            text = "Summary",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Medium
                         )
-                    }
 
-                    // Local offline copy to Documents. Does NOT change upload status.
-                    OutlinedButton(
-                        onClick = {
-                            if (session.status == SessionStatus.UPLOADED) {
-                                showReExportConfirmation = true
-                            } else {
-                                viewModel.exportSession()
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !uiState.isExporting && uiState.scenarios.isNotEmpty()
+                        Text(
+                            text = "All times UTC",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        SummaryRow("Participant", uiState.participantCode ?: "—")
+
+                        SummaryRow("Date", dateFormat.format(Date(session.startedAt)))
+
+                        val startTime = timeFormat.format(Date(session.startedAt))
+                        val endTime = session.endedAt?.let { timeFormat.format(Date(it)) } ?: "N/A"
+                        SummaryRow("Time", "$startTime - $endTime")
+
+                        val durationMs = session.endedAt?.let { it - session.startedAt } ?: 0L
+                        SummaryRow("Duration", formatDuration(durationMs))
+
+                        SummaryRow("Scenarios", session.scenarioCount.toString())
+                    }
+                }
+
+                OutlineCard(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        if (uiState.isExporting) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp
-                            )
-                        } else {
+                        Text(
+                            text = "Actions",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+
+                        // Upload to the VitalWork server. Primary action; sets status UPLOADED on success.
+                        Button(
+                            onClick = { viewModel.uploadSession() },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = uiState.uploadState != UploadState.Uploading &&
+                                uiState.scenarios.isNotEmpty()
+                        ) {
                             Icon(
-                                imageVector = Icons.Default.Share,
+                                imageVector = Icons.Default.CloudUpload,
                                 contentDescription = null,
                                 modifier = Modifier.size(20.dp)
                             )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                if (session.status == SessionStatus.UPLOADED) "Re-upload to server"
+                                else "Upload to server"
+                            )
                         }
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Export to Documents")
-                    }
 
-                    OutlinedButton(
-                        onClick = { showDeleteConfirmation = true },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error
-                        ),
-                        enabled = !uiState.isDeleting
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Delete Session")
+                        // Local offline copy to Documents. Does NOT change upload status.
+                        OutlinedButton(
+                            onClick = {
+                                if (session.status == SessionStatus.UPLOADED) {
+                                    showReExportConfirmation = true
+                                } else {
+                                    viewModel.exportSession()
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !uiState.isExporting && uiState.scenarios.isNotEmpty()
+                        ) {
+                            if (uiState.isExporting) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Share,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Export to Documents")
+                        }
+
+                        OutlinedButton(
+                            onClick = { showDeleteConfirmation = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            ),
+                            enabled = !uiState.isDeleting
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Delete Session")
+                        }
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(16.dp))
+            }
         }
     }
 }
@@ -366,8 +366,8 @@ private fun StatusBadge(status: SessionStatus) {
             "Completed"
         )
         SessionStatus.UPLOADED -> Triple(
-            MaterialTheme.colorScheme.tertiaryContainer,
-            MaterialTheme.colorScheme.onTertiaryContainer,
+            SuccessGreen.copy(alpha = 0.18f),
+            SuccessGreenDeep,
             "Uploaded"
         )
     }
