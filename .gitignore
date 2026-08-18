@@ -13,3 +13,4 @@ local.properties
 .claude/settings.local.json
 .ipynb_checkpoints
 /test
+/doc/grant_RAP_126/redesign
